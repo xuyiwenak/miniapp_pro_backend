@@ -8,6 +8,7 @@ import homeRoutes from "./routes/home";
 import apiRoutes from "./routes/api";
 import dataCenterRoutes from "./routes/dataCenter";
 import messageRoutes from "./routes/message";
+import workRoutes from "./routes/work";
 import { setupChatWs } from "./ws/chatServer";
 
 export function createMiniappApp(): express.Express {
@@ -28,6 +29,7 @@ export function createMiniappApp(): express.Express {
   app.use("/login", loginRoutes);
   app.use("/home", homeRoutes);
   app.use("/api", apiRoutes);
+  app.use("/work", workRoutes);
   app.use("/dataCenter", dataCenterRoutes);
   app.use("/message", authMiddleware, messageRoutes);
 

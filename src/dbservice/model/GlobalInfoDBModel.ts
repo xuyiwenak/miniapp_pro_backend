@@ -6,14 +6,16 @@
  * @LastEditors: lyh
  * @LastEditTime: 2024-11-28 10:35:50
  */
-import { Connection } from "mongoose";
+import { Connection, Model } from "mongoose";
 // import { IAccount } from "../../entity/account.entity";
 // import { IMail } from "../../entity/mail.entity";
+import { IWork, WorkSchema } from "../../entity/work.entity";
 
 class GlobalModelManager {
   private connection: Connection;
   // private accountModel!: Model<IAccount>;
   // private mailModel!: Model<IMail>;
+  private workModel!: Model<IWork>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -25,6 +27,12 @@ class GlobalModelManager {
     // 注册 Account 模型
     // this.accountModel = this.connection.model<IAccount>('Account', AccountSchema);
     // this.mailModel = this.connection.model<IMail>('Mail', MailSchema);
+
+    // 注册 Work 模型（全局库）
+    this.workModel = this.connection.model<IWork>("Work", WorkSchema);
+    this.workModel.createIndexes().catch(() => {
+      // ignore index errors at startup
+    });
   }
 
   // // 获取 Account 模型
@@ -34,6 +42,10 @@ class GlobalModelManager {
   // public getMailModel(): Model<IMail> {
   //   return this.mailModel;
   // }
+
+  public getWorkModel(): Model<IWork> {
+    return this.workModel;
+  }
 
   public async stopConnection() {
     return this.connection.destroy();
@@ -55,8 +67,12 @@ export function initializeGlobalModel(connection: Connection) {
 export function getGlobalModelManager(): GlobalModelManager {
   if (!globalModelManager) {
     throw new Error(
-      "GlobalModelManager is not initialized. Please call initializeGlobalModel first."
+      "GlobalModelManager is not initialized. Please call initializeGlobalModel first.",
     );
   }
   return globalModelManager;
+}
+
+export function getWorkModel(): Model<IWork> {
+  return getGlobalModelManager().getWorkModel();
 }
