@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { sendSucc } from "../middleware/response";
+import { sendSucc, sendErr } from "../middleware/response";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import type { IWork } from "../../entity/work.entity";
+import { logRequest, logRequestError } from "../../util/requestLogger";
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.get("/cards", async (_req: Request, res: Response) => {
             });
 
             return {
+              workId: w.workId,
               url: cover?.url ?? "/static/home/card0.png",
               desc: w.desc,
               tags,
@@ -60,6 +62,59 @@ router.get("/cards", async (_req: Request, res: Response) => {
 
 router.get("/swipers", (_req: Request, res: Response) => {
   sendSucc(res, SWIPERS);
+});
+
+/** 根据 workId 获取单条已发布作品详情（无需登录） */
+router.get("/workDetail", async (req: Request, res: Response) => {
+  const workId = (req.query?.workId as string)?.trim();
+
+  logRequest("home.ts:workDetail:entry", "workDetail request", {
+    req,
+    params: req.params ?? {},
+    requestBody: { workId: workId || undefined },
+    extra: { query: req.query },
+  });
+
+  if (!workId) {
+    logRequest("home.ts:workDetail:validation", "missing workId", {
+      req,
+      requestBody: { workId },
+      statusCode: 400,
+    });
+    sendErr(res, "Missing workId", 400);
+    return;
+  }
+  try {
+    const Work = getWorkModel();
+    const work = (await Work.findOne({ workId, status: "published" }).lean().exec()) as IWork | null;
+    if (!work) {
+      logRequest("home.ts:workDetail:notFound", "work not found", {
+        req,
+        requestBody: { workId },
+        statusCode: 404,
+      });
+      sendErr(res, "Work not found", 404);
+      return;
+    }
+    logRequest("home.ts:workDetail:success", "workDetail success", {
+      req,
+      requestBody: { workId },
+      responseBody: { workId: work.workId, desc: work.desc, imagesCount: work.images?.length ?? 0 },
+      statusCode: 200,
+    });
+    sendSucc(res, work);
+  } catch (err) {
+    logRequestError("home.ts:workDetail:error", "workDetail server error", {
+      req,
+      requestBody: { workId },
+      statusCode: 500,
+      extra: {
+        errorName: (err as Error).name,
+        errorMessage: (err as Error).message,
+      },
+    });
+    sendErr(res, "Server error", 500);
+  }
 });
 
 export default router;
