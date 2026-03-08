@@ -1,8 +1,21 @@
+import fs from "fs";
+import path from "path";
 import { Router, Request, Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
 
 const router = Router();
+
+const AVATARS_DIR = path.join(process.cwd(), "static", "avatars");
+function ensureAvatarsDir() {
+  if (!fs.existsSync(path.join(process.cwd(), "static"))) {
+    fs.mkdirSync(path.join(process.cwd(), "static"), { recursive: true });
+  }
+  if (!fs.existsSync(AVATARS_DIR)) {
+    fs.mkdirSync(AVATARS_DIR, { recursive: true });
+  }
+}
 
 const HISTORY_WORDS = ["AI绘画", "Stable Diffusion", "版权素材", "星空", "illustration", "原创"];
 const POPULAR_WORDS = [
@@ -25,25 +38,10 @@ const SERVICE_LIST = [
   { image: "/static/icon_td.png", name: "数据中心", type: "data", url: "/pages/dataCenter/index" },
 ];
 
-// 内存存储：userId -> 个人信息（可后续改为 Mongo）
-const personalInfoStore = new Map<
-  string,
-  {
-    image: string;
-    name: string;
-    star: string;
-    gender: number;
-    birth: string;
-    address: string[];
-    brief: string;
-    photos: { url: string; name: string; type: string }[];
-  }
->();
-
 const DEFAULT_PERSONAL = {
   image: "/static/avatar1.png",
   name: "小小轩",
-  star: "天枰座",
+  star: "天秤座",
   gender: 0,
   birth: "1994-09-27",
   address: ["440000", "440300"],
@@ -62,35 +60,107 @@ router.get("/searchPopular", (_req: Request, res: Response) => {
   sendSucc(res, { popularWords: POPULAR_WORDS });
 });
 
-router.get("/genPersonalInfo", authMiddleware, (req: MiniappRequest, res: Response) => {
+router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
-  const info = personalInfoStore.get(userId) ?? { ...DEFAULT_PERSONAL };
-  sendSucc(res, { data: info });
+  try {
+    const PersonalInfo = getPersonalInfoModel();
+    const doc = await PersonalInfo.findOne({ userId }).lean().exec();
+    const info = doc
+      ? {
+          image: doc.image ?? DEFAULT_PERSONAL.image,
+          name: doc.name ?? DEFAULT_PERSONAL.name,
+          star: doc.star ?? "",
+          gender: doc.gender ?? DEFAULT_PERSONAL.gender,
+          birth: doc.birth ?? DEFAULT_PERSONAL.birth,
+          address: Array.isArray(doc.address) ? doc.address : DEFAULT_PERSONAL.address,
+          brief: doc.brief ?? DEFAULT_PERSONAL.brief,
+          photos: Array.isArray(doc.photos) ? doc.photos : DEFAULT_PERSONAL.photos,
+        }
+      : { ...DEFAULT_PERSONAL };
+    sendSucc(res, { data: info });
+  } catch {
+    sendSucc(res, { data: { ...DEFAULT_PERSONAL } });
+  }
 });
 
 router.get("/getServiceList", (_req: Request, res: Response) => {
   sendSucc(res, { data: { service: SERVICE_LIST } });
 });
 
-router.post("/savePersonalInfo", authMiddleware, (req: MiniappRequest, res: Response) => {
+/** 上传头像：body.data.image 为 base64 或 data:image/xxx;base64,xxx */
+router.post("/uploadAvatar", authMiddleware, (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const body = req.body?.data ?? req.body;
+  const raw = (body?.image as string) || "";
+  const base64Match = raw.match(/^data:image\/(\w+);base64,(.+)$/) || [null, "jpeg", raw];
+  const ext = (base64Match[1] === "png" ? "png" : "jpeg") as string;
+  const base64 = base64Match[2];
+  if (!base64) {
+    sendErr(res, "Missing image", 400);
+    return;
+  }
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(base64, "base64");
+  } catch {
+    sendErr(res, "Invalid base64", 400);
+    return;
+  }
+  ensureAvatarsDir();
+  const filename = `${userId}-${Date.now()}.${ext}`;
+  const filepath = path.join(AVATARS_DIR, filename);
+  try {
+    fs.writeFileSync(filepath, buf);
+  } catch (err) {
+    sendErr(res, "Save avatar failed", 500);
+    return;
+  }
+  const url = `/static/avatars/${filename}`;
+  sendSucc(res, { url });
+});
+
+router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
   const body = req.body?.data ?? req.body;
   if (!body || typeof body !== "object") {
     sendErr(res, "Invalid body", 400);
     return;
   }
-  const info = {
-    image: body.image ?? DEFAULT_PERSONAL.image,
-    name: body.name ?? DEFAULT_PERSONAL.name,
-    star: body.star ?? DEFAULT_PERSONAL.star,
-    gender: body.gender ?? DEFAULT_PERSONAL.gender,
-    birth: body.birth ?? DEFAULT_PERSONAL.birth,
-    address: Array.isArray(body.address) ? body.address : DEFAULT_PERSONAL.address,
-    brief: body.brief ?? DEFAULT_PERSONAL.brief,
-    photos: Array.isArray(body.photos) ? body.photos : DEFAULT_PERSONAL.photos,
-  };
-  personalInfoStore.set(userId, info);
-  sendSucc(res, { data: info });
+  try {
+    const PersonalInfo = getPersonalInfoModel();
+    const existing = await PersonalInfo.findOne({ userId }).lean().exec();
+    const update = {
+      userId,
+      image: body.image ?? existing?.image ?? DEFAULT_PERSONAL.image,
+      name: body.name ?? DEFAULT_PERSONAL.name,
+      star: body.star ?? existing?.star ?? DEFAULT_PERSONAL.star,
+      gender: body.gender ?? DEFAULT_PERSONAL.gender,
+      birth: body.birth ?? DEFAULT_PERSONAL.birth,
+      address: Array.isArray(body.address) ? body.address : DEFAULT_PERSONAL.address,
+      brief: body.brief ?? DEFAULT_PERSONAL.brief,
+      photos: Array.isArray(body.photos) ? body.photos : DEFAULT_PERSONAL.photos,
+    };
+    const doc = await PersonalInfo.findOneAndUpdate(
+      { userId },
+      { $set: update },
+      { new: true, upsert: true, runValidators: true },
+    )
+      .lean()
+      .exec();
+    const info = {
+      image: doc!.image ?? DEFAULT_PERSONAL.image,
+      name: doc!.name ?? DEFAULT_PERSONAL.name,
+      star: doc!.star ?? "",
+      gender: doc!.gender ?? DEFAULT_PERSONAL.gender,
+      birth: doc!.birth ?? DEFAULT_PERSONAL.birth,
+      address: Array.isArray(doc!.address) ? doc!.address : DEFAULT_PERSONAL.address,
+      brief: doc!.brief ?? DEFAULT_PERSONAL.brief,
+      photos: Array.isArray(doc!.photos) ? doc!.photos : DEFAULT_PERSONAL.photos,
+    };
+    sendSucc(res, { data: info });
+  } catch {
+    sendErr(res, "Save personal info failed", 500);
+  }
 });
 
 export default router;

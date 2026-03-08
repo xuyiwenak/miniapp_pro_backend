@@ -1,4 +1,5 @@
 import http from "http";
+import path from "path";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { sharedHttpOptions } from "../httpServer";
@@ -11,9 +12,12 @@ import messageRoutes from "./routes/message";
 import workRoutes from "./routes/work";
 import { setupChatWs } from "./ws/chatServer";
 
+const staticDir = path.join(process.cwd(), "static");
+
 export function createMiniappApp(): express.Express {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
+  app.use("/static", express.static(staticDir));
 
   if (sharedHttpOptions.cors) {
     app.use((_req, res, next) => {

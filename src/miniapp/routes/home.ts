@@ -85,8 +85,8 @@ router.get("/workDetail", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const Work = getWorkModel();
-    const work = (await Work.findOne({ workId, status: "published" }).lean().exec()) as IWork | null;
+    const WorkModel = getWorkModel();
+    const work = (await WorkModel.findOne({ workId, status: "published" }).lean().exec()) as IWork | null;
     if (!work) {
       logRequest("home.ts:workDetail:notFound", "work not found", {
         req,

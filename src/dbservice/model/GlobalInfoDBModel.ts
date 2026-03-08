@@ -9,6 +9,7 @@
 import { Connection, Model } from "mongoose";
 // import { IAccount } from "../../entity/account.entity";
 // import { IMail } from "../../entity/mail.entity";
+import { IPersonalInfo, PersonalInfoSchema } from "../../entity/personalInfo.entity";
 import { IWork, WorkSchema } from "../../entity/work.entity";
 
 class GlobalModelManager {
@@ -16,6 +17,7 @@ class GlobalModelManager {
   // private accountModel!: Model<IAccount>;
   // private mailModel!: Model<IMail>;
   private workModel!: Model<IWork>;
+  private personalInfoModel!: Model<IPersonalInfo>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -33,6 +35,9 @@ class GlobalModelManager {
     this.workModel.createIndexes().catch(() => {
       // ignore index errors at startup
     });
+
+    this.personalInfoModel = this.connection.model<IPersonalInfo>("PersonalInfo", PersonalInfoSchema);
+    this.personalInfoModel.createIndexes().catch(() => {});
   }
 
   // // 获取 Account 模型
@@ -45,6 +50,10 @@ class GlobalModelManager {
 
   public getWorkModel(): Model<IWork> {
     return this.workModel;
+  }
+
+  public getPersonalInfoModel(): Model<IPersonalInfo> {
+    return this.personalInfoModel;
   }
 
   public async stopConnection() {
@@ -75,4 +84,8 @@ export function getGlobalModelManager(): GlobalModelManager {
 
 export function getWorkModel(): Model<IWork> {
   return getGlobalModelManager().getWorkModel();
+}
+
+export function getPersonalInfoModel(): Model<IPersonalInfo> {
+  return getGlobalModelManager().getPersonalInfoModel();
 }
