@@ -16,7 +16,7 @@ export const WorkSchema = new Schema<IWork>(
   {
     workId: { type: String, required: true, unique: true },
     authorId: { type: String },
-    desc: { type: String, required: true },
+    desc: { type: String, required: false },
     images: [
       {
         url: { type: String, required: true },
