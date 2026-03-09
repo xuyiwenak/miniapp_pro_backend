@@ -11,6 +11,7 @@ import { Connection, Model } from "mongoose";
 // import { IMail } from "../../entity/mail.entity";
 import { IPersonalInfo, PersonalInfoSchema } from "../../entity/personalInfo.entity";
 import { IWork, WorkSchema } from "../../entity/work.entity";
+import { HealingReportSchema, type IHealingReport } from "../../entity/healingReport.entity";
 
 class GlobalModelManager {
   private connection: Connection;
@@ -18,6 +19,7 @@ class GlobalModelManager {
   // private mailModel!: Model<IMail>;
   private workModel!: Model<IWork>;
   private personalInfoModel!: Model<IPersonalInfo>;
+  private healingReportModel!: Model<IHealingReport>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -38,6 +40,9 @@ class GlobalModelManager {
 
     this.personalInfoModel = this.connection.model<IPersonalInfo>("PersonalInfo", PersonalInfoSchema);
     this.personalInfoModel.createIndexes().catch(() => {});
+
+    this.healingReportModel = this.connection.model<IHealingReport>("HealingReport", HealingReportSchema);
+    this.healingReportModel.createIndexes().catch(() => {});
   }
 
   // // 获取 Account 模型
@@ -54,6 +59,10 @@ class GlobalModelManager {
 
   public getPersonalInfoModel(): Model<IPersonalInfo> {
     return this.personalInfoModel;
+  }
+
+  public getHealingReportModel(): Model<IHealingReport> {
+    return this.healingReportModel;
   }
 
   public async stopConnection() {
@@ -88,4 +97,8 @@ export function getWorkModel(): Model<IWork> {
 
 export function getPersonalInfoModel(): Model<IPersonalInfo> {
   return getGlobalModelManager().getPersonalInfoModel();
+}
+
+export function getHealingReportModel(): Model<IHealingReport> {
+  return getGlobalModelManager().getHealingReportModel();
 }

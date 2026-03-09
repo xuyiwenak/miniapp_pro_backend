@@ -27,17 +27,6 @@ const POPULAR_WORDS = [
   "当HR问你离职原因，怎么回答最能被接受",
 ];
 
-const SERVICE_LIST = [
-  { image: "/static/icon_wx.png", name: "微信", type: "weixin", url: "" },
-  { image: "/static/icon_qq.png", name: "QQ", type: "QQ", url: "" },
-  { image: "/static/icon_doc.png", name: "腾讯文档", type: "document", url: "" },
-  { image: "/static/icon_map.png", name: "腾讯地图", type: "map", url: "" },
-  { image: "/static/icon_td.png", name: "数据中心", type: "data", url: "/pages/dataCenter/index" },
-  { image: "/static/icon_td.png", name: "数据中心", type: "data", url: "/pages/dataCenter/index" },
-  { image: "/static/icon_td.png", name: "数据中心", type: "data", url: "/pages/dataCenter/index" },
-  { image: "/static/icon_td.png", name: "数据中心", type: "data", url: "/pages/dataCenter/index" },
-];
-
 const DEFAULT_PERSONAL = {
   image: "/static/avatar1.png",
   name: "小小轩",
@@ -81,10 +70,6 @@ router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: 
   } catch {
     sendSucc(res, { data: { ...DEFAULT_PERSONAL } });
   }
-});
-
-router.get("/getServiceList", (_req: Request, res: Response) => {
-  sendSucc(res, { data: { service: SERVICE_LIST } });
 });
 
 /** 上传头像：body.data.image 为 base64 或 data:image/xxx;base64,xxx */

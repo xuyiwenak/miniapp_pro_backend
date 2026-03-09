@@ -1,16 +1,14 @@
 import http from "http";
 import path from "path";
 import express from "express";
-import { WebSocketServer } from "ws";
 import { sharedHttpOptions } from "../httpServer";
 import { authMiddleware } from "./middleware/auth";
 import loginRoutes from "./routes/login";
 import homeRoutes from "./routes/home";
 import apiRoutes from "./routes/api";
 import dataCenterRoutes from "./routes/dataCenter";
-import messageRoutes from "./routes/message";
 import workRoutes from "./routes/work";
-import { setupChatWs } from "./ws/chatServer";
+import healingRoutes from "./routes/healing";
 
 const staticDir = path.join(process.cwd(), "static");
 
@@ -35,7 +33,7 @@ export function createMiniappApp(): express.Express {
   app.use("/api", apiRoutes);
   app.use("/work", authMiddleware, workRoutes);
   app.use("/dataCenter", dataCenterRoutes);
-  app.use("/message", authMiddleware, messageRoutes);
+  app.use("/healing", healingRoutes);
 
   app.use((_req, res) => {
     res.status(200).json({ code: 404, success: false, message: "Not Found" });
@@ -47,14 +45,6 @@ export function createMiniappApp(): express.Express {
 export function startMiniappServer(port: number): Promise<{ app: express.Express; server: http.Server }> {
   const app = createMiniappApp();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: "/chat" });
-
-  wss.on("connection", (ws, req) => {
-    const url = req.url ?? "";
-    const token = new URL(url, `http://localhost`).searchParams.get("token") ?? undefined;
-    setupChatWs(ws, token);
-  });
-
   const logger = sharedHttpOptions.logger;
   return new Promise((resolve) => {
     server.listen(port, () => {
