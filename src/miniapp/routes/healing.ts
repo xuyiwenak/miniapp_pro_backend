@@ -397,5 +397,44 @@ router.post("/privacy", authMiddleware, async (req: MiniappRequest, res: Respons
   }
 });
 
+router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  const body = (req.body?.data ?? req.body) as { workId?: string };
+  const workId = body?.workId?.trim();
+
+  if (!userId) {
+    sendErr(res, "Unauthorized", 401);
+    return;
+  }
+
+  if (!workId) {
+    sendErr(res, "Missing workId", 400);
+    return;
+  }
+
+  try {
+    const HealingReport = getHealingReportModel();
+    const report = await HealingReport.findOne({ workId, userId }).lean().exec();
+    if (!report) {
+      sendErr(res, "Report not found", 404);
+      return;
+    }
+
+    await HealingReport.deleteOne({ workId, userId }).exec();
+    sendSucc(res, { workId });
+  } catch (err) {
+    logRequestError("healing.ts:delete:error", "healing delete error", {
+      req,
+      requestBody: body,
+      statusCode: 500,
+      extra: {
+        errorName: (err as Error).name,
+        errorMessage: (err as Error).message,
+      },
+    });
+    sendErr(res, "Delete report failed", 500);
+  }
+});
+
 export default router;
 

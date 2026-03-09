@@ -148,5 +148,48 @@ router.post("/publish", async (req: MiniappRequest, res: Response) => {
   }
 });
 
+router.post("/delete", async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  const body = (req.body?.data ?? req.body) as { workId?: string };
+  const workId = body?.workId?.trim();
+
+  if (!userId) {
+    sendErr(res, "Unauthorized", 401);
+    return;
+  }
+
+  if (!workId) {
+    sendErr(res, "Missing workId", 400);
+    return;
+  }
+
+  try {
+    const Work = getWorkModel();
+    const work = await Work.findOne({ workId }).lean().exec();
+    if (!work) {
+      sendErr(res, "Work not found", 404);
+      return;
+    }
+    if (work.authorId !== userId) {
+      sendErr(res, "Forbidden", 403);
+      return;
+    }
+
+    await Work.deleteOne({ workId }).exec();
+    sendSucc(res, { workId });
+  } catch (err) {
+    logRequestError("work.ts:delete:error", "delete work failed", {
+      req,
+      requestBody: { workId },
+      statusCode: 500,
+      extra: {
+        errorName: (err as Error).name,
+        errorMessage: (err as Error).message,
+      },
+    });
+    sendErr(res, "Delete work failed", 500);
+  }
+});
+
 export default router;
 
