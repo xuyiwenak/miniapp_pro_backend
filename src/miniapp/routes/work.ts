@@ -7,6 +7,55 @@ import { logRequest, logRequestError } from "../../util/requestLogger";
 
 const router = Router();
 
+router.get("/list", async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  const status = (req.query?.status as string | undefined)?.trim() as "draft" | "published" | undefined;
+
+  if (!userId) {
+    sendErr(res, "Unauthorized", 401);
+    return;
+  }
+
+  if (status && status !== "draft" && status !== "published") {
+    sendErr(res, "Invalid status", 400);
+    return;
+  }
+
+  try {
+    const Work = getWorkModel();
+    const query: Record<string, unknown> = { authorId: userId };
+    if (status) {
+      query.status = status;
+    }
+    const works = await Work.find(query).sort({ createdAt: -1 }).lean().exec();
+
+    const list = works.map((w) => {
+      const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
+      return {
+        workId: w.workId,
+        desc: w.desc,
+        tags: w.tags ?? [],
+        coverUrl: cover?.url ?? "/static/home/card0.png",
+        status: w.status,
+        createdAt: w.createdAt,
+      };
+    });
+
+    sendSucc(res, list);
+  } catch (err) {
+    logRequestError("work.ts:list:error", "get work list failed", {
+      req,
+      requestBody: { status },
+      statusCode: 500,
+      extra: {
+        errorName: (err as Error).name,
+        errorMessage: (err as Error).message,
+      },
+    });
+    sendErr(res, "Get work list failed", 500);
+  }
+});
+
 router.post("/publish", async (req: MiniappRequest, res: Response) => {
   const payload = (req.body?.data ?? req.body) as {
     desc?: string;
