@@ -126,11 +126,66 @@ PM2 配置文件为 `pm2_config.json`，定义了应用的启动参数：
 2. 实现 `init()`、`start()` 和 `stop()` 方法
 3. 在 `front.ts` 中注册和启动组件
 
-### 添加 API 接口
+### Miniapp 反馈接口（/api/feedback）
 
-1. 在 `shared/` 目录下定义接口类型
-2. 使用 TSRPC CLI 生成接口代码
-3. 实现接口处理逻辑
+本项目为小程序提供了「问题反馈 / 联系客服」能力，接口挂载在 `miniapp` REST 服务下的 `/api/feedback` 路由上，并通过 MongoDB 进行持久化存储。
+
+#### 数据结构（Feedback）
+
+- `userId`: 用户唯一标识（从小程序端 `Authorization` Bearer Token 中解析）
+- `title`: 问题标题（必填，最多 30 字）
+- `content`: 问题描述（必填，最多 300 字）
+- `status`: 处理状态，`pending | processing | resolved`，默认 `pending`
+- `reply`: 客服回复内容（可选）
+- `createdAt` / `updatedAt`: 创建 / 更新时间（由 mongoose `timestamps` 自动维护）
+
+#### 接口列表
+
+- `POST /api/feedback`（需要登录）
+  - 请求体：`{ data: { title: string, content: string } }`
+  - 行为：为当前用户创建一条新的反馈记录，初始 `status = "pending"`。
+  - 响应：`{ code: 200, success: true, data: { id: string } }`
+
+- `GET /api/feedback`（需要登录）
+  - 行为：按 `createdAt` 倒序返回当前登录用户的所有反馈列表。
+  - 响应：
+    ```json
+    {
+      "code": 200,
+      "success": true,
+      "data": {
+        "list": [
+          {
+            "id": "xxxx",
+            "title": "标题",
+            "content": "问题描述",
+            "status": "pending",
+            "reply": "",
+            "createdAt": "2026-03-10T10:00:00.000Z"
+          }
+        ]
+      }
+    }
+    ```
+
+- `PATCH /api/feedback/:id`（后台使用，需要登录）
+  - 请求体：`{ data: { status?: "pending" | "processing" | "resolved", reply?: string } }`
+  - 行为：在确保 `userId` 匹配的前提下，更新指定反馈的处理状态与回复内容。
+  - 响应：`{ code: 200, success: true, data: { id, status, reply } }`
+
+#### 小程序前端调用约定
+
+小程序端通过 `art_app/api/request.js` 暴露的 `request` 方法调用，如：
+
+```js
+// 创建反馈
+request('/api/feedback', 'POST', { data: { title, content } });
+
+// 获取当前用户反馈列表
+request('/api/feedback', 'GET');
+```
+
+请求会自动携带 `Authorization: Bearer <access_token>` 头部，用于服务端识别 `userId`。
 
 ### 日志使用
 

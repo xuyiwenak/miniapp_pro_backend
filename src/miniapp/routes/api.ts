@@ -3,7 +3,7 @@ import path from "path";
 import { Router, Request, Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
-import { getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
+import { getFeedbackModel, getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
 
 const router = Router();
 
@@ -58,7 +58,7 @@ router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: 
       ? {
           image: doc.image ?? DEFAULT_PERSONAL.image,
           name: doc.name ?? DEFAULT_PERSONAL.name,
-          star: doc.star ?? "",
+          star: doc.star ?? DEFAULT_PERSONAL.star,
           gender: doc.gender ?? DEFAULT_PERSONAL.gender,
           birth: doc.birth ?? DEFAULT_PERSONAL.birth,
           address: Array.isArray(doc.address) ? doc.address : DEFAULT_PERSONAL.address,
@@ -69,6 +69,104 @@ router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: 
     sendSucc(res, { data: info });
   } catch {
     sendSucc(res, { data: { ...DEFAULT_PERSONAL } });
+  }
+});
+
+/** 创建问题反馈 */
+router.post("/feedback", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const body = (req.body?.data ?? req.body) as { title?: string; content?: string };
+  const rawTitle = (body.title ?? "").trim();
+  const rawContent = (body.content ?? "").trim();
+
+  if (!rawTitle || !rawContent) {
+    sendErr(res, "Missing title or content", 400);
+    return;
+  }
+
+  const title = rawTitle.slice(0, 30);
+  const content = rawContent.slice(0, 300);
+
+  try {
+    const Feedback = getFeedbackModel();
+    const doc = await Feedback.create({
+      userId,
+      title,
+      content,
+      status: "pending",
+    });
+    sendSucc(res, {
+      id: String(doc._id),
+    });
+  } catch {
+    sendErr(res, "Save feedback failed", 500);
+  }
+});
+
+/** 获取当前用户的历史反馈列表 */
+router.get("/feedback", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  try {
+    const Feedback = getFeedbackModel();
+    const list = await Feedback.find({ userId }).sort({ createdAt: -1 }).lean().exec();
+    const mapped = list.map((item) => ({
+      id: String(item._id),
+      title: item.title,
+      content: item.content,
+      status: item.status,
+      reply: item.reply ?? "",
+      createdAt: item.createdAt,
+    }));
+    sendSucc(res, { list: mapped });
+  } catch {
+    sendErr(res, "Get feedback failed", 500);
+  }
+});
+
+/** 更新反馈的处理状态与回复（后台使用） */
+router.patch("/feedback/:id", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const feedbackId = req.params.id;
+  const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
+
+  if (!feedbackId) {
+    sendErr(res, "Missing id", 400);
+    return;
+  }
+
+  const update: Record<string, unknown> = {};
+  if (body.status) {
+    if (!["pending", "processing", "resolved"].includes(body.status)) {
+      sendErr(res, "Invalid status", 400);
+      return;
+    }
+    update.status = body.status;
+  }
+  if (typeof body.reply === "string") {
+    update.reply = body.reply;
+  }
+
+  if (Object.keys(update).length === 0) {
+    sendErr(res, "Nothing to update", 400);
+    return;
+  }
+
+  try {
+    const Feedback = getFeedbackModel();
+    const doc = await Feedback.findOneAndUpdate({ _id: feedbackId, userId }, { $set: update }, { new: true })
+      .lean()
+      .exec();
+    if (!doc) {
+      sendErr(res, "Feedback not found", 404);
+      return;
+    }
+    sendSucc(res, {
+      id: String(doc._id),
+      status: doc.status,
+      reply: doc.reply ?? "",
+    });
+  } catch {
+    sendErr(res, "Update feedback failed", 500);
   }
 });
 

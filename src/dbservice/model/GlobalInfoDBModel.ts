@@ -12,6 +12,7 @@ import { Connection, Model } from "mongoose";
 import { IPersonalInfo, PersonalInfoSchema } from "../../entity/personalInfo.entity";
 import { IWork, WorkSchema } from "../../entity/work.entity";
 import { HealingReportSchema, type IHealingReport } from "../../entity/healingReport.entity";
+import { FeedbackSchema, type IFeedback } from "../../entity/feedback.entity";
 
 class GlobalModelManager {
   private connection: Connection;
@@ -20,6 +21,7 @@ class GlobalModelManager {
   private workModel!: Model<IWork>;
   private personalInfoModel!: Model<IPersonalInfo>;
   private healingReportModel!: Model<IHealingReport>;
+  private feedbackModel!: Model<IFeedback>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -43,6 +45,9 @@ class GlobalModelManager {
 
     this.healingReportModel = this.connection.model<IHealingReport>("HealingReport", HealingReportSchema);
     this.healingReportModel.createIndexes().catch(() => {});
+
+    this.feedbackModel = this.connection.model<IFeedback>("Feedback", FeedbackSchema);
+    this.feedbackModel.createIndexes().catch(() => {});
   }
 
   // // 获取 Account 模型
@@ -63,6 +68,10 @@ class GlobalModelManager {
 
   public getHealingReportModel(): Model<IHealingReport> {
     return this.healingReportModel;
+  }
+
+  public getFeedbackModel(): Model<IFeedback> {
+    return this.feedbackModel;
   }
 
   public async stopConnection() {
@@ -101,4 +110,8 @@ export function getPersonalInfoModel(): Model<IPersonalInfo> {
 
 export function getHealingReportModel(): Model<IHealingReport> {
   return getGlobalModelManager().getHealingReportModel();
+}
+
+export function getFeedbackModel(): Model<IFeedback> {
+  return getGlobalModelManager().getFeedbackModel();
 }
