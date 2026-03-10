@@ -1,0 +1,9 @@
+{
+  "internal_server_token": "CHANGE_ME_INTERNAL_TOKEN",
+  "account_server_token": "CHANGE_ME_ACCOUNT_TOKEN",
+  "wx_miniapp": {
+    "appId": "YOUR_WECHAT_APPID",
+    "appSecret": "YOUR_WECHAT_APPSECRET"
+  }
+}
+

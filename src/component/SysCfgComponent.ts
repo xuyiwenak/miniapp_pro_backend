@@ -23,6 +23,7 @@ export class SysCfgComponent implements IBaseComponent {
   private _db_zone_map: Map<string, DBCfg> = new Map();
   private _redis_global?: RedisCfg;
   private _server!: ServerCfg;
+  private _server_auth_config: unknown;
   init() {}
 
   async start() {
@@ -32,6 +33,7 @@ export class SysCfgComponent implements IBaseComponent {
     const globalVar = globalVarComp.globalVar;
     this.setZoneConfig(globalVar);
     this.setDbConfig();
+    this.setServerAuthConfig();
   }
 
   async afterStart() {}
@@ -86,8 +88,21 @@ export class SysCfgComponent implements IBaseComponent {
     logger.log("Configuration loaded DB successfully:", config);
   }
 
+  setServerAuthConfig(): void {
+    const [data, error] = loadSysConfigJson("server_auth_config.json");
+    if (!data) {
+      logger.error(`load server_auth_config.json failed: ${error}`);
+      return;
+    }
+    this._server_auth_config = data;
+  }
+
   public get redis_global(): RedisCfg | undefined {
     return this._redis_global;
+  }
+
+  public get server_auth_config(): unknown {
+    return this._server_auth_config;
   }
 
   /**

@@ -3,12 +3,14 @@ import { ComponentManager, EComName, IBaseComponent } from "../common/BaseCompon
 import { getPlayerModel } from "../dbservice/model/ZoneDBModel";
 import { gameLogger } from "../util/logger";
 import { v4 as uuidv4 } from "uuid";
+import { AccountLevel } from "../shared/enum/AccountLevel";
 
 type PlayerDTO = {
   userId: string;
   account: string;
   nickname?: string;
   zoneId?: string;
+  openId?: string;
 };
 
 type PlayerResult =
@@ -29,6 +31,35 @@ export class PlayerComponent implements IBaseComponent {
     const zoneIdList = sysCfg.server?.zoneIdList ?? [];
     this.defaultZone = zoneIdList[0] ?? "";
     gameLogger.debug("PlayerComponent start, defaultZone=", this.defaultZone);
+
+    // 确保默认区存在一个超级管理员账号
+    if (this.defaultZone) {
+      try {
+        const Player = getPlayerModel(this.defaultZone);
+        const adminAccount = "adminxuyiwen";
+        const exist = await Player.findOne({ account: adminAccount }).exec();
+        if (!exist) {
+          const userId = uuidv4();
+          await Player.create({
+            userId,
+            account: adminAccount,
+            password: "123321",
+            zoneId: this.defaultZone,
+            level: AccountLevel.SuperAdmin,
+          });
+          gameLogger.info(
+            "Seed admin account created",
+            adminAccount,
+            "userId=",
+            userId,
+            "zoneId=",
+            this.defaultZone,
+          );
+        }
+      } catch (err) {
+        gameLogger.error("create seed admin account failed", err);
+      }
+    }
   }
 
   async afterStart(): Promise<void> {
@@ -66,6 +97,7 @@ export class PlayerComponent implements IBaseComponent {
         account,
         password, // 当前方案明文存储，后续可改为哈希
         zoneId,
+        level: AccountLevel.User,
       });
 
       gameLogger.info(
@@ -134,11 +166,90 @@ export class PlayerComponent implements IBaseComponent {
           account: player.account,
           nickname: player.nickname,
           zoneId: player.zoneId,
+          openId: player.openId ?? undefined,
         },
       };
     } catch (err) {
       gameLogger.error("login exception, account=", account, err);
       return { ok: false, error: "LoginException" };
+    }
+  }
+
+  /**
+   * 使用微信 openId 登录：按 openId 查找或自动注册
+   */
+  async loginByOpenId(openId: string): Promise<PlayerResult> {
+    if (!this.defaultZone) {
+      gameLogger.error(
+        "loginByOpenId failed: defaultZone is empty, openId=",
+        openId,
+      );
+      return { ok: false, error: "DefaultZoneNotReady" };
+    }
+
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+
+      // 1. 尝试按 openId 查找已有玩家
+      let player = await Player.findOne({ openId }).exec();
+      if (player) {
+        gameLogger.info(
+          "loginByOpenId success (existing), openId=",
+          openId,
+          "userId=",
+          player.userId,
+          "zoneId=",
+          player.zoneId,
+        );
+
+        return {
+          ok: true,
+          data: {
+            userId: player.userId,
+            account: player.account,
+            nickname: player.nickname,
+            zoneId: player.zoneId,
+            openId: player.openId ?? openId,
+          },
+        };
+      }
+
+      // 2. 不存在则自动注册一个账号
+      const userId = uuidv4();
+      const zoneId = this.defaultZone;
+      const account = `wx_${openId}`;
+
+      player = await Player.create({
+        userId,
+        account,
+        password: undefined,
+        zoneId,
+        openId,
+        level: AccountLevel.User,
+      });
+
+      gameLogger.info(
+        "loginByOpenId auto register success, openId=",
+        openId,
+        "userId=",
+        userId,
+        "zoneId=",
+        zoneId,
+      );
+
+      return {
+        ok: true,
+        data: {
+          userId: player.userId,
+          account: player.account,
+          nickname: player.nickname,
+          zoneId: player.zoneId,
+          openId: player.openId ?? openId,
+        },
+      };
+    } catch (err) {
+      gameLogger.error("loginByOpenId exception, openId=", openId, err);
+      return { ok: false, error: "LoginByOpenIdException" };
     }
   }
 
