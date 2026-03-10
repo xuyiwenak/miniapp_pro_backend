@@ -1,11 +1,21 @@
 import fs from "fs";
 import path from "path";
 import { Router, Request, Response } from "express";
+// @ts-ignore 类型通过运行时依赖提供
+import multer from "multer";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getFeedbackModel, getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
+import { uploadToCos } from "../../util/cosUploader";
 
 const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
+});
 
 const AVATARS_DIR = path.join(process.cwd(), "static", "avatars");
 function ensureAvatarsDir() {
@@ -29,10 +39,10 @@ const POPULAR_WORDS = [
 
 const DEFAULT_PERSONAL = {
   image: "/static/avatar1.png",
-  name: "小小轩",
+  name: "用户", // 实际返回时会基于 userId 生成“用户_xxxxxxxx”
   star: "天秤座",
   gender: 0,
-  birth: "1994-09-27",
+  birth: "1994-01-01",
   address: ["440000", "440300"],
   brief: "在你身边，为你设计",
   photos: [
@@ -54,10 +64,11 @@ router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: 
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).lean().exec();
+    const fallbackName = `用户_${String(userId).slice(0, 8)}`;
     const info = doc
       ? {
           image: doc.image ?? DEFAULT_PERSONAL.image,
-          name: doc.name ?? DEFAULT_PERSONAL.name,
+          name: (doc.name && doc.name.trim()) || fallbackName,
           star: doc.star ?? DEFAULT_PERSONAL.star,
           gender: doc.gender ?? DEFAULT_PERSONAL.gender,
           birth: doc.birth ?? DEFAULT_PERSONAL.birth,
@@ -65,10 +76,19 @@ router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: 
           brief: doc.brief ?? DEFAULT_PERSONAL.brief,
           photos: Array.isArray(doc.photos) ? doc.photos : DEFAULT_PERSONAL.photos,
         }
-      : { ...DEFAULT_PERSONAL };
+      : {
+          ...DEFAULT_PERSONAL,
+          name: fallbackName,
+        };
     sendSucc(res, { data: info });
   } catch {
-    sendSucc(res, { data: { ...DEFAULT_PERSONAL } });
+    const fallbackName = `用户_${String(userId).slice(0, 8)}`;
+    sendSucc(res, {
+      data: {
+        ...DEFAULT_PERSONAL,
+        name: fallbackName,
+      },
+    });
   }
 });
 
@@ -170,37 +190,73 @@ router.patch("/feedback/:id", authMiddleware, async (req: MiniappRequest, res: R
   }
 });
 
-/** 上传头像：body.data.image 为 base64 或 data:image/xxx;base64,xxx */
-router.post("/uploadAvatar", authMiddleware, (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
-  const body = req.body?.data ?? req.body;
-  const raw = (body?.image as string) || "";
-  const base64Match = raw.match(/^data:image\/(\w+);base64,(.+)$/) || [null, "jpeg", raw];
-  const ext = (base64Match[1] === "png" ? "png" : "jpeg") as string;
-  const base64 = base64Match[2];
-  if (!base64) {
-    sendErr(res, "Missing image", 400);
-    return;
-  }
-  let buf: Buffer;
-  try {
-    buf = Buffer.from(base64, "base64");
-  } catch {
-    sendErr(res, "Invalid base64", 400);
-    return;
-  }
-  ensureAvatarsDir();
-  const filename = `${userId}-${Date.now()}.${ext}`;
-  const filepath = path.join(AVATARS_DIR, filename);
-  try {
-    fs.writeFileSync(filepath, buf);
-  } catch (err) {
-    sendErr(res, "Save avatar failed", 500);
-    return;
-  }
-  const url = `/static/avatars/${filename}`;
-  sendSucc(res, { url });
-});
+/** 通用图片上传：multipart/form-data，字段名 file */
+router.post(
+  "/upload",
+  authMiddleware,
+  upload.single("file"),
+  async (req: MiniappRequest, res: Response) => {
+    const userId = req.userId!;
+    const anyReq = req as any;
+    const file = anyReq.file as any;
+
+    if (!file || !file.buffer) {
+      sendErr(res, "Missing file", 400);
+      return;
+    }
+    if (!file.mimetype.startsWith("image/")) {
+      sendErr(res, "Only image files are allowed", 400);
+      return;
+    }
+
+    const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+    const safeExt = ext.replace(/[^a-z0-9.]/gi, "") || ".jpg";
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1e9);
+    const key = `images/${userId}/${timestamp}-${random}${safeExt}`;
+
+    try {
+      const url = await uploadToCos(file.buffer, key, file.mimetype);
+      sendSucc(res, { url });
+    } catch (err) {
+      sendErr(res, "Upload to COS failed", 500);
+    }
+  },
+);
+
+/** 上传头像：兼容老接口，转发到 COS 上传；期望字段 file（multipart） */
+router.post(
+  "/uploadAvatar",
+  authMiddleware,
+  upload.single("file"),
+  async (req: MiniappRequest, res: Response) => {
+    const userId = req.userId!;
+    const anyReq = req as any;
+    const file = anyReq.file as any;
+
+    if (!file || !file.buffer) {
+      sendErr(res, "Missing file", 400);
+      return;
+    }
+    if (!file.mimetype.startsWith("image/")) {
+      sendErr(res, "Only image files are allowed", 400);
+      return;
+    }
+
+    const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+    const safeExt = ext.replace(/[^a-z0-9.]/gi, "") || ".jpg";
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1e9);
+    const key = `avatars/${userId}/${timestamp}-${random}${safeExt}`;
+
+    try {
+      const url = await uploadToCos(file.buffer, key, file.mimetype);
+      sendSucc(res, { url });
+    } catch (err) {
+      sendErr(res, "Upload avatar failed", 500);
+    }
+  },
+);
 
 router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
@@ -212,10 +268,14 @@ router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res
   try {
     const PersonalInfo = getPersonalInfoModel();
     const existing = await PersonalInfo.findOne({ userId }).lean().exec();
+    const autoName =
+      (body.name as string | undefined)?.trim() ||
+      (existing?.name && existing.name.trim()) ||
+      `用户_${String(userId).slice(0, 8)}`;
     const update = {
       userId,
       image: body.image ?? existing?.image ?? DEFAULT_PERSONAL.image,
-      name: body.name ?? DEFAULT_PERSONAL.name,
+      name: autoName,
       star: body.star ?? existing?.star ?? DEFAULT_PERSONAL.star,
       gender: body.gender ?? DEFAULT_PERSONAL.gender,
       birth: body.birth ?? DEFAULT_PERSONAL.birth,
@@ -232,7 +292,7 @@ router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res
       .exec();
     const info = {
       image: doc!.image ?? DEFAULT_PERSONAL.image,
-      name: doc!.name ?? DEFAULT_PERSONAL.name,
+      name: doc!.name ?? `用户_${String(userId).slice(0, 8)}`,
       star: doc!.star ?? "",
       gender: doc!.gender ?? DEFAULT_PERSONAL.gender,
       birth: doc!.birth ?? DEFAULT_PERSONAL.birth,

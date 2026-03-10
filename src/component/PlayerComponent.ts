@@ -31,35 +31,6 @@ export class PlayerComponent implements IBaseComponent {
     const zoneIdList = sysCfg.server?.zoneIdList ?? [];
     this.defaultZone = zoneIdList[0] ?? "";
     gameLogger.debug("PlayerComponent start, defaultZone=", this.defaultZone);
-
-    // 确保默认区存在一个超级管理员账号
-    if (this.defaultZone) {
-      try {
-        const Player = getPlayerModel(this.defaultZone);
-        const adminAccount = "adminxuyiwen";
-        const exist = await Player.findOne({ account: adminAccount }).exec();
-        if (!exist) {
-          const userId = uuidv4();
-          await Player.create({
-            userId,
-            account: adminAccount,
-            password: "123321",
-            zoneId: this.defaultZone,
-            level: AccountLevel.SuperAdmin,
-          });
-          gameLogger.info(
-            "Seed admin account created",
-            adminAccount,
-            "userId=",
-            userId,
-            "zoneId=",
-            this.defaultZone,
-          );
-        }
-      } catch (err) {
-        gameLogger.error("create seed admin account failed", err);
-      }
-    }
   }
 
   async afterStart(): Promise<void> {

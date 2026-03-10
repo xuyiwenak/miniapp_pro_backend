@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import type { IWork } from "../../entity/work.entity";
+import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
 
 const router = Router();
@@ -102,7 +103,8 @@ router.get("/workDetail", async (req: Request, res: Response) => {
       responseBody: { workId: work.workId, desc: work.desc, imagesCount: work.images?.length ?? 0 },
       statusCode: 200,
     });
-    sendSucc(res, work);
+    const healingInfo = buildHealingResponse(work, undefined);
+    sendSucc(res, { ...work, ...healingInfo });
   } catch (err) {
     logRequestError("home.ts:workDetail:error", "workDetail server error", {
       req,

@@ -1,10 +1,9 @@
 import { Router, type Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
-import { getHealingReportModel, getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
+import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../util/requestLogger";
-import type { IHealingReport } from "../../entity/healingReport.entity";
-import type { IWork } from "../../entity/work.entity";
+import type { IWork, IHealingScores } from "../../entity/work.entity";
 
 const router = Router();
 
@@ -28,7 +27,6 @@ function hashStringToSeed(input: string): number {
 function createRng(seed: number): () => number {
   let x = seed || 1;
   return () => {
-    // xorshift32
     x ^= x << 13;
     x ^= x >>> 17;
     x ^= x << 5;
@@ -37,7 +35,6 @@ function createRng(seed: number): () => number {
 }
 
 function normalizeScores(raw: Record<EmotionKey, number>): Record<EmotionKey, number> {
-  // 将 0-1 之间的值缩放到 20-95 之间，避免极端 0 或 100
   const result: Record<EmotionKey, number> = { calm: 0, stress: 0, joy: 0, sadness: 0 };
   (Object.keys(raw) as EmotionKey[]).forEach((key) => {
     const v = raw[key];
@@ -59,15 +56,9 @@ function analyzeTextTendencies(text: string): { stressBoost: number; joyBoost: n
 
   const containsAny = (words: string[]) => words.some((w) => lower.includes(w.toLowerCase()));
 
-  if (containsAny(stressWords)) {
-    stressBoost += 0.25;
-  }
-  if (containsAny(joyWords)) {
-    joyBoost += 0.25;
-  }
-  if (containsAny(calmWords)) {
-    calmBoost += 0.25;
-  }
+  if (containsAny(stressWords)) stressBoost += 0.25;
+  if (containsAny(joyWords)) joyBoost += 0.25;
+  if (containsAny(calmWords)) calmBoost += 0.25;
 
   return { stressBoost, joyBoost, calmBoost };
 }
@@ -102,7 +93,7 @@ function generateMockScoresForWork(work: IWork): Record<EmotionKey, number> {
   return normalizeScores(raw);
 }
 
-function pickDominantEmotion(scores: Record<EmotionKey, number>): { key: EmotionKey; label: string; value: number } {
+function pickDominantEmotion(scores: IHealingScores): { key: EmotionKey; label: string; value: number } {
   const entries: { key: EmotionKey; value: number }[] = (Object.keys(scores) as EmotionKey[]).map((key) => ({
     key,
     value: scores[key],
@@ -115,6 +106,40 @@ function pickDominantEmotion(scores: Record<EmotionKey, number>): { key: Emotion
     value: top.value,
   };
 }
+
+function buildHealingResponse(work: IWork, viewerId?: string) {
+  const healing = work.healing;
+  if (!healing) {
+    return { healingAnalyzed: false };
+  }
+
+  const isOwner = !!(work.authorId && viewerId && work.authorId === viewerId);
+
+  if (!healing.isPublic && !isOwner) {
+    return {
+      healingAnalyzed: true,
+      healingVisible: false,
+      healingIsPublic: false,
+    };
+  }
+
+  const dominant = pickDominantEmotion(healing.scores);
+  return {
+    healingAnalyzed: true,
+    healingVisible: true,
+    healingScores: healing.scores,
+    healingSummary: healing.summary,
+    healingColorAnalysis: healing.colorAnalysis,
+    healingStatus: healing.status,
+    healingIsPublic: healing.isPublic,
+    healingDominantEmotion: dominant.key,
+    healingDominantEmotionLabel: dominant.label,
+    healingDominantEmotionScore: dominant.value,
+    isOwner,
+  };
+}
+
+export { buildHealingResponse };
 
 router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string };
@@ -138,8 +163,6 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
 
   try {
     const Work = getWorkModel();
-    const HealingReport = getHealingReportModel();
-
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
     if (!work) {
       sendErr(res, "Work not found", 404);
@@ -147,7 +170,6 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     }
 
     if (work.authorId && work.authorId !== userId) {
-      // 只有作者可以为作品发起分析
       sendErr(res, "Forbidden", 403);
       return;
     }
@@ -156,17 +178,21 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     const summary = buildMockSummary();
     const colorAnalysis = buildColorAnalysis();
 
-    const update: Partial<IHealingReport> = {
-      userId,
-      workId,
-      scores,
-      summary,
-      colorAnalysis,
-      status: "success",
-      isPublic: true,
-    };
-
-    const doc = (await HealingReport.findOneAndUpdate({ workId }, { $set: update }, { new: true, upsert: true }).lean().exec()) as IHealingReport;
+    await Work.updateOne(
+      { workId },
+      {
+        $set: {
+          healing: {
+            scores,
+            summary,
+            colorAnalysis,
+            status: "success",
+            isPublic: true,
+            analyzedAt: new Date(),
+          },
+        },
+      },
+    ).exec();
 
     const dominant = pickDominantEmotion(scores);
 
@@ -175,8 +201,8 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       scores,
       summary,
       colorAnalysis,
-      status: doc.status,
-      isPublic: doc.isPublic,
+      status: "success",
+      isPublic: true,
       dominantEmotion: dominant.key,
       dominantEmotionLabel: dominant.label,
       dominantEmotionScore: dominant.value,
@@ -209,49 +235,17 @@ router.get("/report", async (req: MiniappRequest, res: Response) => {
   }
 
   try {
-    const HealingReport = getHealingReportModel();
     const Work = getWorkModel();
+    const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
 
-    const [report, work] = await Promise.all([
-      HealingReport.findOne({ workId }).lean().exec() as Promise<IHealingReport | null>,
-      Work.findOne({ workId }).lean().exec() as Promise<IWork | null>,
-    ]);
-
-    if (!report) {
-      sendSucc(res, { exists: false });
+    if (!work) {
+      sendErr(res, "Work not found", 404);
       return;
     }
 
     const viewerId = req.userId;
-    const isOwner = !!(work?.authorId && viewerId && work.authorId === viewerId);
-
-    if (!report.isPublic && !isOwner) {
-      sendSucc(res, {
-        exists: true,
-        visible: false,
-        isPublic: false,
-        message: "作者将本次疗愈分析设为私密，仅自己可见。",
-      });
-      return;
-    }
-
-    const scores = report.scores;
-    const dominant = pickDominantEmotion(scores);
-
-      sendSucc(res, {
-        exists: true,
-        visible: true,
-        workId,
-        scores,
-        summary: report.summary,
-        colorAnalysis: report.colorAnalysis,
-        status: report.status,
-        isPublic: report.isPublic,
-        dominantEmotion: dominant.key,
-        dominantEmotionLabel: dominant.label,
-        dominantEmotionScore: dominant.value,
-        isOwner,
-      });
+    const healingResp = buildHealingResponse(work, viewerId);
+    sendSucc(res, healingResp);
   } catch (err) {
     logRequestError("healing.ts:report:error", "healing report error", {
       req,
@@ -279,40 +273,29 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
   });
 
   try {
-    const HealingReport = getHealingReportModel();
     const Work = getWorkModel();
+    const works = (await Work.find({ authorId: userId, "healing.status": "success" })
+      .sort({ "healing.analyzedAt": -1, updatedAt: -1 })
+      .lean()
+      .exec()) as IWork[];
 
-    const reports = (await HealingReport.find({ userId }).sort({ createdAt: -1 }).lean().exec()) as IHealingReport[];
-    if (reports.length === 0) {
-      sendSucc(res, []);
-      return;
-    }
-
-    const workIds = reports.map((r) => r.workId);
-    const works = (await Work.find({ workId: { $in: workIds } }).lean().exec()) as IWork[];
-    const workMap = new Map<string, IWork>();
-    works.forEach((w) => {
-      workMap.set(w.workId, w);
-    });
-
-    const list = reports.map((r) => {
-      const work = workMap.get(r.workId) ?? null;
-      const cover = work?.images?.[0];
-      const scores = r.scores;
-      const dominant = pickDominantEmotion(scores);
+    const list = works.map((w) => {
+      const healing = w.healing!;
+      const cover = w.images?.[0];
+      const dominant = pickDominantEmotion(healing.scores);
 
       return {
-        workId: r.workId,
-        isPublic: r.isPublic,
-        status: r.status,
-        scores,
+        workId: w.workId,
+        isPublic: healing.isPublic,
+        status: healing.status,
+        scores: healing.scores,
         dominantEmotion: dominant.key,
         dominantEmotionLabel: dominant.label,
         dominantEmotionScore: dominant.value,
         coverUrl: cover?.url ?? "/static/home/card0.png",
-        desc: work?.desc ?? "",
-        tags: work?.tags ?? [],
-        createdAt: r.createdAt,
+        desc: w.desc ?? "",
+        tags: w.tags ?? [],
+        createdAt: healing.analyzedAt ?? w.updatedAt,
       };
     });
 
@@ -352,37 +335,25 @@ router.post("/privacy", authMiddleware, async (req: MiniappRequest, res: Respons
   }
 
   try {
-    const HealingReport = getHealingReportModel();
     const Work = getWorkModel();
-
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+
     if (!work) {
       sendErr(res, "Work not found", 404);
       return;
     }
-
     if (work.authorId !== userId) {
       sendErr(res, "Forbidden", 403);
       return;
     }
-
-    const report = (await HealingReport.findOneAndUpdate(
-      { workId, userId },
-      { $set: { isPublic } },
-      { new: true },
-    )
-      .lean()
-      .exec()) as IHealingReport | null;
-
-    if (!report) {
+    if (!work.healing) {
       sendErr(res, "Report not found", 404);
       return;
     }
 
-    sendSucc(res, {
-      workId,
-      isPublic: report.isPublic,
-    });
+    await Work.updateOne({ workId }, { $set: { "healing.isPublic": isPublic } }).exec();
+
+    sendSucc(res, { workId, isPublic });
   } catch (err) {
     logRequestError("healing.ts:privacy:error", "healing privacy error", {
       req,
@@ -413,14 +384,23 @@ router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response
   }
 
   try {
-    const HealingReport = getHealingReportModel();
-    const report = await HealingReport.findOne({ workId, userId }).lean().exec();
-    if (!report) {
+    const Work = getWorkModel();
+    const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+
+    if (!work) {
+      sendErr(res, "Work not found", 404);
+      return;
+    }
+    if (work.authorId !== userId) {
+      sendErr(res, "Forbidden", 403);
+      return;
+    }
+    if (!work.healing) {
       sendErr(res, "Report not found", 404);
       return;
     }
 
-    await HealingReport.deleteOne({ workId, userId }).exec();
+    await Work.updateOne({ workId }, { $set: { healing: null } }).exec();
     sendSucc(res, { workId });
   } catch (err) {
     logRequestError("healing.ts:delete:error", "healing delete error", {
@@ -437,4 +417,3 @@ router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response
 });
 
 export default router;
-
