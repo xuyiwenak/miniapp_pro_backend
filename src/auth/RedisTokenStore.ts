@@ -29,6 +29,8 @@ function getRedis(): Redis {
 
 // 默认 token 过期时间：7 天（可后续从 server_auth_config 读取）
 const DEFAULT_TOKEN_TTL_SEC = 7 * 24 * 60 * 60;
+// 临时 token 过期时间：10 分钟（用于微信登录后绑定/注册流程）
+const DEFAULT_TEMP_TOKEN_TTL_SEC = 10 * 60;
 
 export async function saveTokenUserId(
   token: string,
@@ -52,5 +54,30 @@ export async function revokeToken(token: string): Promise<void> {
   const client = getRedis();
   const key = `auth:token:${token}`;
   await client.del(key);
+}
+
+export async function saveTempTokenOpenId(
+  tempToken: string,
+  openId: string,
+  ttlSec: number = DEFAULT_TEMP_TOKEN_TTL_SEC,
+): Promise<void> {
+  const client = getRedis();
+  const key = `auth:temp:${tempToken}`;
+  await client.set(key, openId, "EX", ttlSec);
+}
+
+/**
+ * 读取并删除临时 token 对应的 openId（一次性）
+ */
+export async function loadOpenIdByTempToken(
+  tempToken: string,
+): Promise<string | null> {
+  const client = getRedis();
+  const key = `auth:temp:${tempToken}`;
+  const openId = await client.get(key);
+  if (openId) {
+    await client.del(key);
+  }
+  return openId;
 }
 

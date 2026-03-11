@@ -5,8 +5,11 @@ import https from "https";
 import { ComponentManager, EComName } from "../../common/BaseComponent";
 import type { PlayerComponent } from "../../component/PlayerComponent";
 import { sendSucc, sendErr } from "../middleware/response";
-import { issueToken } from "../tokenStore";
-import { revokeToken } from "../../auth/RedisTokenStore";
+import { createToken, issueToken } from "../tokenStore";
+import { loadOpenIdByTempToken, revokeToken, saveTempTokenOpenId } from "../../auth/RedisTokenStore";
+import { getPlayerModel } from "../../dbservice/model/ZoneDBModel";
+import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { getFeedbackModel, getPersonalInfoModel, getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 
 const router = Router();
 const DEBUG_LOG_PATH = path.resolve(__dirname, "../../../debug-0e70cb.log");
@@ -205,14 +208,161 @@ router.post("/wxLogin", async (req: Request, res: Response) => {
     return;
   }
 
-  const ret = await playerComp.loginByOpenId(openid);
+  // 先查是否已绑定（不自动注册）
+  const existed = await playerComp.findByOpenId(openid);
+  if (existed.ok) {
+    const token = await issueToken(existed.data.userId);
+    sendSucc(res, { token, userId: existed.data.userId, isNewUser: false });
+    return;
+  }
+  // 未找到：下发临时 token，让前端选择“创建新账号”或“绑定已有账号”
+  const tempToken = createToken();
+  await saveTempTokenOpenId(tempToken, openid);
+  sendSucc(res, { isNewUser: true, tempToken });
+});
+
+/** 微信用户选择：创建新账号（临时 token -> openId -> auto register） */
+router.post("/wxAutoRegister", async (req: Request, res: Response) => {
+  const payload = req.body?.data ?? req.body;
+  const tempToken = (payload?.tempToken as string | undefined)?.trim();
+  if (!tempToken) {
+    sendErr(res, "Missing tempToken", 400);
+    return;
+  }
+
+  const openId = await loadOpenIdByTempToken(tempToken);
+  if (!openId) {
+    sendErr(res, "Temp token expired", 401);
+    return;
+  }
+
+  const playerComp =
+    ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
+  if (!playerComp) {
+    sendErr(res, "Server not ready", 503);
+    return;
+  }
+
+  const ret = await playerComp.loginByOpenId(openId);
   if (!ret.ok) {
     sendErr(res, ret.error, 500);
     return;
   }
-
   const token = await issueToken(ret.data.userId);
   sendSucc(res, { token, userId: ret.data.userId });
+});
+
+async function migrateUserData(oldUserId: string, newUserId: string): Promise<void> {
+  if (oldUserId === newUserId) return;
+
+  const PersonalInfo = getPersonalInfoModel();
+  const Work = getWorkModel();
+  const Feedback = getFeedbackModel();
+
+  // 个人资料：若新账号已存在则不覆盖；否则迁移旧账号的 personalInfo
+  const existingNew = await PersonalInfo.findOne({ userId: newUserId }).lean().exec();
+  if (!existingNew) {
+    await PersonalInfo.updateOne({ userId: oldUserId }, { $set: { userId: newUserId } }).exec();
+  }
+
+  // 作品与反馈：直接批量迁移归属
+  await Work.updateMany({ authorId: oldUserId }, { $set: { authorId: newUserId } }).exec();
+  await Feedback.updateMany({ userId: oldUserId }, { $set: { userId: newUserId } }).exec();
+}
+
+/** 微信用户选择：绑定到已有账号（账号密码校验后写入 openId，并合并历史 wx 账号数据） */
+router.post("/bindWechat", async (req: Request, res: Response) => {
+  const payload = req.body?.data ?? req.body;
+  const tempToken = (payload?.tempToken as string | undefined)?.trim();
+  const account = (payload?.account as string | undefined)?.trim();
+  const password = (payload?.password as string | undefined) ?? "";
+
+  if (!tempToken || !account || !password) {
+    sendErr(res, "Missing tempToken or account or password", 400);
+    return;
+  }
+
+  const openId = await loadOpenIdByTempToken(tempToken);
+  if (!openId) {
+    sendErr(res, "Temp token expired", 401);
+    return;
+  }
+
+  const playerComp =
+    ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
+  if (!playerComp) {
+    sendErr(res, "Server not ready", 503);
+    return;
+  }
+
+  const loginRet = await playerComp.login(account, password);
+  if (!loginRet.ok) {
+    sendErr(res, loginRet.error, 401);
+    return;
+  }
+
+  const zoneId = playerComp.getDefaultZoneId();
+  if (!zoneId) {
+    sendErr(res, "Server not ready", 503);
+    return;
+  }
+  const Player = getPlayerModel(zoneId);
+  const targetUserId = loginRet.data.userId;
+
+  const targetPlayer = await Player.findOne({ userId: targetUserId }).exec();
+  if (!targetPlayer) {
+    sendErr(res, "Account not found", 404);
+    return;
+  }
+
+  // 目标账号已绑定其他微信
+  if (targetPlayer.openId && targetPlayer.openId !== openId) {
+    sendErr(res, "Account already bound to another WeChat", 409);
+    return;
+  }
+
+  // openId 已绑定到其他账号：若是历史 wx 账号则做合并；否则报冲突
+  const existingOpenIdPlayer = await Player.findOne({ openId }).exec();
+  if (existingOpenIdPlayer && existingOpenIdPlayer.userId !== targetUserId) {
+    // 合并旧 wx 账号数据到目标账号
+    await migrateUserData(existingOpenIdPlayer.userId, targetUserId);
+    await existingOpenIdPlayer.deleteOne();
+  }
+
+  targetPlayer.openId = openId;
+  await targetPlayer.save();
+
+  const token = await issueToken(targetUserId);
+  sendSucc(res, { token, userId: targetUserId });
+});
+
+/** 已登录用户解绑微信（要求账号存在密码，否则解绑后无法登录） */
+router.post("/unbindWechat", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const playerComp =
+    ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
+  if (!playerComp) {
+    sendErr(res, "Server not ready", 503);
+    return;
+  }
+  const zoneId = playerComp.getDefaultZoneId();
+  if (!zoneId) {
+    sendErr(res, "Server not ready", 503);
+    return;
+  }
+  const Player = getPlayerModel(zoneId);
+  const player = await Player.findOne({ userId }).exec();
+  if (!player) {
+    sendErr(res, "User not found", 404);
+    return;
+  }
+  if (!player.password) {
+    sendErr(res, "Password not set; cannot unbind", 400);
+    return;
+  }
+  player.openId = undefined;
+  await player.save();
+  sendSucc(res, { success: true });
 });
 
 /** 退出登录：令当前 token 失效 */

@@ -41,6 +41,39 @@ export class PlayerComponent implements IBaseComponent {
     gameLogger.debug("PlayerComponent stop");
   }
 
+  public getDefaultZoneId(): string {
+    return this.defaultZone;
+  }
+
+  /**
+   * 只查询：按 openId 查找玩家（不自动注册）
+   */
+  async findByOpenId(openId: string): Promise<PlayerResult> {
+    if (!this.defaultZone) {
+      return { ok: false, error: "DefaultZoneNotReady" };
+    }
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ openId }).exec();
+      if (!player) {
+        return { ok: false, error: "NotFound" };
+      }
+      return {
+        ok: true,
+        data: {
+          userId: player.userId,
+          account: player.account,
+          nickname: player.nickname,
+          zoneId: player.zoneId,
+          openId: player.openId ?? openId,
+        },
+      };
+    } catch (err) {
+      gameLogger.error("findByOpenId exception, openId=", openId, err);
+      return { ok: false, error: "FindByOpenIdException" };
+    }
+  }
+
   /**
    * 注册账号：同账号不存在则创建
    */
