@@ -6,8 +6,9 @@
     "appSecret": "YOUR_WECHAT_APPSECRET"
   },
 
+  "_comment_imageStorage": "cos=线上CDN | local=本地真机测试(图片存本机 static/uploads，需设 publicBaseUrl 为本机可访问地址如 http://IP:miniapp端口)",
   "imageStorage": "local",
-  "publicBaseUrl": "http://YOUR_SERVER_IP:41003",
+  "publicBaseUrl": "http://YOUR_SERVER_IP:MINIAPP_PORT",
   "cos": {
     "secretId": "YOUR_COS_SECRET_ID",
     "secretKey": "YOUR_COS_SECRET_KEY",

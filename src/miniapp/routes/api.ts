@@ -6,7 +6,7 @@ import multer from "multer";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getFeedbackModel, getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
-import { uploadToCos } from "../../util/cosUploader";
+import { uploadToStorage } from "../../util/imageUploader";
 
 const router = Router();
 
@@ -216,15 +216,15 @@ router.post(
     const key = `images/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
-      const url = await uploadToCos(file.buffer, key, file.mimetype);
+      const url = await uploadToStorage(file.buffer, key, file.mimetype);
       sendSucc(res, { url });
     } catch (err) {
-      sendErr(res, "Upload to COS failed", 500);
+      sendErr(res, "Upload failed", 500);
     }
   },
 );
 
-/** 上传头像：兼容老接口，转发到 COS 上传；期望字段 file（multipart） */
+/** 上传头像：兼容老接口，按配置走 COS 或本地存储；期望字段 file（multipart） */
 router.post(
   "/uploadAvatar",
   authMiddleware,
@@ -250,7 +250,7 @@ router.post(
     const key = `avatars/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
-      const url = await uploadToCos(file.buffer, key, file.mimetype);
+      const url = await uploadToStorage(file.buffer, key, file.mimetype);
       sendSucc(res, { url });
     } catch (err) {
       sendErr(res, "Upload avatar failed", 500);
