@@ -39,6 +39,15 @@ function loadCosConfig(): CosConfig {
   return cachedCosConfig;
 }
 
+/** 不抛错：未配置或配置不完整时返回 null */
+export function getCosConfigOrNull(): CosConfig | null {
+  try {
+    return loadCosConfig();
+  } catch {
+    return null;
+  }
+}
+
 function getCosClient(): COS {
   if (cachedCosClient) return cachedCosClient;
   const cfg = loadCosConfig();
@@ -66,7 +75,7 @@ export async function uploadToCos(
         Body: buffer,
         ContentType: contentType,
       },
-      (err) => {
+      (err: Error | null) => {
         if (err) {
           reject(err);
         } else {
