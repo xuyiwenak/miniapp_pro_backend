@@ -6,6 +6,8 @@
     "appSecret": "a27cec1e7566c229f8f5eee4a0736daa"
   },
 
+  "contentSecurity": true,
+
   "imageStorage": "local",
   "publicBaseUrl": "http://192.168.3.24:41003",
   "cos": {

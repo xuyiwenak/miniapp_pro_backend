@@ -6,6 +6,9 @@
     "appSecret": "YOUR_WECHAT_APPSECRET"
   },
 
+  "_comment_contentSecurity": "true=启用微信内容安全审核(文字+图片) | false=关闭(本地调试时可关)",
+  "contentSecurity": false,
+
   "_comment_imageStorage": "cos=线上CDN | local=本地真机测试(图片存本机 static/uploads，需设 publicBaseUrl 为本机可访问地址如 http://IP:miniapp端口)",
   "imageStorage": "local",
   "publicBaseUrl": "http://YOUR_SERVER_IP:MINIAPP_PORT",

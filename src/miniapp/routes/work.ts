@@ -5,6 +5,7 @@ import type { MiniappRequest } from "../middleware/auth";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
+import { checkText } from "../../util/wxContentSecurity";
 
 const router = Router();
 
@@ -114,6 +115,14 @@ router.post("/publish", async (req: MiniappRequest, res: Response) => {
   }
 
   try {
+    if (desc) {
+      const textResult = await checkText(desc);
+      if (!textResult.safe) {
+        sendErr(res, "内容包含敏感词，请修改后重试", 400);
+        return;
+      }
+    }
+
     const Work = getWorkModel();
     const workId = uuidv4();
     const doc = await Work.create({

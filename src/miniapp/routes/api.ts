@@ -7,6 +7,7 @@ import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getFeedbackModel, getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { uploadToStorage } from "../../util/imageUploader";
+import { checkImage } from "../../util/wxContentSecurity";
 
 const router = Router();
 
@@ -209,6 +210,12 @@ router.post(
       return;
     }
 
+    const imgCheck = await checkImage(file.buffer, file.mimetype);
+    if (!imgCheck.safe) {
+      sendErr(res, "图片疑似违规，请更换后重试", 400);
+      return;
+    }
+
     const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
     const safeExt = ext.replace(/[^a-z0-9.]/gi, "") || ".jpg";
     const timestamp = Date.now();
@@ -240,6 +247,12 @@ router.post(
     }
     if (!file.mimetype.startsWith("image/")) {
       sendErr(res, "Only image files are allowed", 400);
+      return;
+    }
+
+    const imgCheck = await checkImage(file.buffer, file.mimetype);
+    if (!imgCheck.safe) {
+      sendErr(res, "头像图片疑似违规，请更换后重试", 400);
       return;
     }
 
