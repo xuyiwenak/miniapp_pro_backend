@@ -5,6 +5,7 @@ export interface IPersonalInfo {
   image?: string;
   name: string;
   star?: string;
+  mbti?: string;
   gender: number;
   birth?: string;
   address: string[];
@@ -20,6 +21,7 @@ export const PersonalInfoSchema = new Schema<IPersonalInfo>(
     image: { type: String },
     name: { type: String, required: true },
     star: { type: String },
+    mbti: { type: String },
     gender: { type: Number, required: true },
     birth: { type: String },
     address: [{ type: String }],
