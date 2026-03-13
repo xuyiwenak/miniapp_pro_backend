@@ -7,15 +7,21 @@
   },
 
   "coze": {
-    "token": "YOUR_COZE_API_TOKEN",
-    "workflowId": "YOUR_COZE_WORKFLOW_ID",
+    "token": "pat_4yJpehXg5sEwK5es3vUoE6yOmkCqBz3P6GwZ3smkZ7riEk6wqofXkRfUmYYFui9j",
+    "workflowId": "7616661521624334378",
     "baseUrl": "https://api.coze.cn"
   },
 
   "contentSecurity": true,
 
-  "imageStorage": "local",
+  "imageStorage": "oss",
   "publicBaseUrl": "http://192.168.3.24:41003",
+  "oss": {
+    "region": "YOUR_OSS_REGION",
+    "accessKeyId": "YOUR_OSS_ACCESS_KEY_ID",
+    "accessKeySecret": "YOUR_OSS_ACCESS_KEY_SECRET",
+    "bucket": "YOUR_OSS_BUCKET"
+  },
   "cos": {
     "secretId": "YOUR_COS_SECRET_ID",
     "secretKey": "YOUR_COS_SECRET_KEY",

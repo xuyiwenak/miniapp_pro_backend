@@ -3,8 +3,11 @@ import path from "path";
 import { ComponentManager, EComName } from "../common/BaseComponent";
 import { SysCfgComponent } from "../component/SysCfgComponent";
 import { getCosConfigOrNull, uploadToCos } from "./cosUploader";
+import { getOssConfigOrNull, uploadToOss, signOssUrl } from "./ossUploader";
 
 const UPLOADS_DIR = path.join(process.cwd(), "static", "uploads");
+
+const OSS_PREFIX = "oss://";
 
 function ensureUploadsDirForKey(key: string): void {
   const dir = path.join(UPLOADS_DIR, path.dirname(key));
@@ -29,30 +32,37 @@ function getPublicBaseUrl(): string {
   }
 }
 
-/** 是否强制使用本地存储（用于临时不接 CDN 时） */
-function isForceLocalStorage(): boolean {
+function getImageStorage(): string {
   try {
     const sysCfg = ComponentManager.instance.getComponent(
       EComName.SysCfgComponent,
     ) as SysCfgComponent;
     const raw = sysCfg.server_auth_config as { imageStorage?: string };
-    return raw?.imageStorage === "local";
+    return raw?.imageStorage ?? "local";
   } catch {
-    return false;
+    return "local";
   }
 }
 
 /**
- * 统一图片存储：未强制本地且已配置 COS 时上传 COS 并返回 CDN URL；
- * 否则写入本地 static/uploads/{key}，通过 /static 对外提供，返回可访问 URL。
+ * 统一图片存储入口。
+ * - "local"：写入本地 static/uploads/{key}，返回可访问 URL
+ * - "oss"：上传阿里云 OSS，返回 "oss://{key}"（需通过 resolveImageUrl 签名后访问）
+ * - 其他（"cos"）：上传腾讯云 COS，返回 CDN URL
  */
 export async function uploadToStorage(
   buffer: Buffer,
   key: string,
   contentType: string,
 ): Promise<string> {
-  const useCos = !isForceLocalStorage() && getCosConfigOrNull() !== null;
-  if (useCos) {
+  const storage = getImageStorage();
+
+  if (storage === "oss" && getOssConfigOrNull() !== null) {
+    const objectKey = await uploadToOss(buffer, key, contentType);
+    return `${OSS_PREFIX}${objectKey}`;
+  }
+
+  if (storage !== "local" && getCosConfigOrNull() !== null) {
     return uploadToCos(buffer, key, contentType);
   }
 
@@ -63,4 +73,26 @@ export async function uploadToStorage(
   const baseUrl = getPublicBaseUrl();
   const pathUrl = `/static/uploads/${key}`;
   return baseUrl ? `${baseUrl}${pathUrl}` : pathUrl;
+}
+
+/**
+ * 将存储的 URL/Key 转换为可访问的 URL。
+ * - "oss://xxx" -> 签名临时 URL
+ * - "http(s)://xxx" -> 原样返回
+ * - 其他 -> 拼上 publicBaseUrl
+ */
+export function resolveImageUrl(storedUrl: string, expireSeconds = 7200): string {
+  if (!storedUrl) return "";
+
+  if (storedUrl.startsWith(OSS_PREFIX)) {
+    const objectKey = storedUrl.slice(OSS_PREFIX.length);
+    return signOssUrl(objectKey, expireSeconds);
+  }
+
+  if (storedUrl.startsWith("http://") || storedUrl.startsWith("https://")) {
+    return storedUrl;
+  }
+
+  const baseUrl = getPublicBaseUrl();
+  return baseUrl ? `${baseUrl}${storedUrl}` : storedUrl;
 }

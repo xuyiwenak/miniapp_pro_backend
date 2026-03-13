@@ -12,21 +12,30 @@ interface CozeConfig {
 interface CozeRunResponse {
   code: number;
   msg: string;
+  // 兼容两种返回结构：
+  // 1) { code, msg, data: { run_id } }
+  // 2) { code, msg, execute_id, execute_status, ... }
   data?: {
-    run_id: string;
+    run_id?: string;
     execute_status?: string;
   };
+  execute_id?: string;
+  execute_status?: string;
+}
+
+interface CozeStatusResponseItem {
+  execute_id: string;
+  execute_status: "Running" | "Success" | "Fail";
+  output?: string;
+  error_code?: number;
+  error_message?: string;
 }
 
 interface CozeStatusResponse {
   code: number;
   msg: string;
-  data?: {
-    run_id: string;
-    execute_status: "Running" | "Success" | "Fail";
-    output?: string;
-    error?: string;
-  };
+  // Coze 最新接口返回 data 为数组，这里只关心第一个
+  data?: CozeStatusResponseItem[];
 }
 
 function getCozeConfig(): CozeConfig {
@@ -90,24 +99,27 @@ export async function submitWorkflow(params: Record<string, string>): Promise<st
     is_async: true,
   });
 
-  if (resp.code !== 0 || !resp.data?.run_id) {
+  const runId = resp.data?.run_id || resp.execute_id;
+
+  if (resp.code !== 0 || !runId) {
     throw new Error(`Coze submitWorkflow failed: code=${resp.code} msg=${resp.msg}`);
   }
 
-  logger.info("Coze workflow submitted, run_id=", resp.data.run_id);
-  return resp.data.run_id;
+  logger.info("Coze workflow submitted, run_id=", runId);
+  return runId;
 }
 
 /**
  * 查询工作流运行状态
  */
 export async function queryWorkflowStatus(runId: string): Promise<CozeStatusResponse["data"]> {
+  const cfg = getCozeConfig();
   const resp = await cozeRequest<CozeStatusResponse>(
     "GET",
-    `/v1/workflow/run_history?run_id=${encodeURIComponent(runId)}`,
+    `/v1/workflows/${encodeURIComponent(cfg.workflowId)}/run_histories/${encodeURIComponent(runId)}`,
   );
 
-  if (resp.code !== 0 || !resp.data) {
+  if (resp.code !== 0 || !resp.data || resp.data.length === 0) {
     throw new Error(`Coze queryStatus failed: code=${resp.code} msg=${resp.msg}`);
   }
 
@@ -122,16 +134,28 @@ const MAX_POLL_COUNT = 60;
  */
 export async function pollWorkflowResult(runId: string): Promise<string> {
   for (let i = 0; i < MAX_POLL_COUNT; i++) {
-    const status = await queryWorkflowStatus(runId);
+    const statuses = await queryWorkflowStatus(runId);
+    const status = statuses![0];
+
+    logger.info(
+      "Coze workflow poll",
+      "run_id=",
+      runId,
+      "attempt=",
+      i + 1,
+      "status=",
+      status?.execute_status,
+    );
 
     if (status!.execute_status === "Success") {
-      logger.info("Coze workflow success, run_id=", runId);
-      return status!.output ?? "{}";
+      const output = status!.output ?? "{}";
+      logger.info("Coze workflow success, run_id=", runId, "output=", output);
+      return output;
     }
 
     if (status!.execute_status === "Fail") {
-      const errMsg = status!.error || "Unknown workflow error";
-      logger.error("Coze workflow failed, run_id=", runId, "error=", errMsg);
+      const errMsg = status!.error_message || "Unknown workflow error";
+      logger.error("Coze workflow failed, run_id=", runId, "error=", errMsg, "output=", status!.output ?? "");
       throw new Error(`Coze workflow failed: ${errMsg}`);
     }
 

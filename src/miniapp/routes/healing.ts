@@ -4,6 +4,7 @@ import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../util/requestLogger";
 import { submitWorkflow, pollWorkflowResult } from "../../util/cozeWorkflow";
+import { resolveImageUrl } from "../../util/imageUploader";
 import { gameLogger as logger } from "../../util/logger";
 import type { IWork, IHealingScores } from "../../entity/work.entity";
 
@@ -207,15 +208,16 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       return;
     }
 
-    // 构造传给 Coze 工作流的参数
+    // 构造传给 Coze 工作流的参数（OSS 图片自动签名为临时 URL）
+    const rawImageUrl = work.images?.[0]?.url ?? "";
+    const imageUrl = resolveImageUrl(rawImageUrl);
     const workflowParams: Record<string, string> = {
       workId: work.workId,
       desc: work.desc ?? "",
       tags: (work.tags ?? []).join(","),
-      imageUrl: work.images?.[0]?.url ?? "",
+      imageUrl,
     };
 
-    // 提交异步任务
     const runId = await submitWorkflow(workflowParams);
 
     // 立即标记为 pending 状态并记录 runId

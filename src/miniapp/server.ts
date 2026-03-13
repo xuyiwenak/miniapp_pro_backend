@@ -9,6 +9,7 @@ import apiRoutes from "./routes/api";
 import dataCenterRoutes from "./routes/dataCenter";
 import workRoutes from "./routes/work";
 import healingRoutes from "./routes/healing";
+import ossRoutes from "./routes/oss";
 
 const staticDir = path.join(process.cwd(), "static");
 
@@ -32,6 +33,7 @@ export function createMiniappApp(): express.Express {
   app.use("/home", homeRoutes);
   app.use("/api", apiRoutes);
   app.use("/work", authMiddleware, workRoutes);
+  app.use("/oss", authMiddleware, ossRoutes);
   app.use("/dataCenter", dataCenterRoutes);
   app.use("/healing", healingRoutes);
 
