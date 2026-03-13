@@ -6,6 +6,12 @@
     "appSecret": "a27cec1e7566c229f8f5eee4a0736daa"
   },
 
+  "coze": {
+    "token": "YOUR_COZE_API_TOKEN",
+    "workflowId": "YOUR_COZE_WORKFLOW_ID",
+    "baseUrl": "https://api.coze.cn"
+  },
+
   "contentSecurity": true,
 
   "imageStorage": "local",

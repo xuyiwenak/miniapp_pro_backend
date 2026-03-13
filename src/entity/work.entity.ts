@@ -14,6 +14,7 @@ export interface IHealingData {
   status: "pending" | "success" | "failed";
   isPublic: boolean;
   analyzedAt?: Date;
+  cozeRunId?: string;
 }
 
 export interface IWork {
@@ -46,6 +47,7 @@ const HealingDataSubSchema = new Schema<IHealingData>(
     },
     isPublic: { type: Boolean, default: true },
     analyzedAt: { type: Date },
+    cozeRunId: { type: String },
   },
   { _id: false },
 );

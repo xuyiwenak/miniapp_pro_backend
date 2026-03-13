@@ -18,6 +18,11 @@
     "bucket": "your-bucket-1250000000",
     "region": "ap-guangzhou",
     "cdnDomain": "https://your-cdn-domain.example.com"
+  },
+  "coze": {
+    "token": "YOUR_COZE_API_TOKEN",
+    "workflowId": "YOUR_COZE_WORKFLOW_ID",
+    "baseUrl": "https://api.coze.cn"
   }
 }
 

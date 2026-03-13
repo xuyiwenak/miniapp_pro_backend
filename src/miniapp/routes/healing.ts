@@ -3,6 +3,8 @@ import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../util/requestLogger";
+import { submitWorkflow, pollWorkflowResult } from "../../util/cozeWorkflow";
+import { gameLogger as logger } from "../../util/logger";
 import type { IWork, IHealingScores } from "../../entity/work.entity";
 
 const router = Router();
@@ -141,6 +143,37 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
 
 export { buildHealingResponse };
 
+/**
+ * 解析 Coze 工作流返回的 output JSON，提取固定字段
+ */
+function parseCozeOutput(raw: string): {
+  scores: Record<EmotionKey, number>;
+  summary: string;
+  colorAnalysis: string;
+} {
+  try {
+    const obj = JSON.parse(raw);
+    const output = obj.output ? (typeof obj.output === "string" ? JSON.parse(obj.output) : obj.output) : obj;
+    const scores: Record<EmotionKey, number> = {
+      calm: Number(output.calm ?? output.scores?.calm ?? 50),
+      stress: Number(output.stress ?? output.scores?.stress ?? 50),
+      joy: Number(output.joy ?? output.scores?.joy ?? 50),
+      sadness: Number(output.sadness ?? output.scores?.sadness ?? 50),
+    };
+    return {
+      scores,
+      summary: String(output.summary ?? output.healingSummary ?? ""),
+      colorAnalysis: String(output.colorAnalysis ?? output.healingColorAnalysis ?? ""),
+    };
+  } catch {
+    return {
+      scores: { calm: 50, stress: 50, joy: 50, sadness: 50 },
+      summary: raw.slice(0, 500),
+      colorAnalysis: "",
+    };
+  }
+}
+
 router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
@@ -174,39 +207,62 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       return;
     }
 
-    const scores = generateMockScoresForWork(work);
-    const summary = buildMockSummary();
-    const colorAnalysis = buildColorAnalysis();
+    // 构造传给 Coze 工作流的参数
+    const workflowParams: Record<string, string> = {
+      workId: work.workId,
+      desc: work.desc ?? "",
+      tags: (work.tags ?? []).join(","),
+      imageUrl: work.images?.[0]?.url ?? "",
+    };
 
+    // 提交异步任务
+    const runId = await submitWorkflow(workflowParams);
+
+    // 立即标记为 pending 状态并记录 runId
     await Work.updateOne(
       { workId },
       {
         $set: {
           healing: {
-            scores,
-            summary,
-            colorAnalysis,
-            status: "success",
+            scores: { calm: 0, stress: 0, joy: 0, sadness: 0 },
+            summary: "",
+            colorAnalysis: "",
+            status: "pending",
             isPublic: true,
-            analyzedAt: new Date(),
+            cozeRunId: runId,
           },
         },
       },
     ).exec();
 
-    const dominant = pickDominantEmotion(scores);
+    // 立即返回前端 pending 状态
+    sendSucc(res, { workId, status: "pending", runId });
 
-    sendSucc(res, {
-      workId,
-      scores,
-      summary,
-      colorAnalysis,
-      status: "success",
-      isPublic: true,
-      dominantEmotion: dominant.key,
-      dominantEmotionLabel: dominant.label,
-      dominantEmotionScore: dominant.value,
-    });
+    // 后台异步轮询 Coze 结果
+    pollWorkflowResult(runId)
+      .then(async (output) => {
+        const parsed = parseCozeOutput(output);
+        await Work.updateOne(
+          { workId },
+          {
+            $set: {
+              "healing.scores": parsed.scores,
+              "healing.summary": parsed.summary,
+              "healing.colorAnalysis": parsed.colorAnalysis,
+              "healing.status": "success",
+              "healing.analyzedAt": new Date(),
+            },
+          },
+        ).exec();
+        logger.info("Coze analyze complete for workId=", workId);
+      })
+      .catch(async (err) => {
+        logger.error("Coze analyze failed for workId=", workId, "error=", (err as Error).message);
+        await Work.updateOne(
+          { workId },
+          { $set: { "healing.status": "failed" } },
+        ).exec();
+      });
   } catch (err) {
     logRequestError("healing.ts:analyze:error", "healing analyze error", {
       req,
@@ -218,6 +274,73 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       },
     });
     sendErr(res, "Analyze failed", 500);
+  }
+});
+
+router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const workId = (req.query?.workId as string | undefined)?.trim();
+  const userId = req.userId;
+
+  if (!workId) {
+    sendErr(res, "Missing workId", 400);
+    return;
+  }
+  if (!userId) {
+    sendErr(res, "Unauthorized", 401);
+    return;
+  }
+
+  try {
+    const Work = getWorkModel();
+    const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+    if (!work) {
+      sendErr(res, "Work not found", 404);
+      return;
+    }
+    if (work.authorId !== userId) {
+      sendErr(res, "Forbidden", 403);
+      return;
+    }
+
+    const healing = work.healing;
+    if (!healing) {
+      sendSucc(res, { workId, status: "none" });
+      return;
+    }
+
+    if (healing.status === "pending") {
+      sendSucc(res, { workId, status: "pending" });
+      return;
+    }
+
+    if (healing.status === "failed") {
+      sendSucc(res, { workId, status: "failed" });
+      return;
+    }
+
+    const dominant = pickDominantEmotion(healing.scores);
+    sendSucc(res, {
+      workId,
+      status: "success",
+      scores: healing.scores,
+      summary: healing.summary,
+      colorAnalysis: healing.colorAnalysis,
+      isPublic: healing.isPublic,
+      dominantEmotion: dominant.key,
+      dominantEmotionLabel: dominant.label,
+      dominantEmotionScore: dominant.value,
+    });
+  } catch (err) {
+    logRequestError("healing.ts:status:error", "healing status error", {
+      req,
+      requestBody: { workId },
+      statusCode: 500,
+      extra: {
+        errorName: (err as Error).name,
+        errorMessage: (err as Error).message,
+      },
+    });
+    sendErr(res, "Get status failed", 500);
   }
 });
 
