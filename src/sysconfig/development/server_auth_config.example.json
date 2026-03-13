@@ -16,7 +16,7 @@
     "region": "oss-cn-beijing",
     "accessKeyId": "YOUR_OSS_ACCESS_KEY_ID",
     "accessKeySecret": "YOUR_OSS_ACCESS_KEY_SECRET",
-    "bucket": "your-oss-bucket"
+    "bucket": "image-miniapp001"
   },
   "cos": {
     "secretId": "YOUR_COS_SECRET_ID",
