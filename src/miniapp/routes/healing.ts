@@ -309,6 +309,7 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     }
 
     // 构造传给 Coze 工作流的参数（OSS 图片自动签名为临时 URL）
+    // 注意：parameters 的 key 必须与 Coze 工作流「开始节点」里配置的变量名完全一致
     const rawImageUrl = work.images?.[0]?.url ?? "";
     const imageUrl = resolveImageUrl(rawImageUrl);
     const workflowParams: Record<string, string> = {
@@ -316,6 +317,7 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       desc: work.desc ?? "",
       tags: (work.tags ?? []).join(","),
       imageUrl,
+      image_url: imageUrl, // 兼容工作流里使用 snake_case 变量名
     };
 
     const runId = await submitWorkflow(workflowParams);

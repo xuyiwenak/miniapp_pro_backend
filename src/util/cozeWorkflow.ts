@@ -93,6 +93,14 @@ function cozeRequest<T>(method: string, urlPath: string, body?: Record<string, u
  */
 export async function submitWorkflow(params: Record<string, string>): Promise<string> {
   const cfg = getCozeConfig();
+  logger.info(
+    "Coze workflow submit params keys=",
+    Object.keys(params),
+    "imageUrl length=",
+    (params.imageUrl ?? "").length,
+    "image_url length=",
+    (params.image_url ?? "").length,
+  );
   const resp = await cozeRequest<CozeRunResponse>("POST", "/v1/workflow/run", {
     workflow_id: cfg.workflowId,
     parameters: params,
