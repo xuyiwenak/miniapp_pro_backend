@@ -30,16 +30,6 @@ function ensureAvatarsDir() {
   }
 }
 
-const HISTORY_WORDS = ["AI绘画", "Stable Diffusion", "版权素材", "星空", "illustration", "原创"];
-const POPULAR_WORDS = [
-  "考研和靠边同时上岸应该怎么选？有哪些参考建议",
-  "日常饮食中，如何选择优质蛋白",
-  "你有没有网购维权成功的经历？求分享经验",
-  "夏季带孩子旅游，你的必备物品有哪些",
-  "在海外越卖越贵，中国汽车做对了什么",
-  "当HR问你离职原因，怎么回答最能被接受",
-];
-
 const DEFAULT_PERSONAL = {
   image: "/static/avatar1.png",
   name: "用户", // 实际返回时会基于 userId 生成“用户_xxxxxxxx”
@@ -54,14 +44,6 @@ const DEFAULT_PERSONAL = {
     { url: "/static/img_td.png", name: "uploaded2.png", type: "image" },
   ],
 };
-
-router.get("/searchHistory", (_req: Request, res: Response) => {
-  sendSucc(res, { historyWords: HISTORY_WORDS });
-});
-
-router.get("/searchPopular", (_req: Request, res: Response) => {
-  sendSucc(res, { popularWords: POPULAR_WORDS });
-});
 
 router.get("/genPersonalInfo", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
