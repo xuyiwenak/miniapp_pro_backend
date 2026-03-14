@@ -6,8 +6,10 @@ import multer from "multer";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getFeedbackModel, getPersonalInfoModel } from "../../dbservice/model/GlobalInfoDBModel";
-import { uploadToStorage } from "../../util/imageUploader";
+import { uploadToStorage, resolveImageUrl } from "../../util/imageUploader";
 import { checkImage } from "../../util/wxContentSecurity";
+
+const OSS_PREFIX = "oss://";
 
 const router = Router();
 
@@ -226,7 +228,11 @@ router.post(
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);
-      sendSucc(res, { url });
+      const payload: { url: string; cdnUrl?: string } = { url };
+      if (url.startsWith(OSS_PREFIX)) {
+        payload.cdnUrl = resolveImageUrl(url);
+      }
+      sendSucc(res, payload);
     } catch (err) {
       sendErr(res, "Upload failed", 500);
     }

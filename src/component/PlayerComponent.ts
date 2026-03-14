@@ -46,6 +46,21 @@ export class PlayerComponent implements IBaseComponent {
   }
 
   /**
+   * 按 userId 查询该用户的微信 openId（用于内容安全等接口）。
+   * 仅微信登录并绑定过的用户才有 openId。
+   */
+  async getOpenIdByUserId(userId: string): Promise<string | undefined> {
+    if (!this.defaultZone) return undefined;
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ userId }).select("openId").lean().exec();
+      return player?.openId ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * 只查询：按 openId 查找玩家（不自动注册）
    */
   async findByOpenId(openId: string): Promise<PlayerResult> {

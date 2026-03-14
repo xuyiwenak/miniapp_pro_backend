@@ -12,11 +12,13 @@
   "_comment_imageStorage": "oss=阿里云OSS(私有) | cos=腾讯云COS(CDN) | local=本地真机测试(图片存本机 static/uploads，需设 publicBaseUrl)",
   "imageStorage": "local",
   "publicBaseUrl": "http://YOUR_SERVER_IP:MINIAPP_PORT",
+  "_comment_oss_cdnDomain": "可选，OSS 签名 URL 使用该 CDN/自定义域名；不填则用 bucket.region.aliyuncs.com",
   "oss": {
     "region": "oss-cn-beijing",
     "accessKeyId": "YOUR_OSS_ACCESS_KEY_ID",
     "accessKeySecret": "YOUR_OSS_ACCESS_KEY_SECRET",
-    "bucket": "image-miniapp001"
+    "bucket": "your-oss-bucket",
+    "cdnDomain": "https://your-oss-cdn.example.com"
   },
   "cos": {
     "secretId": "YOUR_COS_SECRET_ID",

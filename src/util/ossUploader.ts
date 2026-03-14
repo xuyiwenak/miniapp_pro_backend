@@ -9,6 +9,8 @@ interface OssConfig {
   accessKeyId: string;
   accessKeySecret: string;
   bucket: string;
+  /** 可选：自定义 CDN/外网域名，用于签名 URL；不填则用 bucket.region.aliyuncs.com */
+  cdnDomain?: string;
 }
 
 let cachedOssConfig: OssConfig | null = null;
@@ -32,6 +34,7 @@ function loadOssConfig(): OssConfig {
     accessKeyId: cfg.accessKeyId,
     accessKeySecret: cfg.accessKeySecret,
     bucket: cfg.bucket,
+    cdnDomain: cfg.cdnDomain?.trim() || undefined,
   };
   return cachedOssConfig;
 }
@@ -114,7 +117,9 @@ export function signOssUrl(objectKey: string, expireSeconds = 7200): string {
   const stringToSign = `GET\n\n\n${expires}\n/${cfg.bucket}/${objectKey}`;
   const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
 
-  const host = ossHost(cfg);
+  const baseUrl = cfg.cdnDomain
+    ? cfg.cdnDomain.replace(/\/+$/, "")
+    : `https://${ossHost(cfg)}`;
   const encodedSig = encodeURIComponent(signature);
-  return `https://${host}/${objectKey}?OSSAccessKeyId=${encodeURIComponent(cfg.accessKeyId)}&Expires=${expires}&Signature=${encodedSig}`;
+  return `${baseUrl}/${objectKey}?OSSAccessKeyId=${encodeURIComponent(cfg.accessKeyId)}&Expires=${expires}&Signature=${encodedSig}`;
 }

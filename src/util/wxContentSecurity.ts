@@ -52,6 +52,10 @@ export async function checkText(content: string, openId?: string, scene: number 
   if (!content.trim()) {
     return { safe: true };
   }
+  // 微信 msg_sec_check v2 要求必传 openid，否则报 40003；无 openId 时（如仅账号登录）跳过接口调用
+  if (!openId?.trim()) {
+    return { safe: true };
+  }
 
   try {
     const token = await getAccessToken();
@@ -60,7 +64,7 @@ export async function checkText(content: string, openId?: string, scene: number 
       content,
       version: 2,
       scene,
-      ...(openId ? { openid: openId } : {}),
+      openid: openId,
     });
 
     const raw = await httpsPost(url, Buffer.from(payload, "utf8"), {
