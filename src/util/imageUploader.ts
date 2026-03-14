@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { ComponentManager, EComName } from "../common/BaseComponent";
 import { SysCfgComponent } from "../component/SysCfgComponent";
+import { gameLogger as logger } from "./logger";
 import { getCosConfigOrNull, uploadToCos } from "./cosUploader";
 import { getOssConfigOrNull, uploadToOss, signOssUrl } from "./ossUploader";
 
@@ -58,8 +59,22 @@ export async function uploadToStorage(
   const storage = getImageStorage();
 
   if (storage === "oss" && getOssConfigOrNull() !== null) {
-    const objectKey = await uploadToOss(buffer, key, contentType);
-    return `${OSS_PREFIX}${objectKey}`;
+    try {
+      const objectKey = await uploadToOss(buffer, key, contentType);
+      return `${OSS_PREFIX}${objectKey}`;
+    } catch (err) {
+      // OSS 403/权限或网络失败时回退到本地，避免上传完全不可用
+      logger.warn("OSS upload failed, fallback to local storage", {
+        key,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      ensureUploadsDirForKey(key);
+      const filePath = path.join(UPLOADS_DIR, key);
+      fs.writeFileSync(filePath, buffer);
+      const baseUrl = getPublicBaseUrl();
+      const pathUrl = `/static/uploads/${key}`;
+      return baseUrl ? `${baseUrl}${pathUrl}` : pathUrl;
+    }
   }
 
   if (storage !== "local" && getCosConfigOrNull() !== null) {

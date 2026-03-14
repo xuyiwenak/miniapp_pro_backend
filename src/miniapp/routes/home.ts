@@ -4,8 +4,10 @@ import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import type { IWork } from "../../entity/work.entity";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
+import { resolveImageUrl } from "../../util/imageUploader";
 
 const router = Router();
+const OSS_PREFIX = "oss://";
 
 const CARDS = [
   { url: "/static/home/card0.png", desc: "少年,星空与梦想", tags: [{ text: "AI绘画", theme: "primary" }, { text: "版权素材", theme: "success" }] },
@@ -45,9 +47,12 @@ router.get("/cards", async (_req: Request, res: Response) => {
               return { text, theme };
             });
 
+            const rawUrl = cover?.url ?? "/static/home/card0.png";
+            const url =
+              rawUrl && rawUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawUrl) : rawUrl;
             return {
               workId: w.workId,
-              url: cover?.url ?? "/static/home/card0.png",
+              url,
               desc: w.desc,
               tags,
             };
@@ -104,7 +109,15 @@ router.get("/workDetail", async (req: Request, res: Response) => {
       statusCode: 200,
     });
     const healingInfo = buildHealingResponse(work, undefined);
-    sendSucc(res, { ...work, ...healingInfo });
+    const images =
+      Array.isArray(work.images) && work.images.length > 0
+        ? work.images.map((img: { url?: string; name?: string; type?: string }) => {
+            const raw = (img?.url ?? "").trim();
+            const url = raw && raw.startsWith(OSS_PREFIX) ? resolveImageUrl(raw) : raw;
+            return { ...img, url };
+          })
+        : work.images;
+    sendSucc(res, { ...work, images, ...healingInfo });
   } catch (err) {
     logRequestError("home.ts:workDetail:error", "workDetail server error", {
       req,

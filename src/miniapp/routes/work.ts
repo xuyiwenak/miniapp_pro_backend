@@ -9,7 +9,7 @@ import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
 import { checkText, checkImage } from "../../util/wxContentSecurity";
-import { uploadToStorage } from "../../util/imageUploader";
+import { uploadToStorage, resolveImageUrl } from "../../util/imageUploader";
 
 const router = Router();
 
@@ -55,11 +55,16 @@ router.get("/list", async (req: MiniappRequest, res: Response) => {
 
     const list = works.map((w) => {
       const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
+      const rawCoverUrl = cover?.url ?? "/static/home/card0.png";
+      const coverUrl =
+        rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX)
+          ? resolveImageUrl(rawCoverUrl)
+          : rawCoverUrl;
       return {
         workId: w.workId,
         desc: w.desc,
         tags: w.tags ?? [],
-        coverUrl: cover?.url ?? "/static/home/card0.png",
+        coverUrl,
         status: w.status,
         createdAt: w.createdAt,
       };
@@ -253,7 +258,15 @@ router.get("/detail", async (req: MiniappRequest, res: Response) => {
       return;
     }
     const healingInfo = buildHealingResponse(work, userId);
-    sendSucc(res, { ...work, ...healingInfo });
+    const images =
+      Array.isArray(work.images) && work.images.length > 0
+        ? (work.images as { url?: string; name?: string; type?: string }[]).map((img) => {
+            const raw = (img?.url ?? "").trim();
+            const url = raw && raw.startsWith(OSS_PREFIX) ? resolveImageUrl(raw) : raw;
+            return { ...img, url };
+          })
+        : work.images;
+    sendSucc(res, { ...work, images, ...healingInfo });
   } catch (err) {
     logRequestError("work.ts:detail:error", "get work detail failed", {
       req,

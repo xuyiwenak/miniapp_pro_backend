@@ -117,9 +117,12 @@ export function signOssUrl(objectKey: string, expireSeconds = 7200): string {
   const stringToSign = `GET\n\n\n${expires}\n/${cfg.bucket}/${objectKey}`;
   const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
 
-  const baseUrl = cfg.cdnDomain
+  let baseUrl = cfg.cdnDomain
     ? cfg.cdnDomain.replace(/\/+$/, "")
     : `https://${ossHost(cfg)}`;
+  if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+    baseUrl = `https://${baseUrl}`;
+  }
   const encodedSig = encodeURIComponent(signature);
   return `${baseUrl}/${objectKey}?OSSAccessKeyId=${encodeURIComponent(cfg.accessKeyId)}&Expires=${expires}&Signature=${encodedSig}`;
 }

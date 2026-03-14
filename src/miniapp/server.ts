@@ -10,11 +10,16 @@ import dataCenterRoutes from "./routes/dataCenter";
 import workRoutes from "./routes/work";
 import healingRoutes from "./routes/healing";
 import ossRoutes from "./routes/oss";
+import { gameLogger } from "../util/logger";
 
 const staticDir = path.join(process.cwd(), "static");
 
 export function createMiniappApp(): express.Express {
   const app = express();
+  app.use((req, _res, next) => {
+    gameLogger.info(`[miniapp] ${req.method} ${req.path || req.url}`);
+    next();
+  });
   app.use(express.json({ limit: "10mb" }));
   app.use("/static", express.static(staticDir));
 

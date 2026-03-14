@@ -10,6 +10,8 @@ import type { IWork, IHealingScores } from "../../entity/work.entity";
 
 const router = Router();
 
+const OSS_PREFIX = "oss://";
+
 type EmotionKey = "calm" | "stress" | "joy" | "sadness";
 
 const EMOTION_LABELS: Record<EmotionKey, string> = {
@@ -138,40 +140,138 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
     healingDominantEmotion: dominant.key,
     healingDominantEmotionLabel: dominant.label,
     healingDominantEmotionScore: dominant.value,
+    healingCompositionReport: healing.compositionReport,
+    healingLineAnalysis: healing.lineAnalysis,
+    healingSuggestion: healing.suggestion,
+    healingKeyColors: healing.keyColors,
     isOwner,
   };
 }
 
 export { buildHealingResponse };
 
-/**
- * 解析 Coze 工作流返回的 output JSON，提取固定字段
- */
-function parseCozeOutput(raw: string): {
+/** Coze 新版输出中的线条分析 */
+interface CozeLineAnalysis {
+  energy_score?: number;
+  interpretation?: string;
+  style?: string;
+}
+
+/** Coze 新版输出中的色彩分析 */
+interface CozeColorAnalysis {
+  interpretation?: string;
+  key_colors?: string[];
+}
+
+/** 解析后的完整报告（含可选扩展字段） */
+export interface ParsedHealingReport {
   scores: Record<EmotionKey, number>;
   summary: string;
   colorAnalysis: string;
-} {
+  compositionReport?: string;
+  lineAnalysis?: CozeLineAnalysis;
+  suggestion?: string;
+  keyColors?: string[];
+}
+
+/**
+ * 从 Coze 多层嵌套字符串中解析出最内层 output 对象
+ * 格式可能为: {"Output":"\"{\\\"output\\\":\\\"{...}\\\"}\"}"} 或 {"output": {...}}
+ */
+function unwrapCozeOutput(raw: string): Record<string, unknown> {
+  let obj: unknown = JSON.parse(raw);
+  for (let depth = 0; depth < 5 && obj !== null && typeof obj === "object"; depth++) {
+    const o = obj as Record<string, unknown>;
+    const next = o.Output ?? o.output;
+    if (next == null) return o as Record<string, unknown>;
+    obj = typeof next === "string" ? JSON.parse(next) : next;
+  }
+  return (obj as Record<string, unknown>) ?? {};
+}
+
+/**
+ * 根据 line_analysis.energy_score (0-10) 推导四项情绪分数，保证雷达图有数据
+ */
+function scoresFromEnergyScore(energyScore: number): Record<EmotionKey, number> {
+  const e = Math.max(0, Math.min(10, Number(energyScore) || 5));
+  const t = (e / 10) * 80 + 10;
+  const calm = Math.round(100 - t);
+  const joy = Math.round(t * 0.9);
+  const stress = Math.round(t * 0.4);
+  const sadness = Math.round((100 - t) * 0.5);
+  return {
+    calm: Math.max(5, Math.min(98, calm)),
+    stress: Math.max(5, Math.min(98, stress)),
+    joy: Math.max(5, Math.min(98, joy)),
+    sadness: Math.max(5, Math.min(98, sadness)),
+  };
+}
+
+/**
+ * 解析 Coze 工作流返回的 output JSON，兼容新版结构（insight/color_analysis/line_analysis 等）与旧版
+ */
+function parseCozeOutput(raw: string): ParsedHealingReport {
+  const fallback: ParsedHealingReport = {
+    scores: { calm: 50, stress: 50, joy: 50, sadness: 50 },
+    summary: raw.slice(0, 500),
+    colorAnalysis: "",
+  };
   try {
-    const obj = JSON.parse(raw);
-    const output = obj.output ? (typeof obj.output === "string" ? JSON.parse(obj.output) : obj.output) : obj;
-    const scores: Record<EmotionKey, number> = {
-      calm: Number(output.calm ?? output.scores?.calm ?? 50),
-      stress: Number(output.stress ?? output.scores?.stress ?? 50),
-      joy: Number(output.joy ?? output.scores?.joy ?? 50),
-      sadness: Number(output.sadness ?? output.scores?.sadness ?? 50),
-    };
+    const output = unwrapCozeOutput(raw) as Record<string, unknown>;
+
+    const colorAnalysisObj = output.color_analysis as CozeColorAnalysis | undefined;
+    const lineAnalysisObj = output.line_analysis as CozeLineAnalysis | undefined;
+    const keyColors = Array.isArray(colorAnalysisObj?.key_colors) ? colorAnalysisObj.key_colors : undefined;
+    const colorInterpretation = colorAnalysisObj?.interpretation ?? "";
+    const colorAnalysis =
+      colorInterpretation +
+      (keyColors?.length ? (colorInterpretation ? " 主色：" : "主色：") + keyColors.join("、") : "");
+
+    const summary =
+      String(output.insight ?? output.summary ?? output.healingSummary ?? "").trim() ||
+      String(output.composition_report ?? "").trim();
+
+    let scores: Record<EmotionKey, number>;
+    if (
+      typeof output.calm === "number" ||
+      typeof output.stress === "number" ||
+      (output.scores && typeof (output.scores as Record<string, number>).calm === "number")
+    ) {
+      scores = {
+        calm: Number(output.calm ?? (output.scores as Record<string, number>)?.calm ?? 50),
+        stress: Number(output.stress ?? (output.scores as Record<string, number>)?.stress ?? 50),
+        joy: Number(output.joy ?? (output.scores as Record<string, number>)?.joy ?? 50),
+        sadness: Number(output.sadness ?? (output.scores as Record<string, number>)?.sadness ?? 50),
+      };
+    } else if (typeof lineAnalysisObj?.energy_score === "number") {
+      scores = scoresFromEnergyScore(lineAnalysisObj.energy_score);
+    } else {
+      scores = { calm: 50, stress: 50, joy: 50, sadness: 50 };
+    }
+
+    const compositionReport =
+      typeof output.composition_report === "string" ? output.composition_report.trim() : undefined;
+    const suggestion = typeof output.suggestion === "string" ? output.suggestion.trim() : undefined;
+    const lineAnalysis =
+      lineAnalysisObj && (lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score != null)
+        ? {
+          interpretation: lineAnalysisObj.interpretation,
+          style: lineAnalysisObj.style,
+          energy_score: lineAnalysisObj.energy_score,
+        }
+        : undefined;
+
     return {
       scores,
-      summary: String(output.summary ?? output.healingSummary ?? ""),
-      colorAnalysis: String(output.colorAnalysis ?? output.healingColorAnalysis ?? ""),
+      summary: summary || fallback.summary,
+      colorAnalysis: colorAnalysis || fallback.colorAnalysis,
+      compositionReport: compositionReport || undefined,
+      lineAnalysis,
+      suggestion,
+      keyColors: keyColors?.length ? keyColors : undefined,
     };
   } catch {
-    return {
-      scores: { calm: 50, stress: 50, joy: 50, sadness: 50 },
-      summary: raw.slice(0, 500),
-      colorAnalysis: "",
-    };
+    return fallback;
   }
 }
 
@@ -244,18 +344,18 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     pollWorkflowResult(runId)
       .then(async (output) => {
         const parsed = parseCozeOutput(output);
-        await Work.updateOne(
-          { workId },
-          {
-            $set: {
-              "healing.scores": parsed.scores,
-              "healing.summary": parsed.summary,
-              "healing.colorAnalysis": parsed.colorAnalysis,
-              "healing.status": "success",
-              "healing.analyzedAt": new Date(),
-            },
-          },
-        ).exec();
+        const updatePayload: Record<string, unknown> = {
+          "healing.scores": parsed.scores,
+          "healing.summary": parsed.summary,
+          "healing.colorAnalysis": parsed.colorAnalysis,
+          "healing.status": "success",
+          "healing.analyzedAt": new Date(),
+        };
+        if (parsed.compositionReport != null) updatePayload["healing.compositionReport"] = parsed.compositionReport;
+        if (parsed.lineAnalysis != null) updatePayload["healing.lineAnalysis"] = parsed.lineAnalysis;
+        if (parsed.suggestion != null) updatePayload["healing.suggestion"] = parsed.suggestion;
+        if (parsed.keyColors != null && parsed.keyColors.length) updatePayload["healing.keyColors"] = parsed.keyColors;
+        await Work.updateOne({ workId }, { $set: updatePayload }).exec();
         logger.info("Coze analyze complete for workId=", workId);
       })
       .catch(async (err) => {
@@ -331,6 +431,10 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
       dominantEmotion: dominant.key,
       dominantEmotionLabel: dominant.label,
       dominantEmotionScore: dominant.value,
+      compositionReport: healing.compositionReport,
+      lineAnalysis: healing.lineAnalysis,
+      suggestion: healing.suggestion,
+      keyColors: healing.keyColors,
     });
   } catch (err) {
     logRequestError("healing.ts:status:error", "healing status error", {
@@ -408,6 +512,11 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
       const healing = w.healing!;
       const cover = w.images?.[0];
       const dominant = pickDominantEmotion(healing.scores);
+      const rawCoverUrl = cover?.url ?? "/static/home/card0.png";
+      const coverUrl =
+        rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX)
+          ? resolveImageUrl(rawCoverUrl)
+          : rawCoverUrl;
 
       return {
         workId: w.workId,
@@ -417,7 +526,7 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
         dominantEmotion: dominant.key,
         dominantEmotionLabel: dominant.label,
         dominantEmotionScore: dominant.value,
-        coverUrl: cover?.url ?? "/static/home/card0.png",
+        coverUrl,
         desc: w.desc ?? "",
         tags: w.tags ?? [],
         createdAt: healing.analyzedAt ?? w.updatedAt,

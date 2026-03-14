@@ -7,6 +7,12 @@ export interface IHealingScores {
   sadness: number;
 }
 
+export interface IHealingLineAnalysis {
+  interpretation?: string;
+  style?: string;
+  energy_score?: number;
+}
+
 export interface IHealingData {
   scores: IHealingScores;
   summary: string;
@@ -15,6 +21,10 @@ export interface IHealingData {
   isPublic: boolean;
   analyzedAt?: Date;
   cozeRunId?: string;
+  compositionReport?: string;
+  lineAnalysis?: IHealingLineAnalysis;
+  suggestion?: string;
+  keyColors?: string[];
 }
 
 export interface IWork {
@@ -29,6 +39,15 @@ export interface IWork {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const HealingLineAnalysisSubSchema = new Schema(
+  {
+    interpretation: { type: String },
+    style: { type: String },
+    energy_score: { type: Number },
+  },
+  { _id: false },
+);
 
 const HealingDataSubSchema = new Schema<IHealingData>(
   {
@@ -48,6 +67,10 @@ const HealingDataSubSchema = new Schema<IHealingData>(
     isPublic: { type: Boolean, default: true },
     analyzedAt: { type: Date },
     cozeRunId: { type: String },
+    compositionReport: { type: String },
+    lineAnalysis: { type: HealingLineAnalysisSubSchema },
+    suggestion: { type: String },
+    keyColors: [{ type: String }],
   },
   { _id: false },
 );
