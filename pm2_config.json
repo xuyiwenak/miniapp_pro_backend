@@ -1,10 +1,10 @@
 {
   "apps": [
     {
-      "name": "front_1",
+      "name": "miniapp-backend",
       "script": "front.js",
       "env": {
-        "id": "front_1",
+        "id": "miniapp-backend",
         "internalIP": "127.0.0.1",
         "gameType": "front",
         "publicIP": "127.0.0.1",
