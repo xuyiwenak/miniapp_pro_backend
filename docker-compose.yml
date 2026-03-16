@@ -9,27 +9,60 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
     ports:
-      - "27017:27017"
+      - "27017:27017"          # 本机调试用，线上可去掉对外映射
     volumes:
       - ./data/mongo:/data/db
 
+  redis:
+    image: redis:7-alpine
+    container_name: miniapp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"            # 本机调试用，线上可去掉对外映射
+    volumes:
+      - ./data/redis:/data
+
   backend_app:
     build:
-      context: .          # 就是当前 miniapp_pro_backend 目录
+      context: .               # 当前 miniapp_pro_backend 目录
       dockerfile: Dockerfile
     container_name: miniapp-backend
     restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      # 这里按你项目实际端口来，如果是 40002 就改成 40002
-      HTTP_PORT: 40001
-      MINIAPP_PORT: 40002
-      MONGO_URI: mongodb://root:password@mongo:27017
     depends_on:
       - mongo
+      - redis
+    environment:
+      NODE_ENV: production
+      # 按你项目实际端口来，如果 TSRPC 主端口不是 40001 自己改
+      HTTP_PORT: 40001
+      MINIAPP_PORT: 40002
+      # Mongo：连上面的 mongo 容器
+      MONGO_URI: mongodb://root:password@mongo:27017
+      # Redis：连上面的 redis 容器（和 src/sysconfig/development/db_config.json 对应）
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
-      - "40001:40001"
-      - "40002:40002"
+      - "40001:40001"          # 主 HTTP 端口（如有）
+      - "40002:40002"          # 小程序 REST API 端口
     volumes:
       - ./static:/app/static
-      - ./logs:/app/logs
+      - ./logs/backend:/app/logs
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: miniapp-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend_app
+    ports:
+      - "80:80"
+      # 以后要上 HTTPS，可以再开放 443，并在配置里加 ssl
+      # - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/logs:/var/log/nginx
+      - ./static:/usr/share/nginx/html/static:ro
+
+networks:
+  default:
+    name: miniapp-backend-net
