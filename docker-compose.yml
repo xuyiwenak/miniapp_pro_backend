@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: miniapp-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+
+  backend_app:
+    build:
+      context: .          # 就是当前 miniapp_pro_backend 目录
+      dockerfile: Dockerfile
+    container_name: miniapp-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # 这里按你项目实际端口来，如果是 40002 就改成 40002
+      HTTP_PORT: 40001
+      MINIAPP_PORT: 40002
+      MONGO_URI: mongodb://root:password@mongo:27017
+    depends_on:
+      - mongo
+    ports:
+      - "40001:40001"
+      - "40002:40002"
+    volumes:
+      - ./static:/app/static
+      - ./logs:/app/logs
