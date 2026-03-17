@@ -34,7 +34,7 @@
 
 ## 技术栈
 
-- **运行环境**：Node.js 25+（推荐与生产镜像一致）
+- **运行环境**：Node.js 24+（推荐与生产镜像一致）
 - **语言**：TypeScript
 - **通信框架**：TSRPC（HTTP + WebSocket）
 - **数据库**：MongoDB（通过 `mongoose`）
