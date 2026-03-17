@@ -2,11 +2,15 @@ FROM node:25.8-alpine AS builder
 
 WORKDIR /app
 
-# 仅拷贝 dist 目录（当前仓库已包含构建产物）
-COPY dist ./dist
-COPY dist/package.json ./package.json
-COPY dist/package-lock.json ./package-lock.json
+# 拷贝源码与依赖声明，在镜像内构建（不依赖本地 dist）
+COPY package.json package-lock.json ./
+COPY src ./src
+COPY tsconfig.json ./
+COPY json_to_schema.mjs ./
 
+RUN npm ci && npm run build
+
+# 生产依赖（移除 devDependencies）
 RUN npm ci --omit=dev
 
 FROM node:25.8-alpine AS runner
