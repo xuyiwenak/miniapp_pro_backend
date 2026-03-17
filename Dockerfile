@@ -3,15 +3,17 @@ FROM node:25.8-alpine AS builder
 WORKDIR /app
 
 # 拷贝源码与依赖声明，在镜像内构建（不依赖本地 dist）
-COPY package.json package-lock.json ./
+# 使用 package*.json 以兼容无 package-lock.json 的情况（项目 .gitignore 排除了 lock 文件）
+COPY package*.json ./
 COPY src ./src
 COPY tsconfig.json ./
 COPY json_to_schema.mjs ./
 
-RUN npm ci && npm run build
+# 有 lock 文件用 npm ci，否则用 npm install
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build
 
 # 生产依赖（移除 devDependencies）
-RUN npm ci --omit=dev
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
 
 FROM node:25.8-alpine AS runner
 
