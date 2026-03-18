@@ -1,48 +1,61 @@
-name: Backend CI & Deploy
+name: ArtJoy Backend CI/CD
 
 on:
   push:
     branches:
-      - master   # 如果你主分支是 main，就改成 main
+      - master  # 如果你的主分支叫 main，请改为 main
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
-
-    env:
-      IMAGE_TAG: latest
-      IMAGE_NAME: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}
-
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 登录阿里云 ACR
-      - name: Login to ACR
-        run: |
-          echo "${{ secrets.ACR_PASSWORD }}" | docker login \
-            ${{ secrets.ACR_REGISTRY }} \
-            -u "${{ secrets.ACR_USERNAME }}" \
-            --password-stdin
+      # 使用 Docker 官方 Action 登录，更稳定
+      - name: Login to Aliyun ACR (Public)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
-      # 构建并推送镜像（使用 art_backend 目录下的 Dockerfile）
-      - name: Build and push image
-        run: |
-          docker build \
-            -t $IMAGE_NAME:$IMAGE_TAG \
-            ./art_backend
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # 如果 Dockerfile 在子目录，请改这里，例如: ./art_backend
+          file: ./Dockerfile 
+          push: true
+          tags: |
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:latest
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:${{ github.sha }}
 
-          docker push $IMAGE_NAME:$IMAGE_TAG
-
-      # 通过 SSH 登入 ECS，拉取新镜像并重启服务
-      - name: Deploy to ECS via SSH
-        uses: appleboy/ssh-action@v1.0.0
+  deploy-to-ecs:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ECS_HOST }}
-          username: ${{ secrets.ECS_USER }}
+          username: root
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
-            cd /your/path/on/ecs   # 改成 ECS 上 docker-compose.yml 所在目录
-            docker login ${{ secrets.ACR_REGISTRY }} -u "${{ secrets.ACR_USERNAME }}" -p "${{ secrets.ACR_PASSWORD }}"
+            # 1. 定义变量
+            VPC_REGISTRY="${{ secrets.ACR_REGISTRY_VPC }}"
+            IMAGE_PATH="${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:latest"
+            
+            # 2. 进入项目目录
+            cd ~/workspace/miniapp_pro_backend
+            
+            # 3. 登录内网仓库 (VPC)
+            echo "${{ secrets.ACR_PASSWORD }}" | docker login $VPC_REGISTRY -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+            
+            # 4. 拉取镜像并重启服务
+            # 这里强制使用 docker compose，会自动根据配置文件更新镜像
             docker compose pull
             docker compose up -d
+            
+            # 5. 清理旧镜像释放空间
+            docker image prune -f
