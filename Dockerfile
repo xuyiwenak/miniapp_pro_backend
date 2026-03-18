@@ -7,6 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY src ./src
 COPY tsconfig.json ./
+COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
 
 # 有 lock 文件用 npm ci，否则用 npm install
