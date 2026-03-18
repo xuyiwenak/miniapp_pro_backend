@@ -6,7 +6,7 @@
 - TSRPC HTTP / WebSocket 服务（游戏 / 会话等实时能力）
 - 小程序 REST 接口（登录、作品、记录、反馈等）
 - MongoDB / Redis 数据存储
-- 基于 Docker / docker-compose 的一键部署能力
+- 基于 Docker / docker-compose 的一键部署能力，阿里腾讯云ecs实例
 
 ---
 
