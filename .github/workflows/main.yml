@@ -3,7 +3,7 @@ name: ArtJoy Backend CI/CD
 on:
   push:
     branches:
-      - master  # 如果你的主分支叫 main，请改为 main
+      - master  # 如果你本地分支叫 main，请改为 main
 
 jobs:
   build-and-push:
@@ -12,24 +12,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 使用 Docker 官方 Action 登录，更稳定
-      - name: Login to Aliyun ACR (Public)
+      # 1. 登录阿里云 ACR (公网)
+      - name: Login to Aliyun ACR
         uses: docker/login-action@v3
         with:
-          registry: ${{ secrets.ACR_REGISTRY }}
+          # 域名在 Variables 中，用户名和密码在 Secrets 中
+          registry: ${{ vars.ACR_REGISTRY }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      # 2. 构建并推送镜像
       - name: Build and Push Image
         uses: docker/build-push-action@v5
         with:
           context: .
-          # 如果 Dockerfile 在子目录，请改这里，例如: ./art_backend
-          file: ./Dockerfile 
           push: true
+          # 组合：域名/命名空间/仓库名
           tags: |
-            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:latest
-            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:${{ github.sha }}
+            ${{ vars.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/repo:latest
+            ${{ vars.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/repo:${{ github.sha }}
 
   deploy-to-ecs:
     needs: build-and-push
@@ -38,24 +39,19 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.ECS_HOST }}
+          host: ${{ vars.ECS_HOST }}  # 建议把 ECS_HOST 也补到 Variables 里
           username: root
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
-            # 1. 定义变量
-            VPC_REGISTRY="${{ secrets.ACR_REGISTRY_VPC }}"
-            IMAGE_PATH="${{ secrets.ACR_NAMESPACE }}/${{ secrets.ACR_REPOSITORY }}:latest"
-            
-            # 2. 进入项目目录
+            # 进入项目目录
             cd ~/workspace/miniapp_pro_backend
             
-            # 3. 登录内网仓库 (VPC)
-            echo "${{ secrets.ACR_PASSWORD }}" | docker login $VPC_REGISTRY -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+            # 使用内网域名登录加速 (VPC)
+            echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ vars.ACR_REGISTRY_VPC }} -u "${{ secrets.ACR_USERNAME }}" --password-stdin
             
-            # 4. 拉取镜像并重启服务
-            # 这里强制使用 docker compose，会自动根据配置文件更新镜像
+            # 拉取新镜像并重启
             docker compose pull
             docker compose up -d
             
-            # 5. 清理旧镜像释放空间
+            # 清理无用镜像
             docker image prune -f
