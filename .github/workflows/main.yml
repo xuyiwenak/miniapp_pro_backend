@@ -31,6 +31,9 @@ jobs:
           tags: |
             ${{ vars.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/repo:latest
             ${{ vars.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/repo:${{ github.sha }}
+          # 开启缓存支持 package.json 没变，npm install 那步会直接跳过，构建时间能从几分钟缩短到几十秒。
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy-to-ecs:
     needs: build-and-push
