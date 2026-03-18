@@ -3,7 +3,7 @@ name: ArtJoy Backend CI/CD
 on:
   push:
     branches:
-      - master  # 如果你本地分支叫 main，请改为 main
+      - master
 
 jobs:
   build-and-push:
