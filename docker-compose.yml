@@ -32,7 +32,8 @@ services:
       - mongo
       - redis
     environment:
-      NODE_ENV: production
+      NODE_ENV: development  
+      ENV: development
       # 按你项目实际端口来，如果 TSRPC 主端口不是 40001 自己改
       HTTP_PORT: 40001
       MINIAPP_PORT: 40002
