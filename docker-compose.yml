@@ -1,3 +1,4 @@
+# Nginx 配置位于本目录 ./nginx/（与 monorepo 根目录 nginx/ 同步维护，修改后请两处对齐或从根目录 cp -r nginx art_backend/）。
 # 在 ECS 上：仓库路径示例 /root/workspace/miniapp_pro_backend
 # 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
 # 配置目录挂载：./src/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致），子目录名需与 environment 一致（见 backend_app.environment）

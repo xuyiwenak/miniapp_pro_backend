@@ -55,6 +55,9 @@ pnpm-lock.yaml
 src/sysconfig/development/server_auth_config.json
 src/sysconfig/production/server_auth_config.json
 
+# Nginx TLS（与仓库根目录约定一致）
+nginx/ssl/*.pem
+
 # 本地私有配置与秘钥
 *local.json
 *.secret.*
