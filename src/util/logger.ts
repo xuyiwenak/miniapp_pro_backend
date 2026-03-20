@@ -7,16 +7,17 @@
  * @LastEditTime: 2024-11-11 15:22:48
  */
 import * as log4js from "log4js";
-import path from "path";
 import * as fs from "fs";
-import { getSysconfigLogDirectory } from "./sysconfig_path";
+import { envFirst } from "./env";
+import { resolveSysconfigJsonFile } from "./sysconfig_path";
 
 (function init_logger() {
   const environment =
-    process.env.environment || process.env.ENV || "development";
-  const configFilePath = path.join(
-    getSysconfigLogDirectory(environment),
-    "log_config.json",
+    envFirst("environment", "ENV") ?? "development";
+  const configFilePath = resolveSysconfigJsonFile(
+    environment,
+    "",
+    "log_config.json"
   );
 
   try {

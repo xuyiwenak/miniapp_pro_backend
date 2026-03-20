@@ -32,3 +32,8 @@ docker compose up -d --build
 
 - `development/db_config.json`：无 Mongo 账号字段，直连本机实例。
 - `production/db_config.json`：含 `user` / `password` / `authSource`，连接串由 `buildMongoUrl` 生成。
+
+### 路径解析（`log_config` 与其它 sysconfig JSON）
+
+读取配置时**优先** `SYSCONFIG_ROOT/<environment>/`（例如挂载后的 `/app/config/production/`），若该路径下文件不存在则**回退**到镜像内 `dist/sysconfig/<environment>/`（构建时 `copy-config` 生成）。  
+镜像内默认 `SYSCONFIG_ROOT=/app/config`（见 `Dockerfile`），与 `docker-compose` 挂载一致。

@@ -1,14 +1,16 @@
 import * as fs from "fs";
-import path from "path";
 import { envFirst } from "./env";
 import { gameLogger } from "./logger";
-import { getSysconfigDirectory } from "./sysconfig_path";
+import { resolveSysconfigJsonFile } from "./sysconfig_path";
 
 export function loadSysConfigJson(filename: string): [any, string] {
   const environment = envFirst("environment", "ENV") ?? "development";
   const serverProvide = envFirst("serverProvide", "SERVER_PROVIDE") ?? "";
-  const dir = getSysconfigDirectory(environment, serverProvide);
-  const configFilePath = path.join(dir, filename);
+  const configFilePath = resolveSysconfigJsonFile(
+    environment,
+    serverProvide,
+    filename
+  );
   gameLogger.log(configFilePath);
   try {
     const configData = fs.readFileSync(configFilePath, "utf-8");

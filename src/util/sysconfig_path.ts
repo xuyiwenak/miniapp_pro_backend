@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 
 /**
@@ -40,4 +41,31 @@ export function getSysconfigLogDirectory(environment: string): string {
     return path.resolve(path.join(root, environment));
   }
   return path.resolve(__dirname, `../sysconfig/${environment}`);
+}
+
+/**
+ * 解析 sysconfig 下单个 JSON 的绝对路径：优先 SYSCONFIG_ROOT 挂载目录，不存在则回退到镜像内 dist/sysconfig。
+ * 解决 Docker 未注入 SYSCONFIG_ROOT、或挂载未就绪时仍可读构建产物中的配置。
+ */
+export function resolveSysconfigJsonFile(
+  environment: string,
+  serverProvide: string,
+  filename: string
+): string {
+  const primary = path.join(
+    getSysconfigDirectory(environment, serverProvide),
+    filename
+  );
+  if (fs.existsSync(primary)) {
+    return primary;
+  }
+  const fallbackDir = path.resolve(
+    __dirname,
+    getBaseConfigPath(environment, serverProvide)
+  );
+  const fallback = path.join(fallbackDir, filename);
+  if (fs.existsSync(fallback)) {
+    return fallback;
+  }
+  return primary;
 }

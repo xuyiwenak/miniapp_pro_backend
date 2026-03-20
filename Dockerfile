@@ -30,8 +30,9 @@ VOLUME ["/app/static", "/app/logs"]
 # 暴露：WebSocket + 主 HTTP + 小程序 REST（默认 miniapp = httpPort+1）
 EXPOSE 40000 40001 40002
 
-# 通过环境变量控制端口和配置路径，默认使用 dist 内置配置
-ENV HTTP_PORT=40001 \
+# 与 docker-compose 挂载 ./src/sysconfig:/app/config 一致；未挂载时仍可读 dist/sysconfig
+ENV SYSCONFIG_ROOT=/app/config \
+    HTTP_PORT=40001 \
     MINIAPP_PORT=40002
 
 # 默认入口：使用 dist/front.js 启动 TSRPC + miniapp 服务（如有 index.js，可在此调整）
