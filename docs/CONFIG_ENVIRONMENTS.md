@@ -42,3 +42,5 @@ docker compose up -d --build
 
 Compose 挂载 **`./logs/backend:/app/logs`**。`production/log_config.json` 使用相对路径 **`logs/*.log`**（相对容器工作目录 `WORKDIR /app`），即写入 **`/app/logs`**，与挂载一致。  
 `development/log_config.json` 仍可用 `../logs/`（本机从项目根启动时常见）；若本机也统一从 `art_backend` 目录跑 Node，可改为与 production 相同写法。
+
+若 **`logs/backend` 始终为空** 且 `docker logs miniapp-backend` 里出现 **`init_logger failed` / 找不到 `log_config.json`**：说明进程在启动阶段就退出了，尚未写文件。请确认 ECS 仓库里存在 **`src/sysconfig/production/log_config.json`**（与 compose 挂载一致），并在服务器执行 **`docker compose build --no-cache`** 后重建容器，保证镜像内 **`dist/sysconfig/production/`** 也有该文件。

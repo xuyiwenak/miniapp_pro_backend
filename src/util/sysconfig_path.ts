@@ -69,3 +69,33 @@ export function resolveSysconfigJsonFile(
   }
   return primary;
 }
+
+/**
+ * 读取 sysconfig 下 JSON：先 SYSCONFIG_ROOT 挂载目录，再镜像内 dist/sysconfig。
+ * 两处都不存在时抛出明确错误（避免只报单一路径、难以排查 ECS）。
+ */
+export function readSysconfigJsonFileUtf8(
+  environment: string,
+  serverProvide: string,
+  filename: string
+): { utf8: string; path: string } {
+  const primary = path.join(
+    getSysconfigDirectory(environment, serverProvide),
+    filename
+  );
+  const fallback = path.join(
+    path.resolve(__dirname, getBaseConfigPath(environment, serverProvide)),
+    filename
+  );
+  if (fs.existsSync(primary)) {
+    return { utf8: fs.readFileSync(primary, "utf-8"), path: primary };
+  }
+  if (fs.existsSync(fallback)) {
+    return { utf8: fs.readFileSync(fallback, "utf-8"), path: fallback };
+  }
+  throw new Error(
+    `Missing sysconfig file ${filename}. Tried:\n  ${primary}\n  ${fallback}\n` +
+      `On ECS: ensure src/sysconfig/${environment}/${filename} exists (volume → SYSCONFIG_ROOT), ` +
+      `or rebuild the image so dist/sysconfig includes JSON (npm run copy-config / Dockerfile).`
+  );
+}

@@ -7,26 +7,24 @@
  * @LastEditTime: 2024-11-11 15:22:48
  */
 import * as log4js from "log4js";
-import * as fs from "fs";
 import { envFirst } from "./env";
-import { resolveSysconfigJsonFile } from "./sysconfig_path";
+import { readSysconfigJsonFileUtf8 } from "./sysconfig_path";
 
 (function init_logger() {
   const environment =
     envFirst("environment", "ENV") ?? "development";
-  const configFilePath = resolveSysconfigJsonFile(
-    environment,
-    "",
-    "log_config.json"
-  );
 
   try {
-    const configData = fs.readFileSync(configFilePath, "utf-8");
-    const config = JSON.parse(configData);
+    const { utf8 } = readSysconfigJsonFileUtf8(
+      environment,
+      "",
+      "log_config.json"
+    );
+    const config = JSON.parse(utf8);
     log4js.configure(config);
   } catch (error) {
-    console.log("init_logger failed", error);
-    process.exit(-1);
+    console.error("init_logger failed", error);
+    process.exit(1);
   }
 })();
 

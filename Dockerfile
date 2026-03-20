@@ -11,7 +11,9 @@ COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
 
 # 有 lock 文件用 npm ci，否则用 npm install
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build \
+  && test -f dist/sysconfig/production/log_config.json \
+  && test -f dist/sysconfig/development/log_config.json
 
 # 生产依赖（移除 devDependencies）
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
@@ -23,6 +25,10 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=builder /app /app
+
+# 再次从源码拷入 JSON，避免仅依赖 copy-config 时偶发 dist/sysconfig 不完整
+COPY --from=builder /app/src/sysconfig/production/*.json /app/dist/sysconfig/production/
+COPY --from=builder /app/src/sysconfig/development/*.json /app/dist/sysconfig/development/
 
 # 运行时需要的静态资源目录，挂载或镜像中提供皆可
 VOLUME ["/app/static", "/app/logs"]
