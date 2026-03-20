@@ -27,8 +27,8 @@ COPY --from=builder /app /app
 # 运行时需要的静态资源目录，挂载或镜像中提供皆可
 VOLUME ["/app/static", "/app/logs"]
 
-# 暴露：主 HTTP 端口 + 小程序 REST 端口（默认 httpPort+1）
-EXPOSE 40001 40002
+# 暴露：WebSocket + 主 HTTP + 小程序 REST（默认 miniapp = httpPort+1）
+EXPOSE 40000 40001 40002
 
 # 通过环境变量控制端口和配置路径，默认使用 dist 内置配置
 ENV HTTP_PORT=40001 \

@@ -9,12 +9,14 @@
 import * as log4js from "log4js";
 import path from "path";
 import * as fs from "fs";
+import { getSysconfigLogDirectory } from "./sysconfig_path";
 
 (function init_logger() {
-  const environment = process.env.environment || "development";
-  const configFilePath = path.resolve(
-    __dirname,
-    `../sysconfig/${environment}/log_config.json`,
+  const environment =
+    process.env.environment || process.env.ENV || "development";
+  const configFilePath = path.join(
+    getSysconfigLogDirectory(environment),
+    "log_config.json",
   );
 
   try {

@@ -1,3 +1,7 @@
+# 在 ECS 上：仓库路径示例 /root/workspace/miniapp_pro_backend
+# 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
+# 配置目录挂载：./src/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致），子目录名需与 environment 一致（见 backend_app.environment）
+
 version: "3.9"
 
 services:
@@ -9,7 +13,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
     ports:
-      - "27017:27017"          # 本机调试用，线上可去掉对外映射
+      - "27017:27017"
     volumes:
       - ./data/mongo:/data/db
 
@@ -18,13 +22,13 @@ services:
     container_name: miniapp-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"            # 本机调试用，线上可去掉对外映射
+      - "6379:6379"
     volumes:
       - ./data/redis:/data
 
   backend_app:
     build:
-      context: .               # 当前 miniapp_pro_backend 目录
+      context: .
       dockerfile: Dockerfile
     container_name: miniapp-backend
     restart: unless-stopped
@@ -32,20 +36,32 @@ services:
       - mongo
       - redis
     environment:
-      NODE_ENV: development  
+      NODE_ENV: production
+      # 与挂载一致：宿主机 ./src/sysconfig/development → /app/config/development
+      SYSCONFIG_ROOT: /app/config
+      environment: development
       ENV: development
-      # 按你项目实际端口来，如果 TSRPC 主端口不是 40001 自己改
+      id: front_1
+      SERVER_ID: front_1
+      gameType: front
+      GAME_TYPE: front
+      httpPort: 40001
       HTTP_PORT: 40001
+      miniappApiPort: 40002
       MINIAPP_PORT: 40002
-      # Mongo：连上面的 mongo容器
+      port: 40000
+      WS_PORT: 40000
+      connectionTickTimeout: 30000
       MONGO_URI: mongodb://root:password@mongo:27017
-      # Redis：连上面的 redis 容器（和 src/sysconfig/development/db_config.json 对应）
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - "40001:40001"          # 主 HTTP 端口（如有）
-      - "40002:40002"          # 小程序 REST API 端口
+      - "40000:40000"
+      - "40001:40001"
+      - "40002:40002"
     volumes:
+      # 随 git pull 更新；在 ECS 上等同于 /root/workspace/miniapp_pro_backend/src/sysconfig
+      - ./src/sysconfig:/app/config:ro
       - ./static:/app/static
       - ./logs/backend:/app/logs
 
@@ -57,8 +73,6 @@ services:
       - backend_app
     ports:
       - "80:80"
-      # 以后要上 HTTPS，可以再开放 443，并在配置里加 ssl
-      # - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/logs:/var/log/nginx

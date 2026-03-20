@@ -29,6 +29,7 @@
   - 支持 PM2 启动（本地）
   - 支持 Docker / docker-compose 本地一键启动
   - 适配 ECS + 阿里云 ACR 镜像部署（生产）
+  - ECS 上 **git pull 后启动**、配置目录挂载说明见 [`docs/DEPLOY_ECS.md`](docs/DEPLOY_ECS.md)
 
 ---
 

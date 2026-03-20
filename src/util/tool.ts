@@ -19,12 +19,5 @@ export function getUniqueID(user: UserInfo): string {
   return `${user.zone}:${user.uid}`;
 }
 
-export function getBaseConfigPath(
-  environment: string,
-  serverProvide: string
-): string {
-  if (serverProvide) {
-    return `../sysconfig/${environment}/${serverProvide}/`;
-  }
-  return `../sysconfig/${environment}/`;
-}
+/** @deprecated 请优先使用 `./sysconfig_path` 中的 `getBaseConfigPath` */
+export { getBaseConfigPath } from "./sysconfig_path";

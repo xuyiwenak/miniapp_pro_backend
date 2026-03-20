@@ -17,6 +17,7 @@ import { SysCfgComponent } from "./component/SysCfgComponent";
 import { MongoComponent } from "./component/front/MongoComponent";
 import { PlayerComponent } from "./component/PlayerComponent";
 
+import { envFirst, envNumber, syncEnvForSysConfig } from "./util/env";
 import { gameLogger, gameLogger as logger } from "./util/logger";
 import { stopFrontServer } from "./util/tool";
 import { getMiniappPort, initHttpServer, startHttpServer } from "./httpServer";
@@ -24,23 +25,22 @@ import { startMiniappServer } from "./miniapp/server";
 
 // Entry function
 async function main() {
-  const httpPort = Number(process.env.httpPort);
+  syncEnvForSysConfig();
+
+  const httpPort = envNumber("httpPort", "HTTP_PORT") ?? 40001;
   const args: ServerGlobals = {
-    id: process.env.id!,
-    internalIP: process.env.internalIP,
-    publicIP: process.env.publicIP,
-    gameType: process.env.gameType!,
-    group:
-      process.env.group === undefined ? Number(process.env.group) : undefined,
-    environment: process.env.environment!,
-    connectionTickTimeout: Number(process.env.connectionTickTimeout),
-    port: Number(process.env.port),
+    id: envFirst("id", "SERVER_ID") ?? "front_1",
+    internalIP: envFirst("internalIP", "INTERNAL_IP"),
+    publicIP: envFirst("publicIP", "PUBLIC_IP"),
+    gameType: envFirst("gameType", "GAME_TYPE") ?? "front",
+    group: envNumber("group", "GROUP"),
+    environment: envFirst("environment", "ENV") ?? "development",
+    connectionTickTimeout:
+      envNumber("connectionTickTimeout", "CONNECTION_TICK_TIMEOUT") ?? 30000,
+    port: envNumber("port", "WS_PORT") ?? 40000,
     httpPort,
-    miniappApiPort:
-      process.env.miniappApiPort !== undefined
-        ? Number(process.env.miniappApiPort)
-        : undefined,
-    serverProvide: "",
+    miniappApiPort: envNumber("miniappApiPort", "MINIAPP_PORT"),
+    serverProvide: envFirst("serverProvide", "SERVER_PROVIDE") ?? "",
   };
   args.miniappApiPort = getMiniappPort(args);
   logger.debug("ServerGlobals----->", args);
