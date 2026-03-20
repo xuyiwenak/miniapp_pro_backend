@@ -1,7 +1,7 @@
 {
   "appenders": {
     "server": {
-      "filename": "../logs/server.log",
+      "filename": "logs/server.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
@@ -14,7 +14,7 @@
       "alwaysIncludePattern": true
     },
     "game": {
-      "filename": "../logs/game.log",
+      "filename": "logs/game.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
@@ -34,7 +34,7 @@
       }
     },
     "csv": {
-      "filename": "../logs/csv.log",
+      "filename": "logs/csv.log",
       "type": "util/LoggerCsvDateRollingAppender",
       "numBackups": 7,
       "encoding": "utf8",
@@ -53,7 +53,7 @@
       "alwaysIncludePattern": true
     },
     "prop_history_csv": {
-      "filename": "../logs/prop_history.csv",
+      "filename": "logs/prop_history.csv",
       "type": "util/LoggerCsvDateRollingAppender",
       "numBackups": 7,
       "encoding": "utf8",

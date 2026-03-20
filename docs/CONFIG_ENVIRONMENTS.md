@@ -37,3 +37,8 @@ docker compose up -d --build
 
 读取配置时**优先** `SYSCONFIG_ROOT/<environment>/`（例如挂载后的 `/app/config/production/`），若该路径下文件不存在则**回退**到镜像内 `dist/sysconfig/<environment>/`（构建时 `copy-config` 生成）。  
 镜像内默认 `SYSCONFIG_ROOT=/app/config`（见 `Dockerfile`），与 `docker-compose` 挂载一致。
+
+### 日志写到宿主机 `logs/backend`
+
+Compose 挂载 **`./logs/backend:/app/logs`**。`production/log_config.json` 使用相对路径 **`logs/*.log`**（相对容器工作目录 `WORKDIR /app`），即写入 **`/app/logs`**，与挂载一致。  
+`development/log_config.json` 仍可用 `../logs/`（本机从项目根启动时常见）；若本机也统一从 `art_backend` 目录跑 Node，可改为与 production 相同写法。

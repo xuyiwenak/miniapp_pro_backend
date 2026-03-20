@@ -22,6 +22,12 @@ docker compose up -d
 
 密钥请放在 **`src/sysconfig/production/server_auth_config.json`**（或 CI 下发），勿提交到仓库。
 
+## 日志文件落盘到宿主机
+
+`docker-compose.yml` 已挂载 **`./logs/backend:/app/logs`**。生产环境 `production/log_config.json` 中日志路径为相对进程工作目录 **`/app`** 的 **`logs/*.log`**，即写入 **`/app/logs`**，对应宿主机 **`项目根/logs/backend/`**（如 `server.log`、`game.log` 等按日期滚动）。
+
+查看容器标准输出：`docker logs miniapp-backend`。
+
 ## 本地开发（非 Docker）
 
 见 **[`CONFIG_ENVIRONMENTS.md`](CONFIG_ENVIRONMENTS.md)**，使用 **`development/`** 与 **`ENV=development`**。

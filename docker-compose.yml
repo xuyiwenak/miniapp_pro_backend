@@ -63,6 +63,7 @@ services:
       # 随 git pull 更新；在 ECS 上等同于 /root/workspace/miniapp_pro_backend/src/sysconfig
       - ./src/sysconfig:/app/config:ro
       - ./static:/app/static
+      # 业务日志落盘到容器 /app/logs → 宿主机项目下 logs/backend（与 production/log_config 中 logs/*.log 一致）
       - ./logs/backend:/app/logs
 
   nginx:
