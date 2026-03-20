@@ -1,3 +1,4 @@
+# 基础镜像是否每次 build 都拉取，由 docker-compose.yml 里 backend_app.build.pull 控制（默认 false）。
 FROM node:25.8-alpine AS builder
 
 WORKDIR /app

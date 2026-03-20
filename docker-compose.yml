@@ -1,12 +1,17 @@
 # 在 ECS 上：仓库路径示例 /root/workspace/miniapp_pro_backend
 # 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
 # 配置目录挂载：./src/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致），子目录名需与 environment 一致（见 backend_app.environment）
+#
+# 构建：本文件只有 backend_app 带 build:，`docker compose build` / `docker compose build backend_app` 只会构建后端镜像。
+# mongo / redis / nginx 使用 pull_policy: if_not_present，本地已有镜像时 compose pull / up 不会反复从仓库拉取。
+# backend_app.build.pull: false 避免每次构建时强制拉取 Dockerfile 里的 node 基础镜像（需更新基础镜像时可临时改为 true 或 docker compose build --pull）。
 
 version: "3.9"
 
 services:
   mongo:
     image: mongo:7
+    pull_policy: if_not_present
     container_name: miniapp-mongo
     restart: unless-stopped
     environment:
@@ -19,6 +24,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    pull_policy: if_not_present
     container_name: miniapp-redis
     restart: unless-stopped
     ports:
@@ -30,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      pull: false
     container_name: miniapp-backend
     restart: unless-stopped
     depends_on:
@@ -68,6 +75,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    pull_policy: if_not_present
     container_name: miniapp-nginx
     restart: unless-stopped
     depends_on:
