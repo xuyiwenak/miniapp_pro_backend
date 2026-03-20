@@ -7,7 +7,7 @@
       "encoding": "utf8",
       "layout": {
         "type": "pattern",
-        "pattern": "[%r] [%p] [%f:%l] -- %m"
+        "pattern": "[%d{yyyy-MM-dd HH:mm:ss.SSS O}] [%p] [%f:%l] -- %m"
       },
       "pattern": "yyyy-MM-dd",
       "keepFileExt": true,
@@ -20,7 +20,7 @@
       "encoding": "utf8",
       "layout": {
         "type": "pattern",
-        "pattern": "[%r] [%p] [%f:%l] -- %m"
+        "pattern": "[%d{yyyy-MM-dd HH:mm:ss.SSS O}] [%p] [%f:%l] -- %m"
       },
       "pattern": "yyyy-MM-dd",
       "keepFileExt": true,
@@ -30,7 +30,7 @@
       "type": "console",
       "layout": {
         "type": "pattern",
-        "pattern": "%[ [%r] [%p] [%f:%l] %] -- %m"
+        "pattern": "%[ [%d{yyyy-MM-dd HH:mm:ss.SSS O}] [%p] [%f:%l] %] -- %m"
       }
     },
     "csv": {
@@ -40,7 +40,7 @@
       "encoding": "utf8",
       "layout": {
         "type": "pattern",
-        "pattern": "[%r] [%p] [%f:%l] -- %m"
+        "pattern": "[%d{yyyy-MM-dd HH:mm:ss.SSS O}] [%p] [%f:%l] -- %m"
       },
       "header": [
         "date",
