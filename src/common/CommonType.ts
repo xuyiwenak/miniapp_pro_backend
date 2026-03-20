@@ -22,6 +22,8 @@ export type DBCfg = {
   db: string;
   user?: string;
   password?: string;
+  /** Docker Mongo root 等需指定认证库，一般为 admin */
+  authSource?: string;
 };
 
 export type RedisCfg = {

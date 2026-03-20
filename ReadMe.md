@@ -29,7 +29,8 @@
   - 支持 PM2 启动（本地）
   - 支持 Docker / docker-compose 本地一键启动
   - 适配 ECS + 阿里云 ACR 镜像部署（生产）
-  - ECS 上 **git pull 后启动**、配置目录挂载说明见 [`docs/DEPLOY_ECS.md`](docs/DEPLOY_ECS.md)
+  - **`development` / `production` 两套 sysconfig** 说明见 [`docs/CONFIG_ENVIRONMENTS.md`](docs/CONFIG_ENVIRONMENTS.md)
+  - ECS 上 **git pull 后启动**、挂载见 [`docs/DEPLOY_ECS.md`](docs/DEPLOY_ECS.md)
 
 ---
 
@@ -83,8 +84,9 @@ art_backend/
 │   ├── component/           # 组件系统（DonkJS 核心）
 │   ├── common/              # 通用类型、装饰器、WebsocketGameServer 等
 │   ├── shared/              # 共享枚举、TSRPC 协议（serviceProto 等）
-│   ├── sysconfig/           # 系统配置（按环境划分）
-│   │   └── development/
+│   ├── sysconfig/           # 系统配置（development=本机 | production=Docker/线上）
+│   │   ├── development/
+│   │   └── production/
 │   ├── util/                # 工具方法
 │   │   ├── logger.ts        # 日志封装（gameLogger / serverLogger / csv logger）
 │   │   ├── wxAccessToken.ts # 微信 token 获取与缓存
@@ -109,10 +111,12 @@ art_backend/
 
 ### 系统配置
 
-配置文件位于 `src/sysconfig/` 目录下，根据环境分为不同子目录：
+配置文件位于 `src/sysconfig/` 目录下，由 `ENV` / `environment` 选择子目录：
 
-- `development/`: 开发环境配置
-- `production/`: 生产环境配置
+- **`development/`**：本机开发（Mongo/Redis 一般为 `127.0.0.1`），默认未设置环境变量时使用
+- **`production/`**：Docker / ECS（Mongo `mongo`、Redis `redis` 等服务名）
+
+详见 [`docs/CONFIG_ENVIRONMENTS.md`](docs/CONFIG_ENVIRONMENTS.md)。
 
 主要配置文件包括：
 

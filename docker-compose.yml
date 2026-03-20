@@ -37,10 +37,10 @@ services:
       - redis
     environment:
       NODE_ENV: production
-      # 与挂载一致：宿主机 ./src/sysconfig/development → /app/config/development
+      # 与挂载一致：宿主机 ./src/sysconfig/production → /app/config/production
       SYSCONFIG_ROOT: /app/config
-      environment: development
-      ENV: development
+      environment: production
+      ENV: production
       id: front_1
       SERVER_ID: front_1
       gameType: front

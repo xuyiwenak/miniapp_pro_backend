@@ -8,6 +8,7 @@
     "doc": "tsrpc-cli doc",
     "copy-config": "copyfiles -u 1 \"src/sysconfig/**/*.json\" dist/",
     "json-to-schemas-development": "node json_to_schema.mjs development",
+    "json-to-schemas-production": "node json_to_schema.mjs production",
     "test": "mocha --require ts-node/register test/**/*.test.ts"
   },
   "devDependencies": {

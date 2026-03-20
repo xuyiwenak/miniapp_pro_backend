@@ -28,6 +28,7 @@ import {
   stopAllZoneConnection,
 } from "../../dbservice/model/ZoneDBModel";
 import { gameLogger as logger } from "../../util/logger";
+import { buildMongoUrl } from "../../util/mongo_url";
 
 export class MongoComponent implements IBaseComponent {
   init() {}
@@ -76,7 +77,7 @@ export class MongoComponent implements IBaseComponent {
   initDbConnection(dbConfig: DBCfg, callback: Function): Promise<any> {
     logger.debug("initDbConnection", dbConfig);
     return new Promise((resolve, reject) => {
-      const url = `mongodb://${dbConfig.host}:${dbConfig.port}/${dbConfig.db}`;
+      const url = buildMongoUrl(dbConfig);
       logger.debug("initDbConnection", url);
       const connection = mongoose.createConnection(url);
 
@@ -106,7 +107,7 @@ export class MongoComponent implements IBaseComponent {
     callback: Function
   ): Promise<any> {
     return new Promise((resolve, reject) => {
-      const url = `mongodb://${dbConfig.host}:${dbConfig.port}/${dbConfig.db}`;
+      const url = buildMongoUrl(dbConfig);
       logger.debug("initDbConnection", url);
       const connection = mongoose.createConnection(url);
 
