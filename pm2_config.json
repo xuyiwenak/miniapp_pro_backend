@@ -4,7 +4,8 @@
       "name": "miniapp-backend",
       "script": "front.js",
       "env": {
-        "id": "miniapp-backend",
+        "id": "front_1",
+        "SERVER_ID": "front_1",
         "internalIP": "127.0.0.1",
         "gameType": "front",
         "publicIP": "127.0.0.1",
