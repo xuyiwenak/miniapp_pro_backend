@@ -7,8 +7,6 @@
 # mongo / redis / nginx 使用 pull_policy: if_not_present，本地已有镜像时 compose pull / up 不会反复从仓库拉取。
 # backend_app.build.pull: false 避免每次构建时强制拉取 Dockerfile 里的 node 基础镜像（需更新基础镜像时可临时改为 true 或 docker compose build --pull）。
 
-version: "3.9"
-
 services:
   mongo:
     image: mongo:7
