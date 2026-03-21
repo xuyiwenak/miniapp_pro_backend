@@ -1,47 +1,57 @@
-# 基础镜像是否每次 build 都拉取，由 docker-compose.yml 里 backend_app.build.pull 控制（默认 false）。
-FROM node:25.8-alpine AS builder
+# --- 第一阶段：构建阶段 ---
+# 使用带前缀的本地镜像，防止 Docker 联网校验 Manifest
+FROM m.daocloud.io/docker.io/library/node:25.8-alpine AS builder
 
 WORKDIR /app
 
-# 拷贝源码与依赖声明，在镜像内构建（不依赖本地 dist）
-# 使用 package*.json 以兼容无 package-lock.json 的情况（项目 .gitignore 排除了 lock 文件）
+# 设置 npm 国内镜像源（阿里云），大幅提升安装速度
+RUN npm config set registry https://registry.npmmirror.com
+
+# 拷贝依赖定义
 COPY package*.json ./
+
+# 有 lock 文件用 npm ci，否则用 npm install
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# 拷贝源码并构建
 COPY src ./src
 COPY tsconfig.json ./
 COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
 
-# 有 lock 文件用 npm ci，否则用 npm install
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build \
+RUN npm run build \
   && test -f dist/sysconfig/production/log_config.json \
   && test -f dist/sysconfig/development/log_config.json
 
-# 生产依赖（移除 devDependencies）
+# 移除开发依赖，仅保留生产环境需要的包
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
 
-FROM node:25.8-alpine AS runner
+
+# --- 第二阶段：运行阶段 ---
+# 注意：这里也必须改用带前缀的本地镜像，否则 build 依然会超时报错
+FROM m.daocloud.io/docker.io/library/node:25.8-alpine AS runner
 
 ENV NODE_ENV=production
 
 WORKDIR /app
 
+# 从 builder 阶段拷贝构建产物
 COPY --from=builder /app /app
 
-# 再次从源码拷入 JSON，避免仅依赖 copy-config 时偶发 dist/sysconfig 不完整
+# 再次从源码拷入 JSON，确保配置完整
 COPY --from=builder /app/src/sysconfig/production/*.json /app/dist/sysconfig/production/
 COPY --from=builder /app/src/sysconfig/development/*.json /app/dist/sysconfig/development/
 
-# 运行时需要的静态资源目录，挂载或镜像中提供皆可
+# 挂载卷
 VOLUME ["/app/static", "/app/logs"]
 
-# 暴露：WebSocket + 主 HTTP + 小程序 REST（默认 miniapp = httpPort+1）
+# 暴露端口
 EXPOSE 40000 40001 40002
 
-# 与 docker-compose 挂载 ./src/sysconfig:/app/config 一致；未挂载时仍可读 dist/sysconfig
+# 环境变量
 ENV SYSCONFIG_ROOT=/app/config \
     HTTP_PORT=40001 \
     MINIAPP_PORT=40002
 
-# 默认入口：使用 dist/front.js 启动 TSRPC + miniapp 服务（如有 index.js，可在此调整）
+# 启动命令
 CMD ["node", "dist/front.js"]
-
