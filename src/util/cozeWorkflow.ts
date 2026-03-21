@@ -3,18 +3,24 @@ import http from "http";
 import { ComponentManager, EComName } from "../common/BaseComponent";
 import { gameLogger as logger } from "./logger";
 
-interface CozeConfig {
+export interface CozeConfig {
   token: string;
   workflowId: string;
   baseUrl: string;
+  /** 公网 HTTPS 根，用于拼接异步完成回调 URL（与小程序/图片 publicBaseUrl 无关） */
+  callbackPublicUrl?: string;
+  /** 回调路径，默认 /healing/coze/callback */
+  callbackPath?: string;
+  extCallbackUrlKey?: string;
+  /** 回调 URL 上的 ?token=，用于防伪造 */
+  webhookSecret?: string;
+  /** >0 时在若干毫秒后对仍 pending 的任务做一次 run_histories 补偿查询 */
+  fallbackPollAfterMs?: number;
 }
 
 interface CozeRunResponse {
   code: number;
   msg: string;
-  // 兼容两种返回结构：
-  // 1) { code, msg, data: { run_id } }
-  // 2) { code, msg, execute_id, execute_status, ... }
   data?: {
     run_id?: string;
     execute_status?: string;
@@ -34,11 +40,10 @@ interface CozeStatusResponseItem {
 interface CozeStatusResponse {
   code: number;
   msg: string;
-  // Coze 最新接口返回 data 为数组，这里只关心第一个
   data?: CozeStatusResponseItem[];
 }
 
-function getCozeConfig(): CozeConfig {
+export function getCozeConfig(): CozeConfig {
   const sysCfg = ComponentManager.instance.getComponent(EComName.SysCfgComponent) as {
     server_auth_config?: { coze?: CozeConfig };
   } | null;
@@ -47,6 +52,26 @@ function getCozeConfig(): CozeConfig {
     throw new Error("Coze API token / workflowId not configured");
   }
   return cfg;
+}
+
+function normalizeBaseUrl(u: string): string {
+  return u.replace(/\/+$/, "");
+}
+
+function buildCallbackUrl(cfg: CozeConfig): string {
+  const base = cfg.callbackPublicUrl?.trim();
+  if (!base) {
+    throw new Error("Coze callbackPublicUrl not configured (required for async webhook)");
+  }
+  const path = (cfg.callbackPath ?? "/healing/coze/callback").trim() || "/healing/coze/callback";
+  const pathPart = path.startsWith("/") ? path : `/${path}`;
+  let url = `${normalizeBaseUrl(base)}${pathPart}`;
+  const secret = cfg.webhookSecret?.trim();
+  if (secret) {
+    const sep = url.includes("?") ? "&" : "?";
+    url += `${sep}token=${encodeURIComponent(secret)}`;
+  }
+  return url;
 }
 
 function cozeRequest<T>(method: string, urlPath: string, body?: Record<string, unknown>): Promise<T> {
@@ -93,6 +118,10 @@ function cozeRequest<T>(method: string, urlPath: string, body?: Record<string, u
  */
 export async function submitWorkflow(params: Record<string, string>): Promise<string> {
   const cfg = getCozeConfig();
+  const callbackUrl = buildCallbackUrl(cfg);
+  const extKey = (cfg.extCallbackUrlKey ?? "hook_url").trim() || "hook_url";
+  const ext: Record<string, string> = { [extKey]: callbackUrl };
+
   logger.info(
     "Coze workflow submit params keys=",
     Object.keys(params),
@@ -100,11 +129,15 @@ export async function submitWorkflow(params: Record<string, string>): Promise<st
     (params.imageUrl ?? "").length,
     "image_url length=",
     (params.image_url ?? "").length,
+    "callback ext key=",
+    extKey,
   );
+
   const resp = await cozeRequest<CozeRunResponse>("POST", "/v1/workflow/run", {
     workflow_id: cfg.workflowId,
     parameters: params,
     is_async: true,
+    ext,
   });
 
   const runId = resp.data?.run_id || resp.execute_id;
@@ -138,7 +171,7 @@ const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_COUNT = 60;
 
 /**
- * 轮询等待工作流完成（后端内部使用），返回最终输出 JSON 字符串
+ * @deprecated 异步工作流完成后由 Coze POST 回调处理；仅保留供脚本或调试
  */
 export async function pollWorkflowResult(runId: string): Promise<string> {
   for (let i = 0; i < MAX_POLL_COUNT; i++) {
@@ -171,4 +204,20 @@ export async function pollWorkflowResult(runId: string): Promise<string> {
   }
 
   throw new Error(`Coze workflow timeout after ${MAX_POLL_COUNT * POLL_INTERVAL_MS / 1000}s, run_id=${runId}`);
+}
+
+/**
+ * 单次查询：若已成功则返回 output 字符串；若失败则 throw；若仍运行则返回 null
+ */
+export async function queryWorkflowOutputOnce(runId: string): Promise<string | null> {
+  const statuses = await queryWorkflowStatus(runId);
+  const status = statuses![0];
+  if (status.execute_status === "Success") {
+    return status.output ?? "{}";
+  }
+  if (status.execute_status === "Fail") {
+    const errMsg = status.error_message || "Unknown workflow error";
+    throw new Error(`Coze workflow failed: ${errMsg}`);
+  }
+  return null;
 }

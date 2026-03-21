@@ -30,7 +30,13 @@
   "coze": {
     "token": "YOUR_COZE_API_TOKEN",
     "workflowId": "YOUR_COZE_WORKFLOW_ID",
-    "baseUrl": "https://api.coze.cn"
+    "baseUrl": "https://api.coze.cn",
+    "_comment_cozeCallback": "异步工作流完成时 Coze POST 到 callbackPublicUrl+callbackPath；ext 内键名见 extCallbackUrlKey（与开放平台一致）",
+    "callbackPublicUrl": "https://YOUR_DOMAIN",
+    "callbackPath": "/healing/coze/callback",
+    "extCallbackUrlKey": "hook_url",
+    "webhookSecret": "OPTIONAL_LONG_RANDOM_QUERY_TOKEN",
+    "fallbackPollAfterMs": 0
   }
 }
 

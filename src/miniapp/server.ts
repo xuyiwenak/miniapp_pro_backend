@@ -1,7 +1,9 @@
 import http from "http";
 import path from "path";
 import express from "express";
+import { WebSocketServer } from "ws";
 import { sharedHttpOptions } from "../httpServer";
+import { setupChatWs } from "./ws/chatServer";
 import { authMiddleware } from "./middleware/auth";
 import loginRoutes from "./routes/login";
 import homeRoutes from "./routes/home";
@@ -53,9 +55,29 @@ export function startMiniappServer(port: number): Promise<{ app: express.Express
   const app = createMiniappApp();
   const server = http.createServer(app);
   const logger = sharedHttpOptions.logger;
+
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (request, socket, head) => {
+    try {
+      const host = request.headers.host ?? "127.0.0.1";
+      const pathname = new URL(request.url ?? "/", `http://${host}`).pathname;
+      if (pathname === "/chat") {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          const url = new URL(request.url ?? "/", `http://${host}`);
+          const token = url.searchParams.get("token") ?? undefined;
+          setupChatWs(ws, token);
+        });
+      } else {
+        socket.destroy();
+      }
+    } catch {
+      socket.destroy();
+    }
+  });
+
   return new Promise((resolve) => {
     server.listen(port, () => {
-      logger.info("Miniapp REST API and WebSocket /chat started at port", port);
+      logger.info("Miniapp REST API + WS /chat on port", port);
       resolve({ app, server });
     });
   });

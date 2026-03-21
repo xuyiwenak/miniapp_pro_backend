@@ -1,9 +1,10 @@
-import { Router, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../util/requestLogger";
-import { submitWorkflow, pollWorkflowResult } from "../../util/cozeWorkflow";
+import { notifyHealingUpdate } from "../ws/chatServer";
+import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from "../../util/cozeWorkflow";
 import { resolveImageUrl } from "../../util/imageUploader";
 import { gameLogger as logger } from "../../util/logger";
 import type { IWork, IHealingScores } from "../../entity/work.entity";
@@ -275,6 +276,156 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
   }
 }
 
+function firstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.length) return v;
+  }
+  return undefined;
+}
+
+function normalizeCozeOutputField(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  if (typeof v === "string") return v;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** 兼容多种扣子/开放接口可能推送的 JSON 结构 */
+function parseCozeWebhookPayload(body: unknown): {
+  runId?: string;
+  executeStatus?: string;
+  output?: string;
+  errorMessage?: string;
+} {
+  if (!body || typeof body !== "object") return {};
+  const b = body as Record<string, unknown>;
+  let runId = firstString(b, ["run_id", "execute_id", "executeId", "id"]);
+  let output = normalizeCozeOutputField(b.output ?? b.Output);
+  let executeStatus = firstString(b, ["execute_status", "executeStatus", "status"]);
+  let errorMessage = firstString(b, ["error_message", "errorMessage", "error"]);
+
+  const data = b.data;
+  if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+    const d = data[0] as Record<string, unknown>;
+    runId = runId ?? firstString(d, ["execute_id", "run_id", "id"]);
+    output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
+    executeStatus = executeStatus ?? firstString(d, ["execute_status", "executeStatus"]);
+    errorMessage = errorMessage ?? firstString(d, ["error_message", "errorMessage"]);
+  } else if (data && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    runId = runId ?? firstString(d, ["execute_id", "run_id", "id"]);
+    output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
+    executeStatus = executeStatus ?? firstString(d, ["execute_status", "executeStatus"]);
+    errorMessage = errorMessage ?? firstString(d, ["error_message", "errorMessage"]);
+  }
+
+  if (typeof b.code === "number" && b.code !== 0 && !errorMessage) {
+    errorMessage = String(b.msg ?? "Coze error");
+  }
+
+  return { runId, executeStatus, output, errorMessage };
+}
+
+async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
+  const Work = getWorkModel();
+  const work = (await Work.findOne({ "healing.cozeRunId": runId }).lean().exec()) as IWork | null;
+  if (!work) {
+    logger.warn("Coze webhook: no work for cozeRunId=", runId);
+    return;
+  }
+  if (work.healing?.status === "success") {
+    logger.info("Coze webhook idempotent skip, workId=", work.workId);
+    return;
+  }
+  const parsed = parseCozeOutput(outputRaw);
+  const { workId } = work;
+  const updatePayload: Record<string, unknown> = {
+    "healing.scores": parsed.scores,
+    "healing.summary": parsed.summary,
+    "healing.colorAnalysis": parsed.colorAnalysis,
+    "healing.status": "success",
+    "healing.analyzedAt": new Date(),
+  };
+  if (parsed.compositionReport != null) updatePayload["healing.compositionReport"] = parsed.compositionReport;
+  if (parsed.lineAnalysis != null) updatePayload["healing.lineAnalysis"] = parsed.lineAnalysis;
+  if (parsed.suggestion != null) updatePayload["healing.suggestion"] = parsed.suggestion;
+  if (parsed.keyColors != null && parsed.keyColors.length) updatePayload["healing.keyColors"] = parsed.keyColors;
+  await Work.updateOne({ workId }, { $set: updatePayload }).exec();
+  logger.info("Coze webhook success for workId=", workId);
+  if (work.authorId) {
+    notifyHealingUpdate(String(work.authorId), { workId, status: "success" });
+  }
+}
+
+async function markHealingFailedByRunId(runId: string): Promise<void> {
+  const Work = getWorkModel();
+  const work = (await Work.findOne({ "healing.cozeRunId": runId }).lean().exec()) as IWork | null;
+  const r = await Work.updateOne(
+    { "healing.cozeRunId": runId },
+    { $set: { "healing.status": "failed" } },
+  ).exec();
+  if (r.matchedCount === 0) {
+    logger.warn("Coze webhook fail: no work for cozeRunId=", runId);
+    return;
+  }
+  if (work?.authorId) {
+    notifyHealingUpdate(String(work.authorId), { workId: work.workId, status: "failed" });
+  }
+}
+
+/** Coze 异步完成回调（无用户 JWT；可选 webhookSecret 作为 query token） */
+router.post("/coze/callback", async (req: Request, res: Response) => {
+  const cfg = getCozeConfig();
+  const secret = cfg.webhookSecret?.trim();
+  if (secret) {
+    const t = req.query?.token;
+    if (typeof t !== "string" || t !== secret) {
+      res.status(403).json({ code: 403, success: false, message: "Forbidden" });
+      return;
+    }
+  }
+
+  try {
+    const parsed = parseCozeWebhookPayload(req.body);
+    const runId = parsed.runId?.trim();
+    if (!runId) {
+      logger.error("Coze webhook missing run_id, body=", JSON.stringify(req.body).slice(0, 800));
+      res.status(400).json({ code: 400, success: false, message: "Missing run id" });
+      return;
+    }
+
+    const statusRaw = (parsed.executeStatus ?? "").trim();
+    const upper = statusRaw.toUpperCase();
+
+    if (upper === "FAIL" || upper === "FAILED" || parsed.errorMessage) {
+      await markHealingFailedByRunId(runId);
+      res.status(200).json({ code: 200, success: true });
+      return;
+    }
+
+    if (upper === "RUNNING" || upper === "PENDING") {
+      res.status(200).json({ code: 200, success: true, message: "ignored" });
+      return;
+    }
+
+    if (upper === "SUCCESS" || upper === "SUCCEEDED" || parsed.output != null) {
+      const out = parsed.output ?? "{}";
+      await applyHealingSuccessFromRunId(runId, out);
+      res.status(200).json({ code: 200, success: true });
+      return;
+    }
+
+    res.status(400).json({ code: 400, success: false, message: "Unrecognized webhook payload" });
+  } catch (err) {
+    logger.error("Coze webhook handler error", (err as Error).message);
+    res.status(500).json({ code: 500, success: false, message: "Internal error" });
+  }
+});
+
 router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
@@ -339,34 +490,27 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       },
     ).exec();
 
-    // 立即返回前端 pending 状态
+    // 立即返回前端 pending 状态（完成由 Coze POST /healing/coze/callback 写库）
     sendSucc(res, { workId, status: "pending", runId });
 
-    // 后台异步轮询 Coze 结果
-    pollWorkflowResult(runId)
-      .then(async (output) => {
-        const parsed = parseCozeOutput(output);
-        const updatePayload: Record<string, unknown> = {
-          "healing.scores": parsed.scores,
-          "healing.summary": parsed.summary,
-          "healing.colorAnalysis": parsed.colorAnalysis,
-          "healing.status": "success",
-          "healing.analyzedAt": new Date(),
-        };
-        if (parsed.compositionReport != null) updatePayload["healing.compositionReport"] = parsed.compositionReport;
-        if (parsed.lineAnalysis != null) updatePayload["healing.lineAnalysis"] = parsed.lineAnalysis;
-        if (parsed.suggestion != null) updatePayload["healing.suggestion"] = parsed.suggestion;
-        if (parsed.keyColors != null && parsed.keyColors.length) updatePayload["healing.keyColors"] = parsed.keyColors;
-        await Work.updateOne({ workId }, { $set: updatePayload }).exec();
-        logger.info("Coze analyze complete for workId=", workId);
-      })
-      .catch(async (err) => {
-        logger.error("Coze analyze failed for workId=", workId, "error=", (err as Error).message);
-        await Work.updateOne(
-          { workId },
-          { $set: { "healing.status": "failed" } },
-        ).exec();
-      });
+    const cozeCfg = getCozeConfig();
+    const fallbackMs = cozeCfg.fallbackPollAfterMs ?? 0;
+    if (fallbackMs > 0) {
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const pending = (await Work.findOne({ workId, "healing.status": "pending" }).lean().exec()) as IWork | null;
+            if (!pending) return;
+            const out = await queryWorkflowOutputOnce(runId);
+            if (out === null) return;
+            await applyHealingSuccessFromRunId(runId, out);
+          } catch (err) {
+            logger.error("Coze fallback poll failed workId=", workId, (err as Error).message);
+            await Work.updateOne({ workId }, { $set: { "healing.status": "failed" } }).exec();
+          }
+        })();
+      }, fallbackMs);
+    }
   } catch (err) {
     logRequestError("healing.ts:analyze:error", "healing analyze error", {
       req,

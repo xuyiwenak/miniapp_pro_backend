@@ -29,6 +29,14 @@ export function sendToUser(userId: string, payload: object): void {
   }
 }
 
+/** Coze 回调写库后推送给作者，小程序作品详情页可即时刷新疗愈结果 */
+export function notifyHealingUpdate(
+  userId: string,
+  data: { workId: string; status: "success" | "failed" },
+): void {
+  sendToUser(userId, { type: "healing_update", data });
+}
+
 export function handleChatMessage(
   senderUserId: string,
   body: { type: string; data?: { userId?: string; content?: string } }
