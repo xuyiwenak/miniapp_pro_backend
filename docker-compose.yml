@@ -20,6 +20,20 @@ services:
       - "27017:27017"
     volumes:
       - ./data/mongo:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "mongodb://root:password@127.0.0.1:27017/admin",
+          "--quiet",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -30,6 +44,12 @@ services:
       - "6379:6379"
     volumes:
       - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   backend_app:
     build:
@@ -39,8 +59,10 @@ services:
     container_name: miniapp-backend
     restart: unless-stopped
     depends_on:
-      - mongo
-      - redis
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       # 与挂载一致：宿主机 ./src/sysconfig/production → /app/config/production
