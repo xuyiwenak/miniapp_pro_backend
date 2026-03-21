@@ -120,6 +120,11 @@ export async function submitWorkflow(params: Record<string, string>): Promise<st
   const cfg = getCozeConfig();
   const callbackUrl = buildCallbackUrl(cfg);
   const extKey = (cfg.extCallbackUrlKey ?? "hook_url").trim() || "hook_url";
+  if (/^https?:\/\//i.test(extKey)) {
+    throw new Error(
+      'coze.extCallbackUrlKey must be the ext field name (e.g. "hook_url"), not a URL. Put the domain in callbackPublicUrl only.',
+    );
+  }
   const ext: Record<string, string> = { [extKey]: callbackUrl };
 
   logger.info(
@@ -129,8 +134,10 @@ export async function submitWorkflow(params: Record<string, string>): Promise<st
     (params.imageUrl ?? "").length,
     "image_url length=",
     (params.image_url ?? "").length,
-    "callback ext key=",
+    "extCallbackUrlKey=",
     extKey,
+    "callbackUrl=",
+    callbackUrl.replace(/([?&])token=[^&]+/g, "$1token=***"),
   );
 
   const resp = await cozeRequest<CozeRunResponse>("POST", "/v1/workflow/run", {
