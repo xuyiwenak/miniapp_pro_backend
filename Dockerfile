@@ -18,6 +18,8 @@ COPY src ./src
 COPY tsconfig.json ./
 COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
+# 管理后台静态页面（运行时由 Express 直接服务）
+COPY admin-panel ./admin-panel
 
 RUN npm run build \
   && test -f dist/sysconfig/production/log_config.json \

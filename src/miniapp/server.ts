@@ -12,9 +12,12 @@ import dataCenterRoutes from "./routes/dataCenter";
 import workRoutes from "./routes/work";
 import healingRoutes from "./routes/healing";
 import ossRoutes from "./routes/oss";
+import adminRoutes from "./routes/admin/index";
 import { gameLogger } from "../util/logger";
 
 const staticDir = path.join(process.cwd(), "static");
+// __dirname = dist/miniapp/  →  ../../  = project root
+const adminPanelDir = path.join(__dirname, "../../admin-panel");
 
 export function createMiniappApp(): express.Express {
   const app = express();
@@ -24,6 +27,7 @@ export function createMiniappApp(): express.Express {
   });
   app.use(express.json({ limit: "10mb" }));
   app.use("/static", express.static(staticDir));
+  app.use("/admin-panel", express.static(adminPanelDir));
 
   if (sharedHttpOptions.cors) {
     app.use((_req, res, next) => {
@@ -43,6 +47,7 @@ export function createMiniappApp(): express.Express {
   app.use("/oss", authMiddleware, ossRoutes);
   app.use("/dataCenter", dataCenterRoutes);
   app.use("/healing", healingRoutes);
+  app.use("/admin", adminRoutes);
 
   app.use((_req, res) => {
     res.status(200).json({ code: 404, success: false, message: "Not Found" });
