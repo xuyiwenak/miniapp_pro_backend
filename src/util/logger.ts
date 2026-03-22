@@ -30,5 +30,4 @@ import { readSysconfigJsonFileUtf8 } from "./sysconfig_path";
 
 export const serverLogger = log4js.getLogger("server");
 export const gameLogger = log4js.getLogger("game");
-export const csvLogger = log4js.getLogger("csv");
 export const prop_history_csvLogger = log4js.getLogger("prop_history_csv");
