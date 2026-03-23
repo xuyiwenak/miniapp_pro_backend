@@ -37,6 +37,9 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
+# 安装 docker CLI，用于系统监控 API 和容器管理
+RUN apk add --no-cache docker-cli
+
 # 从 builder 阶段拷贝构建产物
 COPY --from=builder /app /app
 

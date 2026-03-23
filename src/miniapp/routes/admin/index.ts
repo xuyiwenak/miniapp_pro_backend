@@ -8,6 +8,7 @@ import statsRouter from "./stats";
 import usersRouter from "./users";
 import worksRouter from "./works";
 import feedbackRouter from "./feedback";
+import systemRouter from "./system";
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use("/stats", statsRouter);
 router.use("/users", usersRouter);
 router.use("/works", worksRouter);
 router.use("/feedback", feedbackRouter);
+router.use("/system", systemRouter);
 
 export default router;
