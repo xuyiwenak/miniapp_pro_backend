@@ -117,6 +117,8 @@ services:
       - ./nginx/certbot/www:/var/www/certbot:ro
       - ./nginx/logs:/var/log/nginx
       - ./static:/usr/share/nginx/html/static:ro
+      # 前端 SPA（art_web build 产物）：先在宿主机 build 后放到 art_web_dist/ 目录
+      - ./art_web_dist:/usr/share/nginx/html/app:ro
 
 networks:
   default:
