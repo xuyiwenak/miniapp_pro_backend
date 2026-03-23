@@ -74,7 +74,7 @@
         "game",
         "console"
       ],
-      "enableCallStack": true,
+      "enableCallStack": false,
       "level": "debug"
     },
     "prop_history_csv": {
