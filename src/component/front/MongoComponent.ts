@@ -73,33 +73,45 @@ export class MongoComponent implements IBaseComponent {
     await stopAllZoneConnection();
   }
 
+  private static readonly CONN_OPTIONS: mongoose.ConnectOptions = {
+    serverSelectionTimeoutMS: 8000,   // 选主超时，超时后报错而不是永久阻塞
+    heartbeatFrequencyMS: 10000,      // 心跳频率，及时感知节点状态
+    connectTimeoutMS: 10000,          // 初始 TCP 连接超时
+    socketTimeoutMS: 45000,           // 空闲 socket 超时
+    retryWrites: true,
+    retryReads: true,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    family: 4,                        // 强制 IPv4，避免 Docker DNS 解析 AAAA 超时
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
   initDbConnection(dbConfig: DBCfg, callback: Function): Promise<any> {
-    logger.debug("initDbConnection", dbConfig);
     return new Promise((resolve, reject) => {
       const url = buildMongoUrl(dbConfig);
-      logger.debug("initDbConnection", url);
-      const connection = mongoose.createConnection(url);
+      const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-      // 监听连接成功事件
       connection.on("connected", () => {
         const result = callback(connection);
         resolve(result);
-        logger.debug("initialized", dbConfig);
+        logger.info("MongoDB connected", dbConfig.db);
       });
 
-      // 监听连接错误事件
       connection.on("error", (error: Error) => {
-        logger.error("Connection error:", error);
+        logger.error("MongoDB connection error:", error.message);
         reject(error);
       });
 
-      // 可选：处理其他连接关闭等事件
       connection.on("disconnected", () => {
-        logger.debug("Connection disconnected");
+        logger.warn("MongoDB disconnected, mongoose will auto-reconnect", dbConfig.db);
+      });
+
+      connection.on("reconnected", () => {
+        logger.info("MongoDB reconnected", dbConfig.db);
       });
     });
   }
+
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
   initDbZoneConnection(
     dbConfig: DBCfg,
@@ -108,25 +120,25 @@ export class MongoComponent implements IBaseComponent {
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       const url = buildMongoUrl(dbConfig);
-      logger.debug("initDbConnection", url);
-      const connection = mongoose.createConnection(url);
+      const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-      // 监听连接成功事件
       connection.on("connected", () => {
         const result = callback(connection, zone);
         resolve(result);
-        logger.debug("initialized", dbConfig);
+        logger.info("MongoDB zone connected", zone, dbConfig.db);
       });
 
-      // 监听连接错误事件
       connection.on("error", (error: Error) => {
-        logger.error("Connection error:", error);
+        logger.error("MongoDB zone connection error:", zone, error.message);
         reject(error);
       });
 
-      // 可选：处理其他连接关闭等事件
       connection.on("disconnected", () => {
-        logger.debug("Connection disconnected");
+        logger.warn("MongoDB zone disconnected, auto-reconnect", zone);
+      });
+
+      connection.on("reconnected", () => {
+        logger.info("MongoDB zone reconnected", zone);
       });
     });
   }

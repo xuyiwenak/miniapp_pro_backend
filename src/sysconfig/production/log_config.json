@@ -30,8 +30,13 @@
       "type": "console",
       "layout": {
         "type": "pattern",
-        "pattern": "%[ [%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] [%f:%l] %] -- %m"
+        "pattern": "%[ [%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] %] -- %m"
       }
+    },
+    "console_warn": {
+      "type": "logLevelFilter",
+      "appender": "console",
+      "level": "warn"
     },
     "prop_history_csv": {
       "filename": "logs/prop_history.csv",
@@ -41,13 +46,7 @@
       "layout": {
         "type": "messagePassThrough"
       },
-      "header": [
-        "date",
-        "changeData",
-        "nowData",
-        "beforeData",
-        "source"
-      ],
+      "header": ["date", "changeData", "nowData", "beforeData", "source"],
       "pattern": "yyyy-MM-dd",
       "keepFileExt": true,
       "alwaysIncludePattern": true
@@ -55,35 +54,24 @@
   },
   "categories": {
     "default": {
-      "appenders": [
-        "game"
-      ],
-      "enableCallStack": true,
-      "level": "debug"
+      "appenders": ["game", "console_warn"],
+      "enableCallStack": false,
+      "level": "info"
     },
     "server": {
-      "appenders": [
-        "server",
-        "console"
-      ],
-      "enableCallStack": true,
-      "level": "debug"
+      "appenders": ["server", "console_warn"],
+      "enableCallStack": false,
+      "level": "info"
     },
     "game": {
-      "appenders": [
-        "game",
-        "console"
-      ],
+      "appenders": ["game", "console_warn"],
       "enableCallStack": false,
-      "level": "debug"
+      "level": "info"
     },
     "prop_history_csv": {
-      "appenders": [
-        "prop_history_csv",
-        "console"
-      ],
-      "enableCallStack": true,
-      "level": "debug"
+      "appenders": ["prop_history_csv"],
+      "enableCallStack": false,
+      "level": "info"
     }
   }
 }
