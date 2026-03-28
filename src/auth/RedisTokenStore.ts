@@ -111,6 +111,31 @@ export async function incrementHealDailyUsage(userId: string): Promise<number> {
   return count;
 }
 
+/** 批量读取多个用户今日用量（mget 一次请求） */
+export async function getHealDailyUsageBatch(userIds: string[]): Promise<Record<string, number>> {
+  if (userIds.length === 0) return {};
+  const client = getRedis();
+  const date = todayDateStr();
+  const keys = userIds.map((id) => `heal:daily:${id}:${date}`);
+  const values = await client.mget(...keys);
+  const result: Record<string, number> = {};
+  userIds.forEach((id, i) => {
+    result[id] = values[i] !== null ? parseInt(values[i]!, 10) : 0;
+  });
+  return result;
+}
+
+/** 手动设置某用户今日用量（管理员调整用），设为 0 时删除 key */
+export async function setHealDailyUsage(userId: string, count: number): Promise<void> {
+  const client = getRedis();
+  const key = `heal:daily:${userId}:${todayDateStr()}`;
+  if (count <= 0) {
+    await client.del(key);
+  } else {
+    await client.set(key, String(count), "EX", secondsUntilUtcMidnight());
+  }
+}
+
 /**
  * 读取并删除临时 token 对应的 openId（一次性）
  */

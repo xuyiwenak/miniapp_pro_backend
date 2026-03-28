@@ -6,6 +6,7 @@ import { ComponentManager } from "../../../common/BaseComponent";
 import type { PlayerComponent } from "../../../component/PlayerComponent";
 import { getPlayerModel } from "../../../dbservice/model/ZoneDBModel";
 import { AccountLevel } from "../../../shared/enum/AccountLevel";
+import { getHealDailyUsageBatch, setHealDailyUsage } from "../../../auth/RedisTokenStore";
 
 const router = Router();
 
@@ -45,7 +46,11 @@ router.get("/", async (req: AdminRequest, res: Response) => {
         .exec(),
     ]);
 
-    sendSucc(res, { total, page, limit, list });
+    const userIds = list.map((u) => u.userId);
+    const healUsageMap = await getHealDailyUsageBatch(userIds);
+    const listWithUsage = list.map((u) => ({ ...u, healTodayUsage: healUsageMap[u.userId] ?? 0 }));
+
+    sendSucc(res, { total, page, limit, list: listWithUsage });
   } catch {
     sendErr(res, "Failed to list users", 500);
   }
@@ -95,6 +100,22 @@ router.patch("/:userId/level", requireSuperAdmin, async (req: AdminRequest, res:
     sendSucc(res, { userId, level });
   } catch {
     sendErr(res, "Failed to update user level", 500);
+  }
+});
+
+/** PATCH /admin/users/:userId/heal-usage — 手动设置用户今日分析用量 */
+router.patch("/:userId/heal-usage", async (req: AdminRequest, res: Response) => {
+  const { userId } = req.params;
+  const { usage } = req.body as { usage?: unknown };
+  if (typeof usage !== "number" || !Number.isInteger(usage) || usage < 0) {
+    sendErr(res, "usage must be a non-negative integer", 400);
+    return;
+  }
+  try {
+    await setHealDailyUsage(userId, usage);
+    sendSucc(res, { userId, healTodayUsage: usage });
+  } catch {
+    sendErr(res, "Failed to update heal usage", 500);
   }
 });
 
