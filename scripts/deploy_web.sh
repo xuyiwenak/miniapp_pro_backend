@@ -19,7 +19,11 @@ fi
 
 echo "--- 构建 art_web 前端 ---"
 cd "$ART_WEB_DIR"
-npm install --prefer-offline
+if diff -q package-lock.json node_modules/.package-lock.json > /dev/null 2>&1; then
+  echo "依赖无变化，跳过 npm install"
+else
+  npm ci --prefer-offline
+fi
 npm run build
 
 echo "--- 同步 dist 到 art_backend/art_web_dist ---"
