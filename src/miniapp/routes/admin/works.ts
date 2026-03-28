@@ -63,6 +63,26 @@ router.patch("/:workId/status", async (req: AdminRequest, res: Response) => {
   }
 });
 
+/** PATCH /admin/works/:workId/featured — 切换首页展示 */
+router.patch("/:workId/featured", async (req: AdminRequest, res: Response) => {
+  const { workId } = req.params;
+  const { featured } = req.body ?? {};
+
+  if (typeof featured !== "boolean") {
+    sendErr(res, "featured must be a boolean", 400);
+    return;
+  }
+
+  try {
+    const Work = getWorkModel();
+    const result = await Work.updateOne({ workId }, { $set: { featured } }).exec();
+    if (result.matchedCount === 0) { sendErr(res, "Work not found", 404); return; }
+    sendSucc(res, { workId, featured });
+  } catch {
+    sendErr(res, "Failed to update featured", 500);
+  }
+});
+
 /** DELETE /admin/works/:workId — 删除作品 */
 router.delete("/:workId", async (req: AdminRequest, res: Response) => {
   const { workId } = req.params;

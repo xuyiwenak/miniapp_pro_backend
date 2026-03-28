@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
+import { getPlayerModel } from "../../dbservice/model/ZoneDBModel";
 import type { IWork } from "../../entity/work.entity";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
@@ -22,11 +23,35 @@ const SWIPERS = new Array(6).fill("/static/home/swiper0.png");
 router.get("/cards", async (_req: Request, res: Response) => {
   try {
     const Work = getWorkModel();
-    const works = (await Work.find({ status: "published" })
+    // 优先展示管理员精选作品；若无精选则回退到全部已发布
+    let works = (await Work.find({ status: "published", featured: true })
       .sort({ createdAt: -1 })
       .limit(20)
       .lean()
       .exec()) as IWork[];
+    if (works.length === 0) {
+      works = (await Work.find({ status: "published" })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+        .exec()) as IWork[];
+    }
+
+    // 查询作者昵称
+    const authorIds = works.filter((w) => w.authorId).map((w) => w.authorId as string);
+    let nicknameMap: Record<string, string> = {};
+    if (authorIds.length > 0) {
+      try {
+        const Player = getPlayerModel("zone_1");
+        const players = await Player.find({ userId: { $in: authorIds } })
+          .select("userId nickname")
+          .lean()
+          .exec();
+        for (const p of players as { userId: string; nickname?: string }[]) {
+          if (p.userId && p.nickname) nicknameMap[p.userId] = p.nickname;
+        }
+      } catch {}
+    }
 
     const list =
       works.length > 0
@@ -55,6 +80,7 @@ router.get("/cards", async (_req: Request, res: Response) => {
               url,
               desc: w.desc,
               tags,
+              nickname: (w.authorId && nicknameMap[w.authorId]) || "匿名",
             };
           })
         : CARDS;
