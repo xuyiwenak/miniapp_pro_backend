@@ -8,6 +8,11 @@ import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from "../../ut
 import { resolveImageUrl } from "../../util/imageUploader";
 import { gameLogger as logger } from "../../util/logger";
 import type { IWork, IHealingScores } from "../../entity/work.entity";
+import { ComponentManager } from "../../common/BaseComponent";
+import type { PlayerComponent } from "../../component/PlayerComponent";
+import { getPlayerModel } from "../../dbservice/model/ZoneDBModel";
+import { AccountLevel } from "../../shared/enum/AccountLevel";
+import { getHealDailyLimit, getHealDailyUsage, incrementHealDailyUsage } from "../../auth/RedisTokenStore";
 
 const router = Router();
 
@@ -446,6 +451,27 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     return;
   }
 
+  // ── 每日配额检查 ──
+  try {
+    const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
+    const zoneId = playerComp?.getDefaultZoneId();
+    if (zoneId) {
+      const Player = getPlayerModel(zoneId);
+      const player = await Player.findOne({ userId }).select("level").lean().exec();
+      const isSuperAdmin = player?.level === AccountLevel.SuperAdmin;
+      if (!isSuperAdmin) {
+        const [limit, used] = await Promise.all([getHealDailyLimit(), getHealDailyUsage(userId)]);
+        if (used >= limit) {
+          sendErr(res, `今日分析次数已用完（每日限${limit}次），请明天再试`, 429);
+          return;
+        }
+      }
+    }
+  } catch (quotaErr) {
+    logger.error("heal quota check error", (quotaErr as Error).message);
+    // 配额检查失败时放行，不影响主功能
+  }
+
   try {
     const Work = getWorkModel();
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
@@ -472,6 +498,9 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
     };
 
     const runId = await submitWorkflow(workflowParams);
+
+    // 提交成功后计入当日用量（失败时不计）
+    void incrementHealDailyUsage(userId).catch(() => {});
 
     // 立即标记为 pending 状态并记录 runId
     await Work.updateOne(

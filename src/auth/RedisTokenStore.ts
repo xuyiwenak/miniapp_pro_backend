@@ -66,6 +66,51 @@ export async function saveTempTokenOpenId(
   await client.set(key, openId, "EX", ttlSec);
 }
 
+// ── 每日分析配额 ──────────────────────────────────────────────────────────────
+
+const HEAL_LIMIT_KEY = "sys:heal_daily_limit";
+const DEFAULT_HEAL_DAILY_LIMIT = 3;
+
+export async function getHealDailyLimit(): Promise<number> {
+  const client = getRedis();
+  const val = await client.get(HEAL_LIMIT_KEY);
+  return val !== null ? parseInt(val, 10) : DEFAULT_HEAL_DAILY_LIMIT;
+}
+
+export async function setHealDailyLimit(limit: number): Promise<void> {
+  const client = getRedis();
+  await client.set(HEAL_LIMIT_KEY, String(limit));
+}
+
+function todayDateStr(): string {
+  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
+}
+
+function secondsUntilUtcMidnight(): number {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setUTCHours(24, 0, 0, 0);
+  return Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+}
+
+export async function getHealDailyUsage(userId: string): Promise<number> {
+  const client = getRedis();
+  const key = `heal:daily:${userId}:${todayDateStr()}`;
+  const val = await client.get(key);
+  return val !== null ? parseInt(val, 10) : 0;
+}
+
+/** 自增今日用量，返回自增后的值，首次使用时设置到次日零点的 TTL */
+export async function incrementHealDailyUsage(userId: string): Promise<number> {
+  const client = getRedis();
+  const key = `heal:daily:${userId}:${todayDateStr()}`;
+  const count = await client.incr(key);
+  if (count === 1) {
+    await client.expire(key, secondsUntilUtcMidnight());
+  }
+  return count;
+}
+
 /**
  * 读取并删除临时 token 对应的 openId（一次性）
  */

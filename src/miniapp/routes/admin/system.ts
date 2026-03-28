@@ -7,6 +7,7 @@ import { sendSucc, sendErr } from "../../middleware/response";
 import { requireSuperAdmin } from "../../middleware/adminAuth";
 import type { AdminRequest } from "../../middleware/adminAuth";
 import type { Response } from "express";
+import { getHealDailyLimit, setHealDailyLimit } from "../../../auth/RedisTokenStore";
 
 /** 采样 200ms 计算 CPU 使用率 */
 function sampleCpuUsage(): Promise<number> {
@@ -148,6 +149,31 @@ router.get("/logs", (_req: AdminRequest, res: Response) => {
     if (err) { sendSucc(res, { lines: [], error: err.message }); return; }
     sendSucc(res, { lines: stdout.split("\n").filter(Boolean), file: logFile });
   });
+});
+
+/** GET /admin/system/config — 读取系统配置 */
+router.get("/config", async (_req: AdminRequest, res: Response) => {
+  try {
+    const healDailyLimit = await getHealDailyLimit();
+    sendSucc(res, { healDailyLimit });
+  } catch (e) {
+    sendErr(res, String(e), 500);
+  }
+});
+
+/** PATCH /admin/system/config — 修改系统配置（仅超级管理员） */
+router.patch("/config", requireSuperAdmin, async (req: AdminRequest, res: Response) => {
+  const { healDailyLimit } = req.body as { healDailyLimit?: unknown };
+  if (typeof healDailyLimit !== "number" || !Number.isInteger(healDailyLimit) || healDailyLimit < 0) {
+    sendErr(res, "healDailyLimit must be a non-negative integer", 400);
+    return;
+  }
+  try {
+    await setHealDailyLimit(healDailyLimit);
+    sendSucc(res, { healDailyLimit });
+  } catch (e) {
+    sendErr(res, String(e), 500);
+  }
 });
 
 export default router;
