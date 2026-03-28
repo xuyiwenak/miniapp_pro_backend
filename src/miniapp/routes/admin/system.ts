@@ -123,7 +123,7 @@ router.post("/deploy", requireSuperAdmin, (_req: AdminRequest, res: Response) =>
   const cmd = [
     `docker compose -f "${composeFile}" --project-directory "${projectDir}"`,
     `up -d --no-deps --build backend_app`,
-    `&& docker image prune -f`,
+    `&& docker image prune --force`,
   ].join(" ");
 
   // 构建最多等待 5 分钟
