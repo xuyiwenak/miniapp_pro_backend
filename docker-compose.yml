@@ -20,6 +20,9 @@ services:
       - "27017:27017"
     volumes:
       - ./data/mongo:/data/db
+    networks:
+      default:
+        ipv4_address: 172.28.0.2
     healthcheck:
       test:
         [
@@ -44,6 +47,9 @@ services:
       - "6379:6379"
     volumes:
       - ./data/redis:/data
+    networks:
+      default:
+        ipv4_address: 172.28.0.3
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -58,9 +64,10 @@ services:
       pull: false
     container_name: miniapp-backend
     restart: unless-stopped
-    dns_opt:
-      - "timeout:2"   # DNS 查询超时 2s（默认 5s），失败快速重试
-      - "attempts:3"  # 重试 3 次，避免 EAI_AGAIN 永久阻塞
+    # 用 /etc/hosts 静态映射绕过 Docker 内嵌 DNS，根治 EAI_AGAIN
+    extra_hosts:
+      - "mongo:172.28.0.2"
+      - "redis:172.28.0.3"
     depends_on:
       mongo:
         condition: service_healthy
@@ -126,3 +133,6 @@ services:
 networks:
   default:
     name: miniapp-backend-net
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
