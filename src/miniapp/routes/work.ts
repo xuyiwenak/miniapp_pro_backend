@@ -9,7 +9,8 @@ import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
 import { checkText, checkImage } from "../../util/wxContentSecurity";
-import { uploadToStorage, resolveImageUrl } from "../../util/imageUploader";
+import { uploadToStorage, resolveImageUrl, deleteFromStorage } from "../../util/imageUploader";
+import { gameLogger as logger } from "../../util/logger";
 
 const router = Router();
 
@@ -356,6 +357,20 @@ router.post("/delete", async (req: MiniappRequest, res: Response) => {
 
     await Work.deleteOne({ workId }).exec();
     sendSucc(res, { workId });
+
+    // 异步清理 OSS / 本地文件，不阻塞响应
+    const imageUrls = ((work as any).images as { url?: string }[] | undefined)
+      ?.map((img) => img?.url)
+      .filter(Boolean) as string[] | undefined;
+    if (imageUrls?.length) {
+      void Promise.allSettled(imageUrls.map((url) => deleteFromStorage(url))).then((results) => {
+        results.forEach((r, i) => {
+          if (r.status === "rejected") {
+            logger.error(`deleteFromStorage failed for workId=${workId} url=${imageUrls[i]}`, r.reason);
+          }
+        });
+      });
+    }
   } catch (err) {
     logRequestError("work.ts:delete:error", "delete work failed", {
       req,

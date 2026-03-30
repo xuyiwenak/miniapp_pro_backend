@@ -4,7 +4,7 @@ import { ComponentManager, EComName } from "../common/BaseComponent";
 import { SysCfgComponent } from "../component/SysCfgComponent";
 import { gameLogger as logger } from "./logger";
 import { getCosConfigOrNull, uploadToCos } from "./cosUploader";
-import { getOssConfigOrNull, uploadToOss, signOssUrl } from "./ossUploader";
+import { getOssConfigOrNull, uploadToOss, signOssUrl, deleteFromOss } from "./ossUploader";
 
 const UPLOADS_DIR = path.join(process.cwd(), "static", "uploads");
 
@@ -88,6 +88,32 @@ export async function uploadToStorage(
   const baseUrl = getPublicBaseUrl();
   const pathUrl = `/static/uploads/${key}`;
   return baseUrl ? `${baseUrl}${pathUrl}` : pathUrl;
+}
+
+/**
+ * 根据存储的 URL/Key 删除对应的文件。
+ * - "oss://xxx" -> 删除 OSS 对象
+ * - 本地路径    -> 删除本地文件
+ * - http(s) URL -> 外部文件，不处理
+ */
+export async function deleteFromStorage(storedUrl: string): Promise<void> {
+  if (!storedUrl) return;
+
+  if (storedUrl.startsWith(OSS_PREFIX)) {
+    const objectKey = storedUrl.slice(OSS_PREFIX.length);
+    await deleteFromOss(objectKey);
+    return;
+  }
+
+  // 本地文件（相对路径如 /static/uploads/xxx）
+  if (!storedUrl.startsWith("http://") && !storedUrl.startsWith("https://")) {
+    const relativePath = storedUrl.startsWith("/") ? storedUrl : `/${storedUrl}`;
+    const filePath = path.join(process.cwd(), relativePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      logger.info("Local file deleted:", filePath);
+    }
+  }
 }
 
 /**

@@ -6,6 +6,7 @@ import type { IWork } from "../../entity/work.entity";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
 import { resolveImageUrl } from "../../util/imageUploader";
+import { loadUserIdByToken } from "../../auth/RedisTokenStore";
 
 const router = Router();
 const OSS_PREFIX = "oss://";
@@ -96,9 +97,17 @@ router.get("/swipers", (_req: Request, res: Response) => {
   sendSucc(res, SWIPERS);
 });
 
-/** 根据 workId 获取单条已发布作品详情（无需登录） */
+/** 根据 workId 获取单条已发布作品详情（无需登录，但登录用户会正确识别 isOwner） */
 router.get("/workDetail", async (req: Request, res: Response) => {
   const workId = (req.query?.workId as string)?.trim();
+
+  // 可选 token 解析：不强制登录，但有 token 时识别 viewerId 以正确返回 isOwner
+  let viewerId: string | undefined;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    const token = auth.slice(7).trim();
+    viewerId = (await loadUserIdByToken(token)) || undefined;
+  }
 
   logRequest("home.ts:workDetail:entry", "workDetail request", {
     req,
@@ -134,7 +143,7 @@ router.get("/workDetail", async (req: Request, res: Response) => {
       responseBody: { workId: work.workId, desc: work.desc, imagesCount: work.images?.length ?? 0 },
       statusCode: 200,
     });
-    const healingInfo = buildHealingResponse(work, undefined);
+    const healingInfo = buildHealingResponse(work, viewerId);
     const images =
       Array.isArray(work.images) && work.images.length > 0
         ? work.images.map((img: { url?: string; name?: string; type?: string }) => {

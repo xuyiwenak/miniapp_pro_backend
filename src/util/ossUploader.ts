@@ -107,6 +107,49 @@ export function uploadToOss(
 }
 
 /**
+ * 从 OSS 删除一个对象（DELETE Object）。
+ */
+export function deleteFromOss(objectKey: string): Promise<void> {
+  const cfg = loadOssConfig();
+  const host = ossHost(cfg);
+  const date = new Date().toUTCString();
+
+  const stringToSign = `DELETE\n\n\n${date}\n/${cfg.bucket}/${objectKey}`;
+  const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
+
+  const options: https.RequestOptions = {
+    hostname: host,
+    port: 443,
+    path: `/${objectKey}`,
+    method: "DELETE",
+    headers: {
+      Authorization: `OSS ${cfg.accessKeyId}:${signature}`,
+      Date: date,
+      Host: host,
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (d) => chunks.push(d));
+      res.on("end", () => {
+        // 204 No Content 或 404（已不存在）都视为成功
+        if (res.statusCode === 204 || res.statusCode === 404) {
+          logger.info("OSS delete success, key=", objectKey);
+          resolve();
+        } else {
+          const body = Buffer.concat(chunks).toString("utf8");
+          reject(new Error(`OSS delete failed: status=${res.statusCode} body=${body.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", (err) => reject(err));
+    req.end();
+  });
+}
+
+/**
  * 生成 OSS 私有对象的临时签名 URL（纯本地计算，不发 HTTP 请求）。
  * @param objectKey  OSS 中的文件 key
  * @param expireSeconds 有效期，默认 7200 秒（2 小时）

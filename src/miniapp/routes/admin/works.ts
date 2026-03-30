@@ -2,7 +2,8 @@ import { Router, Response } from "express";
 import type { AdminRequest } from "../../middleware/adminAuth";
 import { sendSucc, sendErr } from "../../middleware/response";
 import { getWorkModel } from "../../../dbservice/model/GlobalInfoDBModel";
-import { resolveImageUrl } from "../../../util/imageUploader";
+import { resolveImageUrl, deleteFromStorage } from "../../../util/imageUploader";
+import { gameLogger as logger } from "../../../util/logger";
 
 const router = Router();
 const OSS_PREFIX = "oss://";
@@ -34,7 +35,8 @@ router.get("/", async (req: AdminRequest, res: Response) => {
       const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
       const rawUrl = (cover as { url?: string } | null)?.url ?? "";
       const coverUrl = rawUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawUrl) : rawUrl;
-      return { ...w, coverUrl };
+      const healingAnalyzed = !!(w as any).healing?.status && (w as any).healing.status !== "none";
+      return { ...w, coverUrl, healingAnalyzed };
     });
 
     sendSucc(res, { total, page, limit, list });
@@ -83,15 +85,31 @@ router.patch("/:workId/featured", async (req: AdminRequest, res: Response) => {
   }
 });
 
-/** DELETE /admin/works/:workId — 删除作品 */
+/** DELETE /admin/works/:workId — 删除作品（含异步清理 OSS 文件） */
 router.delete("/:workId", async (req: AdminRequest, res: Response) => {
   const { workId } = req.params;
 
   try {
     const Work = getWorkModel();
-    const result = await Work.deleteOne({ workId }).exec();
-    if (result.deletedCount === 0) { sendErr(res, "Work not found", 404); return; }
+    const work = await Work.findOne({ workId }).lean().exec();
+    if (!work) { sendErr(res, "Work not found", 404); return; }
+
+    await Work.deleteOne({ workId }).exec();
     sendSucc(res, { workId });
+
+    // 异步清理 OSS / 本地文件
+    const imageUrls = ((work as any).images as { url?: string }[] | undefined)
+      ?.map((img) => img?.url)
+      .filter(Boolean) as string[] | undefined;
+    if (imageUrls?.length) {
+      void Promise.allSettled(imageUrls.map((url) => deleteFromStorage(url))).then((results) => {
+        results.forEach((r, i) => {
+          if (r.status === "rejected") {
+            logger.error(`[admin] deleteFromStorage failed workId=${workId} url=${imageUrls[i]}`, r.reason);
+          }
+        });
+      });
+    }
   } catch {
     sendErr(res, "Failed to delete work", 500);
   }

@@ -120,17 +120,18 @@ function pickDominantEmotion(scores: IHealingScores): { key: EmotionKey; label: 
 
 function buildHealingResponse(work: IWork, viewerId?: string) {
   const healing = work.healing;
-  if (!healing) {
-    return { healingAnalyzed: false };
-  }
-
   const isOwner = !!(work.authorId && viewerId && work.authorId === viewerId);
+
+  if (!healing) {
+    return { healingAnalyzed: false, isOwner };
+  }
 
   if (!healing.isPublic && !isOwner) {
     return {
       healingAnalyzed: true,
       healingVisible: false,
       healingIsPublic: false,
+      isOwner: false,
     };
   }
 
@@ -512,7 +513,7 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
             summary: "",
             colorAnalysis: "",
             status: "pending",
-            isPublic: true,
+            isPublic: false,
             cozeRunId: runId,
           },
         },
