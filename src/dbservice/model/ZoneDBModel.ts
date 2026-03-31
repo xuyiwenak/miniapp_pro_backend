@@ -41,7 +41,7 @@ export class ZoneModelManager {
     // this.counterModel.createIndexes();
     // this.propBagModel = this.connection.model<IPropBag>('PropBags', PropBagSchema);
      this.playerModel = this.connection.model<IPlayer>('Player', PlayerSchema);
-     this.playerModel.createIndexes();
+     this.playerModel.createIndexes().catch(() => {});
     // // MailSchema.plugin(AutoIncrement, { inc_field: 'mailId', start_seq: 10000000000 });
     // this.mailModel = this.connection.model<IMail>('Mail', MailSchema);
     // this.mailModel.createIndexes();

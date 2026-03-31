@@ -147,8 +147,11 @@ export class MongoComponent implements IBaseComponent {
     const url = buildMongoUrl(dbConfig);
     const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-    // 必须在 asPromise() 之前注册 error 监听，否则 mongoose/driver 内部发出的
-    // error event 无人接收 → Node.js 当作 uncaught → 进程崩溃，重试失效
+    // mongoose.createConnection() 立即启动内部 async 连接流程，产生的 promise
+    // ($initialConnection) 有时不会被正确链式处理，导致 Unhandled rejection 崩溃。
+    // 立即为其挂载 .catch() 可阻断这条泄漏路径。
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    void (connection as any).$initialConnection?.catch(() => {});
     connection.on("error", () => {});
 
     try {
@@ -186,6 +189,8 @@ export class MongoComponent implements IBaseComponent {
     const url = buildMongoUrl(dbConfig);
     const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    void (connection as any).$initialConnection?.catch(() => {});
     connection.on("error", () => {});
 
     try {
