@@ -115,60 +115,49 @@ export class MongoComponent implements IBaseComponent {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
-  initDbConnection(dbConfig: DBCfg, callback: Function): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const url = buildMongoUrl(dbConfig);
-      const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
+  async initDbConnection(dbConfig: DBCfg, callback: Function): Promise<any> {
+    const url = buildMongoUrl(dbConfig);
+    const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-      connection.on("connected", () => {
-        const result = callback(connection);
-        resolve(result);
-        logger.info("MongoDB connected", dbConfig.db);
-      });
+    // 使用 asPromise() 替代 event 监听，避免内部 Promise rejection 无人捕获导致进程崩溃
+    await connection.asPromise();
+    logger.info("MongoDB connected", dbConfig.db);
 
-      connection.on("error", (error: Error) => {
-        logger.error("MongoDB connection error:", error.message);
-        reject(error);
-      });
-
-      connection.on("disconnected", () => {
-        logger.warn("MongoDB disconnected, mongoose will auto-reconnect", dbConfig.db);
-      });
-
-      connection.on("reconnected", () => {
-        logger.info("MongoDB reconnected", dbConfig.db);
-      });
+    connection.on("error", (error: Error) => {
+      logger.error("MongoDB connection error:", error.message);
     });
+    connection.on("disconnected", () => {
+      logger.warn("MongoDB disconnected, mongoose will auto-reconnect", dbConfig.db);
+    });
+    connection.on("reconnected", () => {
+      logger.info("MongoDB reconnected", dbConfig.db);
+    });
+
+    return callback(connection);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
-  initDbZoneConnection(
+  async initDbZoneConnection(
     dbConfig: DBCfg,
     zone: string,
-    callback: Function
+    callback: Function,
   ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const url = buildMongoUrl(dbConfig);
-      const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
+    const url = buildMongoUrl(dbConfig);
+    const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-      connection.on("connected", () => {
-        const result = callback(connection, zone);
-        resolve(result);
-        logger.info("MongoDB zone connected", zone, dbConfig.db);
-      });
+    await connection.asPromise();
+    logger.info("MongoDB zone connected", zone, dbConfig.db);
 
-      connection.on("error", (error: Error) => {
-        logger.error("MongoDB zone connection error:", zone, error.message);
-        reject(error);
-      });
-
-      connection.on("disconnected", () => {
-        logger.warn("MongoDB zone disconnected, auto-reconnect", zone);
-      });
-
-      connection.on("reconnected", () => {
-        logger.info("MongoDB zone reconnected", zone);
-      });
+    connection.on("error", (error: Error) => {
+      logger.error("MongoDB zone connection error:", zone, error.message);
     });
+    connection.on("disconnected", () => {
+      logger.warn("MongoDB zone disconnected, auto-reconnect", zone);
+    });
+    connection.on("reconnected", () => {
+      logger.info("MongoDB zone reconnected", zone);
+    });
+
+    return callback(connection, zone);
   }
 }
