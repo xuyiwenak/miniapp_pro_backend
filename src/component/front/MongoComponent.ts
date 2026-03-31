@@ -67,21 +67,17 @@ export class MongoComponent implements IBaseComponent {
     }
     if (sysCfgComp.db_global) {
       await this.connectWithRetry(sysCfgComp.db_global, initializeGlobalModel);
-      logger.debug("sysCfgComp.db_server1");
     }
 
     const server = sysCfgComp.server.serverId;
-    logger.debug("server ", server, sysCfgComp.db_server_map);
     const serverCfg = sysCfgComp.db_server_map.get(server);
     assert(
       serverCfg !== undefined,
       `Server config not found for serverId: ${server}`
     );
     await this.connectWithRetry(serverCfg, initializeServerModel);
-    logger.debug("sysCfgComp.db_server2");
 
     const zoneList = sysCfgComp.server.zoneIdList;
-    logger.debug("zoneList ", zoneList);
     for (const zone of zoneList) {
       const zoneCfg = sysCfgComp.db_server_map.get(server);
       assert(
@@ -89,33 +85,27 @@ export class MongoComponent implements IBaseComponent {
         `Server config not found for zone: ${zone}`
       );
       await this.connectWithRetry(zoneCfg, initializeZoneModel, zone);
-      logger.debug("sysCfgComp.db_server3");
     }
   }
 
-  /** 带指数退避重试的连接包装，解决容器启动竞态（单独重启时 depends_on 不生效） */
+  /** 带指数退避的无限重试连接包装：直到连上为止，进程不会因连接失败而退出 */
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
   private async connectWithRetry(
     dbConfig: DBCfg,
     callback: Function,
     zone?: string,
-    maxRetries = 12,
     baseDelayMs = 3000,
   ): Promise<any> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       try {
         if (zone !== undefined) {
           return await this.initDbZoneConnection(dbConfig, zone, callback);
         }
         return await this.initDbConnection(dbConfig, callback);
       } catch (err) {
-        if (attempt === maxRetries) {
-          logger.error(`MongoDB connection failed after ${maxRetries} attempts, giving up.`);
-          throw err;
-        }
         const delayMs = Math.min(baseDelayMs * attempt, 30000);
         logger.warn(
-          `MongoDB connection attempt ${attempt}/${maxRetries} failed: ${(err as Error).message} — retrying in ${delayMs}ms`,
+          `MongoDB connection attempt ${attempt} failed: ${(err as Error).message} — retrying in ${delayMs}ms`,
         );
         await new Promise((r) => setTimeout(r, delayMs));
       }

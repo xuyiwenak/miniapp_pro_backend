@@ -85,7 +85,7 @@ export class SysCfgComponent implements IBaseComponent {
     if (config.redis_global) {
       this._redis_global = config.redis_global as RedisCfg;
     }
-    logger.log("Configuration loaded DB successfully:", config);
+    logger.info("DB config loaded.");
   }
 
   setServerAuthConfig(): void {

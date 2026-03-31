@@ -11,9 +11,8 @@ export function loadSysConfigJson(filename: string): [any, string] {
       serverProvide,
       filename
     );
-    gameLogger.log(configFilePath);
+    gameLogger.debug(`Loaded config: ${configFilePath}`);
     const data = JSON.parse(utf8);
-    gameLogger.debug(`${filename} content: ${data}`);
     return [data, "load succuss"];
   } catch (error) {
     gameLogger.error(error);
