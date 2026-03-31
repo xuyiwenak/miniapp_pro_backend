@@ -119,10 +119,23 @@ export class MongoComponent implements IBaseComponent {
     const url = buildMongoUrl(dbConfig);
     const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-    // 使用 asPromise() 替代 event 监听，避免内部 Promise rejection 无人捕获导致进程崩溃
-    await connection.asPromise();
+    // 必须在 asPromise() 之前注册 error 监听，否则 mongoose/driver 内部发出的
+    // error event 无人接收 → Node.js 当作 uncaught → 进程崩溃，重试失效
+    connection.on("error", () => {});
+
+    try {
+      await connection.asPromise();
+    } catch (err) {
+      // 失败后清理：移除监听、关闭连接，让 connectWithRetry 可以建新连接
+      connection.removeAllListeners();
+      try { await connection.close(true); } catch {}
+      throw err;
+    }
+
     logger.info("MongoDB connected", dbConfig.db);
 
+    // 连接成功后替换为真正的事件处理器
+    connection.removeAllListeners("error");
     connection.on("error", (error: Error) => {
       logger.error("MongoDB connection error:", error.message);
     });
@@ -145,9 +158,19 @@ export class MongoComponent implements IBaseComponent {
     const url = buildMongoUrl(dbConfig);
     const connection = mongoose.createConnection(url, MongoComponent.CONN_OPTIONS);
 
-    await connection.asPromise();
+    connection.on("error", () => {});
+
+    try {
+      await connection.asPromise();
+    } catch (err) {
+      connection.removeAllListeners();
+      try { await connection.close(true); } catch {}
+      throw err;
+    }
+
     logger.info("MongoDB zone connected", zone, dbConfig.db);
 
+    connection.removeAllListeners("error");
     connection.on("error", (error: Error) => {
       logger.error("MongoDB zone connection error:", zone, error.message);
     });
