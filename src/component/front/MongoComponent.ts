@@ -38,7 +38,7 @@ export class MongoComponent implements IBaseComponent {
       EComName.SysCfgComponent
     );
     if (sysCfgComp.db_global) {
-      await this.initDbConnection(sysCfgComp.db_global, initializeGlobalModel);
+      await this.connectWithRetry(sysCfgComp.db_global, initializeGlobalModel);
       logger.debug("sysCfgComp.db_server1");
     }
 
@@ -49,7 +49,7 @@ export class MongoComponent implements IBaseComponent {
       serverCfg !== undefined,
       `Server config not found for serverId: ${server}`
     );
-    await this.initDbConnection(serverCfg, initializeServerModel);
+    await this.connectWithRetry(serverCfg, initializeServerModel);
     logger.debug("sysCfgComp.db_server2");
 
     const zoneList = sysCfgComp.server.zoneIdList;
@@ -60,8 +60,37 @@ export class MongoComponent implements IBaseComponent {
         zoneCfg !== undefined,
         `Server config not found for zone: ${zone}`
       );
-      await this.initDbZoneConnection(zoneCfg, zone, initializeZoneModel);
+      await this.connectWithRetry(zoneCfg, initializeZoneModel, zone);
       logger.debug("sysCfgComp.db_server3");
+    }
+  }
+
+  /** 带指数退避重试的连接包装，解决容器启动竞态（单独重启时 depends_on 不生效） */
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
+  private async connectWithRetry(
+    dbConfig: DBCfg,
+    callback: Function,
+    zone?: string,
+    maxRetries = 12,
+    baseDelayMs = 3000,
+  ): Promise<any> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (zone !== undefined) {
+          return await this.initDbZoneConnection(dbConfig, zone, callback);
+        }
+        return await this.initDbConnection(dbConfig, callback);
+      } catch (err) {
+        if (attempt === maxRetries) {
+          logger.error(`MongoDB connection failed after ${maxRetries} attempts, giving up.`);
+          throw err;
+        }
+        const delayMs = Math.min(baseDelayMs * attempt, 30000);
+        logger.warn(
+          `MongoDB connection attempt ${attempt}/${maxRetries} failed: ${(err as Error).message} — retrying in ${delayMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     }
   }
 
