@@ -13,6 +13,7 @@ services:
     pull_policy: if_not_present
     container_name: miniapp-mongo
     restart: unless-stopped
+    stop_grace_period: 60s
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
