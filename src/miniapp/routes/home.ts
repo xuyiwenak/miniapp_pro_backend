@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { sendSucc, sendErr } from "../middleware/response";
 import { getWorkModel } from "../../dbservice/model/GlobalInfoDBModel";
-import { getPlayerModel } from "../../dbservice/model/ZoneDBModel";
+import { getNicknameMap } from "../../dbservice/model/ZoneDBModel";
 import type { IWork } from "../../entity/work.entity";
 import { buildHealingResponse } from "./healing";
 import { logRequest, logRequestError } from "../../util/requestLogger";
@@ -38,21 +38,9 @@ router.get("/cards", async (_req: Request, res: Response) => {
         .exec()) as IWork[];
     }
 
-    // 查询作者昵称
+    // 查询作者昵称（跨所有 zone）
     const authorIds = works.filter((w) => w.authorId).map((w) => w.authorId as string);
-    let nicknameMap: Record<string, string> = {};
-    if (authorIds.length > 0) {
-      try {
-        const Player = getPlayerModel("zone_1");
-        const players = await Player.find({ userId: { $in: authorIds } })
-          .select("userId nickname")
-          .lean()
-          .exec();
-        for (const p of players as { userId: string; nickname?: string }[]) {
-          if (p.userId && p.nickname) nicknameMap[p.userId] = p.nickname;
-        }
-      } catch {}
-    }
+    const nicknameMap = await getNicknameMap(authorIds).catch(() => ({} as Record<string, string>));
 
     const list =
       works.length > 0

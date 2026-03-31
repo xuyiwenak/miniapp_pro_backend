@@ -118,3 +118,24 @@ export async function stopAllZoneConnection() {
 export function getPlayerModel(zone: string): Model<IPlayer> {
   return getZoneModelManager(zone).getPlayerModel();
 }
+
+/** 跨所有 zone 查询 userId→nickname 映射 */
+export async function getNicknameMap(userIds: string[]): Promise<Record<string, string>> {
+  if (userIds.length === 0) return {};
+  const result: Record<string, string> = {};
+  for (const [zone, manager] of zoneModelManagerMap.entries()) {
+    try {
+      const players = await manager.getPlayerModel()
+        .find({ userId: { $in: userIds } })
+        .select("userId nickname")
+        .lean()
+        .exec() as { userId: string; nickname?: string }[];
+      for (const p of players) {
+        if (p.userId && p.nickname) result[p.userId] = p.nickname;
+      }
+    } catch {
+      // 单个 zone 查询失败不影响其他 zone
+    }
+  }
+  return result;
+}
