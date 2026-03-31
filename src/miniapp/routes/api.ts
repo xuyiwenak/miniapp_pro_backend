@@ -177,6 +177,60 @@ router.patch("/feedback/:id", authMiddleware, async (req: MiniappRequest, res: R
   }
 });
 
+// 预置艺术标签（审核通过的固定列表）
+export const ART_TAGS = [
+  '安静内敛', '热爱自然', '治愈系', '感性细腻', '喜欢色彩',
+  '夜间创作', '随性自由', '温暖包容', '城市探索', '思考者',
+];
+
+/** 获取 onboarding 状态（onboardingStep + artTags + mbti + name + image） */
+router.get("/onboarding", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  try {
+    const PersonalInfo = getPersonalInfoModel();
+    const doc = await PersonalInfo.findOne({ userId }).select("name image mbti artTags onboardingStep").lean().exec();
+    sendSucc(res, {
+      onboardingStep: doc?.onboardingStep ?? 0,
+      name: doc?.name ?? "",
+      image: doc?.image ?? "",
+      mbti: doc?.mbti ?? "",
+      artTags: doc?.artTags ?? [],
+      presetTags: ART_TAGS,
+    });
+  } catch {
+    sendErr(res, "Get onboarding failed", 500);
+  }
+});
+
+/** 更新 onboarding 进度：每个节点调一次，只传本节点的字段 */
+router.patch("/onboarding", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const body = req.body?.data ?? req.body;
+  if (!body || typeof body !== "object") { sendErr(res, "Invalid body", 400); return; }
+
+  const update: Record<string, unknown> = {};
+  if (typeof body.name === "string" && body.name.trim()) update.name = body.name.trim().slice(0, 20);
+  if (typeof body.image === "string" && body.image) update.image = body.image;
+  if (Array.isArray(body.artTags)) {
+    const valid = (body.artTags as unknown[]).filter((t): t is string => typeof t === "string" && ART_TAGS.includes(t));
+    update.artTags = valid.slice(0, 5);
+  }
+  if (typeof body.mbti === "string") update.mbti = body.mbti.trim().slice(0, 10);
+  if (typeof body.onboardingStep === "number") update.onboardingStep = body.onboardingStep;
+
+  try {
+    const PersonalInfo = getPersonalInfoModel();
+    await PersonalInfo.findOneAndUpdate(
+      { userId },
+      { $set: update },
+      { upsert: true, new: true },
+    ).exec();
+    sendSucc(res, { ok: true });
+  } catch {
+    sendErr(res, "Update onboarding failed", 500);
+  }
+});
+
 /** 通用图片上传：multipart/form-data，字段名 file */
 router.post(
   "/upload",

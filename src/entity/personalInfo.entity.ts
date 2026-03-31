@@ -11,6 +11,8 @@ export interface IPersonalInfo {
   address: string[];
   brief?: string;
   photos: { url: string; name: string; type: string }[];
+  artTags?: string[];
+  onboardingStep?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -33,6 +35,8 @@ export const PersonalInfoSchema = new Schema<IPersonalInfo>(
         type: { type: String, required: true },
       },
     ],
+    artTags: [{ type: String }],
+    onboardingStep: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
