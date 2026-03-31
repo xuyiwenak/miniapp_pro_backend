@@ -22,7 +22,7 @@ services:
       - ./data/mongo:/data/db
     networks:
       default:
-        ipv4_address: 10.88.0.2
+        ipv4_address: 172.28.0.2
     healthcheck:
       test:
         [
@@ -49,7 +49,7 @@ services:
       - ./data/redis:/data
     networks:
       default:
-        ipv4_address: 10.88.0.3
+        ipv4_address: 172.28.0.3
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -66,8 +66,8 @@ services:
     restart: unless-stopped
     # 用 /etc/hosts 静态映射绕过 Docker 内嵌 DNS，根治 EAI_AGAIN
     extra_hosts:
-      - "mongo:10.88.0.2"
-      - "redis:10.88.0.3"
+      - "mongo:172.28.0.2"
+      - "redis:172.28.0.3"
     depends_on:
       mongo:
         condition: service_healthy
@@ -135,4 +135,4 @@ networks:
     name: miniapp-backend-net
     ipam:
       config:
-        - subnet: 10.88.0.0/24
+        - subnet: 172.28.0.0/16
