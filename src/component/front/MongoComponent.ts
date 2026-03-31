@@ -138,8 +138,8 @@ export class MongoComponent implements IBaseComponent {
     retryWrites: true,
     retryReads: true,
     maxPoolSize: 10,
-    minPoolSize: 2,
-    family: 4,                        // 强制 IPv4，避免 Docker DNS 解析 AAAA 超时
+    minPoolSize: 0,   // 禁止主动建池，避免启动时池连接泄漏 Unhandled rejection
+    family: 4,        // 强制 IPv4，避免 Docker DNS 解析 AAAA 超时
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
