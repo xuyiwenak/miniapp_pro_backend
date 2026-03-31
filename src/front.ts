@@ -88,11 +88,12 @@ async function main() {
 main();
 
 process.on("uncaughtException", function (err) {
-  logger.error("Unhandled exception:", err);
+  logger.error("Uncaught exception:", err.message);
 });
 
 process.on("unhandledRejection", function (reason) {
-  logger.error("Unhandled rejection:", reason);
+  const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
+  logger.warn("Unhandled rejection:", msg);
 });
 
 process.on("SIGINT", () => {
