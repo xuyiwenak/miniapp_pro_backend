@@ -17,6 +17,7 @@ import {
 } from "../../dbservice/model/GlobalInfoDBModel";
 
 import assert from "assert";
+import * as dns from "dns";
 import * as mongoose from "mongoose";
 import { DBCfg } from "../../common/CommonType";
 import {
@@ -33,10 +34,33 @@ import { buildMongoUrl } from "../../util/mongo_url";
 export class MongoComponent implements IBaseComponent {
   init() {}
 
+  /** 在调用 mongoose 之前先等 DNS 可解析，避免 EAI_AGAIN 泄漏进 mongoose 内部 Promise */
+  private async waitForDns(hostname: string, maxAttempts = 20): Promise<void> {
+    for (let i = 1; i <= maxAttempts; i++) {
+      try {
+        await new Promise<void>((resolve, reject) =>
+          dns.resolve4(hostname, (err) => (err ? reject(err) : resolve())),
+        );
+        logger.info(`DNS resolved: ${hostname}`);
+        return;
+      } catch {
+        if (i === maxAttempts) throw new Error(`DNS resolution for "${hostname}" failed after ${maxAttempts} attempts`);
+        const delay = Math.min(2000 * i, 15000);
+        logger.warn(`DNS not ready for "${hostname}", retrying in ${delay}ms (${i}/${maxAttempts})`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
   async start() {
     const sysCfgComp = ComponentManager.instance.getComponent(
       EComName.SysCfgComponent
     );
+
+    // 先确认 mongo hostname 可解析，再让 mongoose 尝试连接
+    if (sysCfgComp.db_global?.host) {
+      await this.waitForDns(sysCfgComp.db_global.host);
+    }
     if (sysCfgComp.db_global) {
       await this.connectWithRetry(sysCfgComp.db_global, initializeGlobalModel);
       logger.debug("sysCfgComp.db_server1");
