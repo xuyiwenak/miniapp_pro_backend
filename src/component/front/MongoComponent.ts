@@ -17,7 +17,7 @@ import {
 } from "../../dbservice/model/GlobalInfoDBModel";
 
 import assert from "assert";
-import * as dns from "dns";
+import * as net from "net";
 import * as mongoose from "mongoose";
 import { DBCfg } from "../../common/CommonType";
 import {
@@ -34,19 +34,23 @@ import { buildMongoUrl } from "../../util/mongo_url";
 export class MongoComponent implements IBaseComponent {
   init() {}
 
-  /** 在调用 mongoose 之前先等 DNS 可解析，避免 EAI_AGAIN 泄漏进 mongoose 内部 Promise */
-  private async waitForDns(hostname: string, maxAttempts = 20): Promise<void> {
+  /** 在调用 mongoose 之前先等 TCP 端口可连，兼容 hostname 和 IP，避免 EAI_AGAIN 进入 mongoose */
+  private async waitForTcp(host: string, port: number, maxAttempts = 20): Promise<void> {
     for (let i = 1; i <= maxAttempts; i++) {
       try {
-        await new Promise<void>((resolve, reject) =>
-          dns.resolve4(hostname, (err) => (err ? reject(err) : resolve())),
-        );
-        logger.info(`DNS resolved: ${hostname}`);
+        await new Promise<void>((resolve, reject) => {
+          const socket = new net.Socket();
+          socket.setTimeout(3000);
+          socket.connect(port, host, () => { socket.destroy(); resolve(); });
+          socket.on("error", (err) => { socket.destroy(); reject(err); });
+          socket.on("timeout", () => { socket.destroy(); reject(new Error("timeout")); });
+        });
+        logger.info(`MongoDB TCP reachable: ${host}:${port}`);
         return;
       } catch {
-        if (i === maxAttempts) throw new Error(`DNS resolution for "${hostname}" failed after ${maxAttempts} attempts`);
+        if (i === maxAttempts) throw new Error(`MongoDB ${host}:${port} not reachable after ${maxAttempts} attempts`);
         const delay = Math.min(2000 * i, 15000);
-        logger.warn(`DNS not ready for "${hostname}", retrying in ${delay}ms (${i}/${maxAttempts})`);
+        logger.warn(`Waiting for MongoDB ${host}:${port}, retry in ${delay}ms (${i}/${maxAttempts})`);
         await new Promise((r) => setTimeout(r, delay));
       }
     }
@@ -57,9 +61,9 @@ export class MongoComponent implements IBaseComponent {
       EComName.SysCfgComponent
     );
 
-    // 先确认 mongo hostname 可解析，再让 mongoose 尝试连接
+    // 先确认 mongo TCP 端口可达，再让 mongoose 尝试连接
     if (sysCfgComp.db_global?.host) {
-      await this.waitForDns(sysCfgComp.db_global.host);
+      await this.waitForTcp(sysCfgComp.db_global.host, sysCfgComp.db_global.port ?? 27017);
     }
     if (sysCfgComp.db_global) {
       await this.connectWithRetry(sysCfgComp.db_global, initializeGlobalModel);
