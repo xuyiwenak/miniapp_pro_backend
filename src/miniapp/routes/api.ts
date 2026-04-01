@@ -189,13 +189,15 @@ router.get("/onboarding", authMiddleware, async (req: MiniappRequest, res: Respo
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).select("name image mbti artTags onboardingStep").lean().exec();
+    const forceReset = process.env.ONBOARDING_FORCE === "true";
     sendSucc(res, {
-      onboardingStep: doc?.onboardingStep ?? 0,
+      onboardingStep: forceReset ? 0 : (doc?.onboardingStep ?? 0),
       name: doc?.name ?? "",
       image: doc?.image ?? "",
       mbti: doc?.mbti ?? "",
       artTags: doc?.artTags ?? [],
       presetTags: ART_TAGS,
+      forceReset,
     });
   } catch {
     sendErr(res, "Get onboarding failed", 500);
