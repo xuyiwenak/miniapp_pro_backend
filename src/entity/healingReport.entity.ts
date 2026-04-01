@@ -1,11 +1,7 @@
 import { Schema } from "mongoose";
 
-export interface IHealingScores {
-  calm: number;
-  stress: number;
-  joy: number;
-  sadness: number;
-}
+/** 情绪维度得分，key 由后端 SCORE_DIMENSIONS 配置驱动，支持任意扩展 */
+export type IHealingScores = Record<string, number>;
 
 export interface IHealingReport {
   userId: string;
@@ -23,12 +19,7 @@ export const HealingReportSchema = new Schema<IHealingReport>(
   {
     userId: { type: String, required: true, index: true },
     workId: { type: String, required: true, unique: true },
-    scores: {
-      calm: { type: Number, required: true },
-      stress: { type: Number, required: true },
-      joy: { type: Number, required: true },
-      sadness: { type: Number, required: true },
-    },
+    scores: { type: Schema.Types.Mixed, default: {} },
     summary: { type: String, required: true },
     colorAnalysis: { type: String, required: true },
     status: {

@@ -6,7 +6,7 @@ import { logRequest, logRequestError } from "../../util/requestLogger";
 import { notifyHealingUpdate } from "../ws/chatServer";
 import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from "../../util/cozeWorkflow";
 import { resolveImageUrl } from "../../util/imageUploader";
-import { gameLogger as logger } from "../../util/logger";
+import { gameLogger as logger, cozeDebugLogger } from "../../util/logger";
 import type { IWork, IHealingScores } from "../../entity/work.entity";
 import { ComponentManager } from "../../common/BaseComponent";
 import type { PlayerComponent } from "../../component/PlayerComponent";
@@ -18,14 +18,25 @@ const router = Router();
 
 const OSS_PREFIX = "oss://";
 
-type EmotionKey = "calm" | "stress" | "joy" | "sadness";
+/**
+ * 情绪维度配置 —— 后端唯一配置源
+ * 新增维度只需在此数组追加一项，Coze 工作流也需同步输出对应 key。
+ * key:   与 MongoDB scores 字段 key 及 Coze 输出字段名一致
+ * label: 前端展示文案
+ * emoji: 前端图标
+ */
+const SCORE_DIMENSIONS = [
+  { key: "joy",             label: "快乐",   emoji: "✨" },
+  { key: "calm",            label: "平静",   emoji: "🌿" },
+  { key: "anxiety",         label: "焦虑",   emoji: "😰" },
+  { key: "fear",            label: "恐惧",   emoji: "😨" },
+  { key: "solitude",        label: "孤僻",   emoji: "🌑" },
+  { key: "passion",         label: "热情",   emoji: "🔥" },
+  { key: "social_aversion", label: "社交抵触", emoji: "🚧" },
+  { key: "vitality",        label: "活力",   emoji: "⚡" },
+] as const satisfies { key: string; label: string; emoji: string }[];
 
-const EMOTION_LABELS: Record<EmotionKey, string> = {
-  calm: "平静",
-  stress: "压力",
-  joy: "快乐",
-  sadness: "忧郁",
-};
+type EmotionKey = typeof SCORE_DIMENSIONS[number]["key"];
 
 function hashStringToSeed(input: string): number {
   let hash = 0;
@@ -45,33 +56,31 @@ function createRng(seed: number): () => number {
   };
 }
 
-function normalizeScores(raw: Record<EmotionKey, number>): Record<EmotionKey, number> {
-  const result: Record<EmotionKey, number> = { calm: 0, stress: 0, joy: 0, sadness: 0 };
-  (Object.keys(raw) as EmotionKey[]).forEach((key) => {
-    const v = raw[key];
+function normalizeScores(raw: Record<string, number>): Record<string, number> {
+  const result: Record<string, number> = {};
+  SCORE_DIMENSIONS.forEach(({ key }) => {
+    const v = raw[key] ?? 0;
     const scaled = 20 + v * 75;
     result[key] = Math.round(Math.max(5, Math.min(98, scaled)));
   });
   return result;
 }
 
-function analyzeTextTendencies(text: string): { stressBoost: number; joyBoost: number; calmBoost: number } {
+function analyzeTextTendencies(text: string): Record<string, number> {
   const lower = text.toLowerCase();
-  let stressBoost = 0;
-  let joyBoost = 0;
-  let calmBoost = 0;
-
-  const stressWords = ["焦虑", "压力", "紧张", "deadline", "加班", "疲惫"];
-  const joyWords = ["阳光", "温暖", "愉悦", "开心", "喜悦", "快乐"];
-  const calmWords = ["宁静", "平静", "治愈", "放松", "冥想", "安静"];
-
   const containsAny = (words: string[]) => words.some((w) => lower.includes(w.toLowerCase()));
+  const boosts: Record<string, number> = {};
 
-  if (containsAny(stressWords)) stressBoost += 0.25;
-  if (containsAny(joyWords)) joyBoost += 0.25;
-  if (containsAny(calmWords)) calmBoost += 0.25;
+  if (containsAny(["阳光", "温暖", "愉悦", "开心", "喜悦", "快乐"]))       boosts["joy"]             = 0.25;
+  if (containsAny(["宁静", "平静", "治愈", "放松", "冥想", "安静"]))        boosts["calm"]            = 0.25;
+  if (containsAny(["焦虑", "压力", "紧张", "deadline", "加班", "疲惫"]))   boosts["anxiety"]         = 0.25;
+  if (containsAny(["恐惧", "害怕", "恐慌", "不安", "惊恐"]))               boosts["fear"]            = 0.25;
+  if (containsAny(["孤独", "独处", "疏离", "隔绝", "沉默"]))               boosts["solitude"]        = 0.25;
+  if (containsAny(["热情", "激情", "澎湃", "燃烧", "雀跃"]))               boosts["passion"]         = 0.25;
+  if (containsAny(["不想社交", "回避", "冷漠", "抵触", "排斥"]))           boosts["social_aversion"] = 0.25;
+  if (containsAny(["活力", "精力", "元气", "充沛", "奔放"]))               boosts["vitality"]        = 0.25;
 
-  return { stressBoost, joyBoost, calmBoost };
+  return boosts;
 }
 
 function buildMockSummary(): string {
@@ -82,40 +91,26 @@ function buildColorAnalysis(): string {
   return "整体色彩可被理解为柔和的莫兰迪疗愈系配色，在低饱和度的冷暖过渡中，帮助情绪慢慢舒缓下来，营造出安全、可停靠的内在空间。";
 }
 
-function generateMockScoresForWork(work: IWork): Record<EmotionKey, number> {
+function generateMockScoresForWork(work: IWork): Record<string, number> {
   const seedSource = `${work.workId}|${work.authorId ?? ""}|${work.desc ?? ""}|${(work.tags ?? []).join(",")}`;
   const seed = hashStringToSeed(seedSource);
   const rng = createRng(seed);
+  const boosts = analyzeTextTendencies(`${work.desc ?? ""} ${(work.tags ?? []).join(" ")}`);
 
-  const { stressBoost, joyBoost, calmBoost } = analyzeTextTendencies(`${work.desc ?? ""} ${(work.tags ?? []).join(" ")}`);
-
-  const baseCalm = rng() * 0.8 + calmBoost;
-  const baseStress = rng() * 0.8 + stressBoost;
-  const baseJoy = rng() * 0.8 + joyBoost;
-  const baseSadness = rng() * 0.8 + rng() * 0.2;
-
-  const raw: Record<EmotionKey, number> = {
-    calm: Math.min(1, Math.max(0, baseCalm)),
-    stress: Math.min(1, Math.max(0, baseStress)),
-    joy: Math.min(1, Math.max(0, baseJoy)),
-    sadness: Math.min(1, Math.max(0, baseSadness)),
-  };
+  const raw: Record<string, number> = {};
+  SCORE_DIMENSIONS.forEach(({ key }) => {
+    raw[key] = Math.min(1, Math.max(0, rng() * 0.8 + (boosts[key] ?? 0)));
+  });
 
   return normalizeScores(raw);
 }
 
-function pickDominantEmotion(scores: IHealingScores): { key: EmotionKey; label: string; value: number } {
-  const entries: { key: EmotionKey; value: number }[] = (Object.keys(scores) as EmotionKey[]).map((key) => ({
-    key,
-    value: scores[key],
-  }));
-  entries.sort((a, b) => b.value - a.value);
-  const top = entries[0];
-  return {
-    key: top.key,
-    label: EMOTION_LABELS[top.key],
-    value: top.value,
-  };
+function pickDominantEmotion(scores: IHealingScores): { key: string; label: string; value: number } {
+  const entries = SCORE_DIMENSIONS
+    .map(({ key, label }) => ({ key, label, value: scores[key] ?? 0 }))
+    .sort((a, b) => b.value - a.value);
+  const top = entries[0] ?? { key: "calm", label: "平静", value: 0 };
+  return { key: top.key, label: top.label, value: top.value };
 }
 
 function buildHealingResponse(work: IWork, viewerId?: string) {
@@ -140,6 +135,7 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
     healingAnalyzed: true,
     healingVisible: true,
     healingScores: healing.scores,
+    healingScoreDimensions: SCORE_DIMENSIONS,
     healingSummary: healing.summary,
     healingColorAnalysis: healing.colorAnalysis,
     healingStatus: healing.status,
@@ -172,7 +168,7 @@ interface CozeColorAnalysis {
 
 /** 解析后的完整报告（含可选扩展字段） */
 export interface ParsedHealingReport {
-  scores: Record<EmotionKey, number>;
+  scores: Record<string, number>;
   summary: string;
   colorAnalysis: string;
   compositionReport?: string;
@@ -189,8 +185,13 @@ function unwrapCozeOutput(raw: string): Record<string, unknown> {
   let obj: unknown = JSON.parse(raw);
   for (let depth = 0; depth < 5 && obj !== null && typeof obj === "object"; depth++) {
     const o = obj as Record<string, unknown>;
+    // ── [DEBUG] 每层解包结果 ───────────────────────────────────────
+    logger.info(`[coze-debug] unwrap depth=${depth} keys:`, Object.keys(o));
     const next = o.Output ?? o.output;
-    if (next == null) return o as Record<string, unknown>;
+    if (next == null) {
+      cozeDebugLogger.info("[coze-debug] unwrap final object:", JSON.stringify(o).slice(0, 1000));
+      return o as Record<string, unknown>;
+    }
     obj = typeof next === "string" ? JSON.parse(next) : next;
   }
   return (obj as Record<string, unknown>) ?? {};
@@ -199,19 +200,25 @@ function unwrapCozeOutput(raw: string): Record<string, unknown> {
 /**
  * 根据 line_analysis.energy_score (0-10) 推导四项情绪分数，保证雷达图有数据
  */
-function scoresFromEnergyScore(energyScore: number): Record<EmotionKey, number> {
+function scoresFromEnergyScore(energyScore: number): Record<string, number> {
   const e = Math.max(0, Math.min(10, Number(energyScore) || 5));
-  const t = (e / 10) * 80 + 10;
-  const calm = Math.round(100 - t);
-  const joy = Math.round(t * 0.9);
-  const stress = Math.round(t * 0.4);
-  const sadness = Math.round((100 - t) * 0.5);
-  return {
-    calm: Math.max(5, Math.min(98, calm)),
-    stress: Math.max(5, Math.min(98, stress)),
-    joy: Math.max(5, Math.min(98, joy)),
-    sadness: Math.max(5, Math.min(98, sadness)),
+  const t = (e / 10) * 80 + 10; // 高能量 → 高活跃度
+  // 按语义推导各维度：高能量→活力/热情/快乐高，平静/焦虑/恐惧低
+  const derived: Record<string, number> = {
+    joy:             t * 0.9,
+    calm:            100 - t * 0.6,
+    anxiety:         t * 0.3,
+    fear:            t * 0.2,
+    solitude:        (100 - t) * 0.5,
+    passion:         t * 0.85,
+    social_aversion: (100 - t) * 0.4,
+    vitality:        t * 0.95,
   };
+  const result: Record<string, number> = {};
+  SCORE_DIMENSIONS.forEach(({ key }) => {
+    result[key] = Math.max(5, Math.min(98, Math.round(derived[key] ?? 50)));
+  });
+  return result;
 }
 
 /**
@@ -219,7 +226,7 @@ function scoresFromEnergyScore(energyScore: number): Record<EmotionKey, number> 
  */
 function parseCozeOutput(raw: string): ParsedHealingReport {
   const fallback: ParsedHealingReport = {
-    scores: { calm: 50, stress: 50, joy: 50, sadness: 50 },
+    scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50])),
     summary: raw.slice(0, 500),
     colorAnalysis: "",
   };
@@ -238,22 +245,20 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
       String(output.insight ?? output.summary ?? output.healingSummary ?? "").trim() ||
       String(output.composition_report ?? "").trim();
 
-    let scores: Record<EmotionKey, number>;
-    if (
-      typeof output.calm === "number" ||
-      typeof output.stress === "number" ||
-      (output.scores && typeof (output.scores as Record<string, number>).calm === "number")
-    ) {
-      scores = {
-        calm: Number(output.calm ?? (output.scores as Record<string, number>)?.calm ?? 50),
-        stress: Number(output.stress ?? (output.scores as Record<string, number>)?.stress ?? 50),
-        joy: Number(output.joy ?? (output.scores as Record<string, number>)?.joy ?? 50),
-        sadness: Number(output.sadness ?? (output.scores as Record<string, number>)?.sadness ?? 50),
-      };
+    const rawScores = output.scores as Record<string, number> | undefined;
+    const hasDimScore = SCORE_DIMENSIONS.some(
+      ({ key }) => typeof output[key] === "number" || typeof rawScores?.[key] === "number",
+    );
+    let scores: Record<string, number>;
+    if (hasDimScore) {
+      scores = {};
+      SCORE_DIMENSIONS.forEach(({ key }) => {
+        scores[key] = Number(output[key] ?? rawScores?.[key] ?? 50);
+      });
     } else if (typeof lineAnalysisObj?.energy_score === "number") {
       scores = scoresFromEnergyScore(lineAnalysisObj.energy_score);
     } else {
-      scores = { calm: 50, stress: 50, joy: 50, sadness: 50 };
+      scores = Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50]));
     }
 
     const compositionReport =
@@ -337,6 +342,9 @@ function parseCozeWebhookPayload(body: unknown): {
 }
 
 async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
+  // ── [DEBUG] 进入解析前记录完整原始字符串 ──────────────────────────
+  cozeDebugLogger.info("[coze-debug] outputRaw (full):", outputRaw);
+
   const Work = getWorkModel();
   const work = (await Work.findOne({ "healing.cozeRunId": runId }).lean().exec()) as IWork | null;
   if (!work) {
@@ -348,6 +356,17 @@ async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): P
     return;
   }
   const parsed = parseCozeOutput(outputRaw);
+
+  // ── [DEBUG] 解析结果 ────────────────────────────────────────────
+  cozeDebugLogger.info("[coze-debug] parseCozeOutput result:", {
+    scores: parsed.scores,
+    summary: parsed.summary?.slice(0, 100),
+    colorAnalysis: parsed.colorAnalysis?.slice(0, 100),
+    compositionReport: parsed.compositionReport?.slice(0, 100),
+    lineAnalysis: parsed.lineAnalysis,
+    suggestion: parsed.suggestion?.slice(0, 100),
+    keyColors: parsed.keyColors,
+  });
   const { workId } = work;
   const updatePayload: Record<string, unknown> = {
     "healing.scores": parsed.scores,
@@ -395,9 +414,21 @@ router.post("/coze/callback", async (req: Request, res: Response) => {
     }
   }
 
+  // ── [DEBUG] 原始请求体 ──────────────────────────────────────────
+  cozeDebugLogger.info("[coze-debug] raw body:", JSON.stringify(req.body));
+
   try {
     const parsed = parseCozeWebhookPayload(req.body);
     const runId = parsed.runId?.trim();
+
+    // ── [DEBUG] 解包后字段 ─────────────────────────────────────────
+    cozeDebugLogger.info("[coze-debug] parsed webhook:", {
+      runId: parsed.runId,
+      executeStatus: parsed.executeStatus,
+      errorMessage: parsed.errorMessage,
+      outputSnippet: parsed.output ? parsed.output.slice(0, 500) : null,
+    });
+
     if (!runId) {
       logger.error("Coze webhook missing run_id, body=", JSON.stringify(req.body).slice(0, 800));
       res.status(400).json({ code: 400, success: false, message: "Missing run id" });
@@ -509,12 +540,13 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
       {
         $set: {
           healing: {
-            scores: { calm: 0, stress: 0, joy: 0, sadness: 0 },
+            scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 0])),
             summary: "",
             colorAnalysis: "",
             status: "pending",
             isPublic: false,
             cozeRunId: runId,
+            submittedAt: new Date(),
           },
         },
       },
@@ -587,7 +619,7 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
     }
 
     if (healing.status === "pending") {
-      sendSucc(res, { workId, status: "pending" });
+      sendSucc(res, { workId, status: "pending", submittedAt: healing.submittedAt, estimatedSeconds: 90 });
       return;
     }
 
@@ -601,6 +633,7 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
       workId,
       status: "success",
       scores: healing.scores,
+      scoreDimensions: SCORE_DIMENSIONS,
       summary: healing.summary,
       colorAnalysis: healing.colorAnalysis,
       isPublic: healing.isPublic,

@@ -33,6 +33,19 @@
         "pattern": "%[ [%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] %] -- %m"
       }
     },
+    "coze_debug": {
+      "filename": "logs/coze_debug.log",
+      "type": "dateFile",
+      "numBackups": 7,
+      "encoding": "utf8",
+      "layout": {
+        "type": "pattern",
+        "pattern": "[%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] -- %m"
+      },
+      "pattern": "yyyy-MM-dd",
+      "keepFileExt": true,
+      "alwaysIncludePattern": true
+    },
     "console_warn": {
       "type": "logLevelFilter",
       "appender": "console",
@@ -70,6 +83,11 @@
     },
     "prop_history_csv": {
       "appenders": ["prop_history_csv"],
+      "enableCallStack": false,
+      "level": "info"
+    },
+    "coze_debug": {
+      "appenders": ["coze_debug"],
       "enableCallStack": false,
       "level": "info"
     }
