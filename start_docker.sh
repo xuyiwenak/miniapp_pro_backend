@@ -5,7 +5,9 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "--- 仅构建并重启 backend_app（mongo / redis / nginx 不重建、不停止）---"
 # --no-deps：不启动/重建依赖服务；依赖需已在运行，否则 backend 会连库失败
-docker compose up -d --no-deps --build backend_app
+# --no-cache：强制完整重建，避免 Docker 缓存导致 TS 编译产物未更新
+docker compose build --no-cache backend_app
+docker compose up -d --no-deps backend_app
 
 echo "--- 清理悬空镜像 ---"
 docker image prune -f
