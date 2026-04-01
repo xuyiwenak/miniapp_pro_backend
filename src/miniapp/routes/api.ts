@@ -213,6 +213,8 @@ router.patch("/onboarding", authMiddleware, async (req: MiniappRequest, res: Res
   const update: Record<string, unknown> = {};
   if (typeof body.name === "string" && body.name.trim()) update.name = body.name.trim().slice(0, 20);
   if (typeof body.image === "string" && body.image) update.image = body.image;
+  if (typeof body.birth === "string") update.birth = body.birth.trim().slice(0, 10);
+  if (typeof body.star === "string") update.star = body.star.trim().slice(0, 10);
   if (Array.isArray(body.artTags)) {
     const valid = (body.artTags as unknown[]).filter((t): t is string => typeof t === "string" && ART_TAGS.includes(t));
     update.artTags = valid.slice(0, 5);
