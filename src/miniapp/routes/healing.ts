@@ -19,6 +19,14 @@ const router = Router();
 const OSS_PREFIX = "oss://";
 
 /**
+ * 疗愈分析预估完成时长（秒）。
+ * 后端通过 /healing/status 响应的 estimatedSeconds 字段下发给前端，
+ * 前端 config/constants.js 的 HEALING_ESTIMATED_SECONDS 仅作离线 fallback，
+ * 两处数值应保持一致。
+ */
+const HEALING_ESTIMATED_SECONDS = 600;
+
+/**
  * 情绪维度配置 —— 后端唯一配置源
  * 新增维度只需在此数组追加一项，Coze 工作流也需同步输出对应 key。
  * key:   与 MongoDB scores 字段 key 及 Coze 输出字段名一致
@@ -139,6 +147,7 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
     healingSummary: healing.summary,
     healingColorAnalysis: healing.colorAnalysis,
     healingStatus: healing.status,
+    healingSubmittedAt: healing.submittedAt ?? null,
     healingIsPublic: healing.isPublic,
     healingDominantEmotion: dominant.key,
     healingDominantEmotionLabel: dominant.label,
@@ -619,7 +628,7 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
     }
 
     if (healing.status === "pending") {
-      sendSucc(res, { workId, status: "pending", submittedAt: healing.submittedAt, estimatedSeconds: 90 });
+      sendSucc(res, { workId, status: "pending", submittedAt: healing.submittedAt, estimatedSeconds: HEALING_ESTIMATED_SECONDS });
       return;
     }
 
