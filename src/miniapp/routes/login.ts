@@ -7,6 +7,7 @@ import { issueToken } from "../tokenStore";
 import { revokeToken } from "../../auth/RedisTokenStore";
 import { getPlayerModel } from "../../dbservice/model/ZoneDBModel";
 import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { gameLogger as logger } from "../../util/logger";
 
 const router = Router();
 
@@ -141,6 +142,7 @@ router.post("/wxLogin", async (req: Request, res: Response) => {
   try {
     const wxResp = await fetchCode2Session();
     if (!wxResp || !wxResp.openid) {
+      logger.warn("wxLogin jscode2session failed", { errcode: wxResp?.errcode, errmsg: wxResp?.errmsg });
       sendErr(res, "WeChat login failed", 401);
       return;
     }
