@@ -21,9 +21,8 @@ services:
       - "27017:27017"
     volumes:
       - ./data/mongo:/data/db
-    networks:
-      default:
-        ipv4_address: 172.28.0.2
+    # 不固定 ipv4：与 backend 的 extra_hosts 绑定时，在部分 ECS/bridge 环境下会出现「解析到固定 IP 但 TCP 不通」；
+    # 使用默认分配 + Docker DNS（服务名 mongo）即可稳定互访。
     healthcheck:
       test:
         [
@@ -48,9 +47,6 @@ services:
       - "6379:6379"
     volumes:
       - ./data/redis:/data
-    networks:
-      default:
-        ipv4_address: 172.28.0.3
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -65,10 +61,8 @@ services:
       pull: false
     container_name: miniapp-backend
     restart: unless-stopped
-    # 用 /etc/hosts 静态映射绕过 Docker 内嵌 DNS，根治 EAI_AGAIN
-    extra_hosts:
-      - "mongo:172.28.0.2"
-      - "redis:172.28.0.3"
+    # 不要用 extra_hosts 绑死 mongo/redis 的 IP：在若干 ECS 上与固定 ipv4 组合时，会出现对 172.28.0.2/3 TCP 超时、后端一直 Waiting for MongoDB。
+    # 同 compose 网络内用服务名（db_config 里 host: mongo）由 Docker 内嵌 DNS 解析即可。
     depends_on:
       mongo:
         condition: service_healthy
@@ -136,4 +130,7 @@ networks:
     name: miniapp-backend-net
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        # 勿与宿主机上其他 Docker 网络复用同一 subnet。多项目/遗留网络若都占 172.28.0.0/16，
+        # 会出现两条同前缀路由指向不同 br-*，`ip route get` 命中错误网桥 → 容器互连 TCP 超时/拒连。
+        # 部署前在宿主机执行：./scripts/check_docker_bridge_subnet_conflict.sh
+        - subnet: ${DOCKER_SUBNET:-172.29.0.0/16}
