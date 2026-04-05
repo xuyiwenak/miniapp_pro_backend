@@ -12,7 +12,7 @@ import { Logger, TsrpcError, WsConnection, WsServer } from "tsrpc";
 import {
   serviceProto as serviceProto_Public,
   ServiceType as ServiceType_Public,
-} from "../shared/public/instance/front_protocols/serviceProto";
+} from "../apps/drawing/protocols/serviceProto";
 import { NetworkUtil } from "./NetworkUtil";
 import { ServerState } from "./ServerDef";
 import { ServerGlobals } from "./ServerGlobal";
@@ -110,7 +110,7 @@ export class WebsocketGameServer {
     this.reportServerState();
 
     await this.server.autoImplementApi(
-      path.resolve(__dirname, "../api/public/front"),
+      path.resolve(__dirname, "../apps/drawing/api"),
     );
   }
 

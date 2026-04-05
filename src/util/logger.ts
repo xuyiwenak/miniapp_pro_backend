@@ -21,6 +21,18 @@ import { readSysconfigJsonFileUtf8 } from "./sysconfig_path";
       "log_config.json"
     );
     const config = JSON.parse(utf8);
+
+    // 将 APP_NAME 注入到每个 appender 的 layout pattern，方便区分多项目日志
+    const appName = envFirst("APP_NAME");
+    if (appName) {
+      for (const appender of Object.values(config.appenders ?? {}) as Record<string, unknown>[]) {
+        const layout = appender.layout as Record<string, unknown> | undefined;
+        if (typeof layout?.pattern === "string") {
+          layout.pattern = layout.pattern.replace("[%p]", `[${appName}][%p]`);
+        }
+      }
+    }
+
     log4js.configure(config);
   } catch (error) {
     console.error("init_logger failed", error);

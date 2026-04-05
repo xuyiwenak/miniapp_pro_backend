@@ -1,25 +1,41 @@
 {
   "apps": [
     {
-      "name": "miniapp-backend",
-      "script": "front.js",
+      "name": "drawing",
+      "cwd": ".",
+      "script": "npm",
+      "args": "run dev:drawing",
+      "interpreter": "none",
+      "watch": false,
       "env": {
-        "id": "front_1",
-        "SERVER_ID": "front_1",
-        "internalIP": "127.0.0.1",
-        "gameType": "front",
-        "publicIP": "127.0.0.1",
-        "shutdown_with_message": true,
-        "connectionTickTimeout": "3000",
+        "NODE_ENV": "development",
+        "ENV": "development",
         "environment": "development",
-        "group": "1",
-        "port": 41001,
-        "httpPort": 41000,
-        "miniappApiPort": 41003,
-        "ONBOARDING_FORCE": "true"
-      }, 
-      "node_args": "--inspect=41002",
-      "cwd": "./dist"
+        "WS_PORT": "40000",
+        "HTTP_PORT": "40001",
+        "MINIAPP_PORT": "40002",
+        "SERVER_ID": "front_1",
+        "id": "front_1",
+        "SYSCONFIG_ROOT": "src/apps/drawing/sysconfig"
+      }
+    },
+    {
+      "name": "begreat",
+      "cwd": ".",
+      "script": "npm",
+      "args": "run dev:begreat",
+      "interpreter": "none",
+      "watch": false,
+      "env": {
+        "NODE_ENV": "development",
+        "ENV": "development",
+        "environment": "development",
+        "HTTP_PORT": "41001",
+        "MINIAPP_PORT": "41002",
+        "SERVER_ID": "begreat_1",
+        "id": "begreat_1",
+        "SYSCONFIG_ROOT": "src/apps/begreat/sysconfig"
+      }
     }
   ]
 }

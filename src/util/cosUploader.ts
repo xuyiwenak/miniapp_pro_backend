@@ -75,7 +75,7 @@ export async function uploadToCos(
         Body: buffer,
         ContentType: contentType,
       },
-      (err: Error | null) => {
+      (err) => {
         if (err) {
           reject(err);
         } else {

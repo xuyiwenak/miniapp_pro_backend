@@ -1,0 +1,15 @@
+{
+  "internal_server_token": "REPLACE_WITH_STRONG_RANDOM_TOKEN",
+  "wx_miniapp": {
+    "appId": "YOUR_BEGREAT_APPID",
+    "appSecret": "YOUR_BEGREAT_APPSECRET"
+  },
+  "wx_pay": {
+    "mchId": "YOUR_MERCHANT_ID",
+    "appId": "YOUR_BEGREAT_APPID",
+    "apiV3Key": "YOUR_32_CHAR_V3_API_KEY_HERE_XXXX",
+    "serialNo": "YOUR_CERT_SERIAL_NO",
+    "privateKeyPath": "/app/config/wx_pay_private_key.pem"
+  },
+  "PUBLIC_BASE_URL": "https://your-domain.com/begreat"
+}

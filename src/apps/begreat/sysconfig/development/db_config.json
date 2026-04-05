@@ -1,0 +1,20 @@
+{
+  "db_global": {
+    "host": "127.0.0.1",
+    "port": 27017,
+    "db": "begreat_db"
+  },
+  "db_server": {
+    "begreat_1": {
+      "host": "127.0.0.1",
+      "port": 27017,
+      "db": "begreat_db"
+    }
+  },
+  "db_zones": {},
+  "redis_global": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 1
+  }
+}
