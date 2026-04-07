@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { AdminRequest } from "../../middleware/adminAuth";
-import { sendSucc, sendErr } from "../../middleware/response";
+import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
 import { getWorkModel, getFeedbackModel } from "../../../../../dbservice/model/GlobalInfoDBModel";
 import { ComponentManager } from "../../../../../common/BaseComponent";
 import type { PlayerComponent } from "../../../../../component/PlayerComponent";

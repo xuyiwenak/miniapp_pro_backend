@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
-import { sendSucc, sendErr } from "../middleware/response";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
 

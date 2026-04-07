@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { adminAuthMiddleware, type AdminRequest } from "../../middleware/adminAuth";
-import { sendSucc, sendErr } from "../../middleware/response";
+import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
 import { ComponentManager } from "../../../../../common/BaseComponent";
 import type { PlayerComponent } from "../../../../../component/PlayerComponent";
 import { getPlayerModel } from "../../../../../dbservice/model/ZoneDBModel";

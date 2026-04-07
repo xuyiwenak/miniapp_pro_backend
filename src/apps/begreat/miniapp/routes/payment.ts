@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import https from "https";
 import crypto from "crypto";
-import { sendSucc, sendErr } from "../middleware/response";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel } from "../../dbservice/BegreatDBModel";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import { gameLogger as logger } from "../../../../util/logger";

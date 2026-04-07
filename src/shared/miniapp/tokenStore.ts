@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { saveTokenUserId } from "../../../auth/RedisTokenStore";
+import { saveTokenUserId } from "../../auth/RedisTokenStore";
 
 export function createToken(): string {
   return randomBytes(24).toString("hex");

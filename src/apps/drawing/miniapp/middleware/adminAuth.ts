@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { sendErr } from "./response";
+import { sendErr } from "../../../../shared/miniapp/middleware/response";
 import { loadUserIdByToken } from "../../../../auth/RedisTokenStore";
 import { ComponentManager } from "../../../../common/BaseComponent";
 import type { PlayerComponent } from "../../../../component/PlayerComponent";

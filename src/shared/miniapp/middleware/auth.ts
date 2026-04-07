@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { sendErr } from "./response";
-import { loadUserIdByToken } from "../../../../auth/RedisTokenStore";
-import { gameLogger } from "../../../../util/logger";
+import { loadUserIdByToken } from "../../../auth/RedisTokenStore";
+import { gameLogger } from "../../../util/logger";
 
 export type MiniappRequest = Request & { userId?: string };
 

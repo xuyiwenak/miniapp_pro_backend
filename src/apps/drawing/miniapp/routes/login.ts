@@ -2,11 +2,11 @@ import { Router, Request, Response } from "express";
 import https from "https";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import type { PlayerComponent } from "../../../../component/PlayerComponent";
-import { sendSucc, sendErr } from "../middleware/response";
-import { issueToken } from "../tokenStore";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { issueToken } from "../../../../shared/miniapp/tokenStore";
 import { revokeToken } from "../../../../auth/RedisTokenStore";
 import { getPlayerModel } from "../../../../dbservice/model/ZoneDBModel";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { gameLogger as logger } from "../../../../util/logger";
 
 const router = Router();

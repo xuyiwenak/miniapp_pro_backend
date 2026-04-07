@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { randomBytes } from "crypto";
-import { sendSucc, sendErr } from "../middleware/response";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getQuestionModel, getSessionModel, getOccupationModel } from "../../dbservice/BegreatDBModel";
 import {
   computeAllNormalizedScores,

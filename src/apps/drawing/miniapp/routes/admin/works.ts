@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { AdminRequest } from "../../middleware/adminAuth";
-import { sendSucc, sendErr } from "../../middleware/response";
+import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
 import { getWorkModel } from "../../../../../dbservice/model/GlobalInfoDBModel";
 import { resolveImageUrl, deleteFromStorage } from "../../../../../util/imageUploader";
 import { gameLogger as logger } from "../../../../../util/logger";

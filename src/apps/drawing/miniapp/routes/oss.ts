@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import path from "path";
-import { sendSucc, sendErr } from "../middleware/response";
-import type { MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import type { MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { signOssUrl } from "../../../../util/ossUploader";
 
 const router = Router();

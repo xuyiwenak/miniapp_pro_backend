@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
-import { sendSucc, sendErr } from "../middleware/response";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getWorkModel } from "../../../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../../../util/requestLogger";
 import { notifyHealingUpdate } from "../ws/chatServer";

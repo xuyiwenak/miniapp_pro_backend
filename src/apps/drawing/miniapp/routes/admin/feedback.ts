@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import type { AdminRequest } from "../../middleware/adminAuth";
-import { sendSucc, sendErr } from "../../middleware/response";
+import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
 import { getFeedbackModel } from "../../../../../dbservice/model/GlobalInfoDBModel";
 
 const router = Router();

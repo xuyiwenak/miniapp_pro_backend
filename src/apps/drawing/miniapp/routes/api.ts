@@ -3,8 +3,8 @@ import path from "path";
 import { Router, Request, Response } from "express";
 // @ts-ignore 类型通过运行时依赖提供
 import multer from "multer";
-import { sendSucc, sendErr } from "../middleware/response";
-import { authMiddleware, type MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getFeedbackModel, getPersonalInfoModel } from "../../../../dbservice/model/GlobalInfoDBModel";
 import { uploadToStorage, resolveImageUrl } from "../../../../util/imageUploader";
 import { checkImage } from "../../../../util/wxContentSecurity";

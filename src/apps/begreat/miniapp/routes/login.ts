@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import https from "https";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
-import { sendSucc, sendErr } from "../middleware/response";
-import { issueToken } from "../tokenStore";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import { issueToken } from "../../../../shared/miniapp/tokenStore";
 import { gameLogger as logger } from "../../../../util/logger";
 
 const router = Router();

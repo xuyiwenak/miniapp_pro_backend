@@ -1,6 +1,11 @@
 import http from "http";
 import express from "express";
 import { gameLogger as logger } from "../../../util/logger";
+import {
+  setupCommonMiniappApp,
+  setupNotFoundHandler,
+  startMiniappHttpServer,
+} from "../../../shared/miniapp/server";
 import loginRoutes      from "./routes/login";
 import assessmentRoutes from "./routes/assessment";
 import reportRoutes     from "./routes/report";
@@ -8,19 +13,15 @@ import paymentRoutes    from "./routes/payment";
 
 export function createBegreatApp(): express.Express {
   const app = express();
-
-  app.use((req, _res, next) => {
-    logger.info(`[begreat] ${req.method} ${req.path ?? req.url}`);
-    next();
-  });
-  app.use(express.json({ limit: "2mb" }));
-
-  // CORS
-  app.use((_req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    next();
+  setupCommonMiniappApp(app, {
+    logger,
+    logPrefix: "begreat",
+    jsonLimit: "2mb",
+    cors: {
+      origin: "*",
+      headers: "Content-Type, Authorization",
+      methods: "GET, POST, OPTIONS",
+    },
   });
 
   app.use("/login",      loginRoutes);
@@ -28,21 +29,12 @@ export function createBegreatApp(): express.Express {
   app.use("/report",     reportRoutes);
   app.use("/payment",    paymentRoutes);
 
-  app.use((_req, res) => {
-    res.status(200).json({ code: 404, success: false, message: "Not Found" });
-  });
+  setupNotFoundHandler(app);
 
   return app;
 }
 
 export function startBegreatServer(port: number): Promise<{ app: express.Express; server: http.Server }> {
-  const app    = createBegreatApp();
-  const server = http.createServer(app);
-
-  return new Promise((resolve) => {
-    server.listen(port, () => {
-      logger.info("[begreat] REST API listening on port", port);
-      resolve({ app, server });
-    });
-  });
+  const app = createBegreatApp();
+  return startMiniappHttpServer(app, port, logger, "[begreat] REST API listening on port");
 }

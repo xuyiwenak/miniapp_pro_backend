@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { sendSucc, sendErr } from "../middleware/response";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { getWorkModel } from "../../../../dbservice/model/GlobalInfoDBModel";
 import { getNicknameMap } from "../../../../dbservice/model/ZoneDBModel";
 import type { IWork } from "../../../../entity/work.entity";

@@ -4,7 +4,8 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import { sharedHttpOptions } from "../httpServer";
 import { setupChatWs } from "./ws/chatServer";
-import { authMiddleware } from "./middleware/auth";
+import { authMiddleware } from "../../../shared/miniapp/middleware/auth";
+import { setupCommonMiniappApp, setupNotFoundHandler } from "../../../shared/miniapp/server";
 import loginRoutes from "./routes/login";
 import homeRoutes from "./routes/home";
 import apiRoutes from "./routes/api";
@@ -21,24 +22,21 @@ const adminPanelDir = path.join(__dirname, "../../admin-panel");
 
 export function createMiniappApp(): express.Express {
   const app = express();
-  app.use((req, _res, next) => {
-    gameLogger.info(`[miniapp] ${req.method} ${req.path || req.url}`);
-    next();
+  setupCommonMiniappApp(app, {
+    logger: gameLogger,
+    logPrefix: "miniapp",
+    jsonLimit: "10mb",
+    cors: sharedHttpOptions.cors
+      ? {
+          origin: sharedHttpOptions.cors,
+          headers: "Content-Type, Authorization, *",
+          maxAge: sharedHttpOptions.corsMaxAge,
+        }
+      : undefined,
   });
-  app.use(express.json({ limit: "10mb" }));
+
   app.use("/static", express.static(staticDir));
   app.use("/admin-panel", express.static(adminPanelDir));
-
-  if (sharedHttpOptions.cors) {
-    app.use((_req, res, next) => {
-      res.setHeader("Access-Control-Allow-Origin", sharedHttpOptions.cors);
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, *");
-      if (sharedHttpOptions.corsMaxAge) {
-        res.setHeader("Access-Control-Max-Age", String(sharedHttpOptions.corsMaxAge));
-      }
-      next();
-    });
-  }
 
   app.use("/login", loginRoutes);
   app.use("/home", homeRoutes);
@@ -49,9 +47,7 @@ export function createMiniappApp(): express.Express {
   app.use("/healing", healingRoutes);
   app.use("/admin", adminRoutes);
 
-  app.use((_req, res) => {
-    res.status(200).json({ code: 404, success: false, message: "Not Found" });
-  });
+  setupNotFoundHandler(app);
 
   return app;
 }

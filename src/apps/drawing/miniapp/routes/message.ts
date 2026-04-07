@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
-import { sendSucc, sendErr } from "../middleware/response";
-import type { MiniappRequest } from "../middleware/auth";
+import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
+import type { MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getMessageStore } from "../messageStore";
 
 const router = Router();

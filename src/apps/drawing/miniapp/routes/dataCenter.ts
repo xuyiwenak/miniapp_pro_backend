@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { sendSucc } from "../middleware/response";
+import { sendSucc } from "../../../../shared/miniapp/middleware/response";
 
 const router = Router();
 

@@ -3,7 +3,7 @@ import os from "os";
 import { exec } from "child_process";
 import path from "path";
 import fs from "fs";
-import { sendSucc, sendErr } from "../../middleware/response";
+import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
 import { requireSuperAdmin } from "../../middleware/adminAuth";
 import type { AdminRequest } from "../../middleware/adminAuth";
 import type { Response } from "express";

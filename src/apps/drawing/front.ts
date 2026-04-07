@@ -12,10 +12,13 @@ import { ComponentManager, EComName } from "../../common/BaseComponent";
 import { ServerGlobals } from "../../common/ServerGlobal";
 import { websocketGameServer } from "../../common/WebsocketGameServer";
 
-import { GlobalVarComponent } from "../../component/GlobalVarComponent";
-import { SysCfgComponent } from "../../component/SysCfgComponent";
 import { MongoComponent } from "../../component/front/MongoComponent";
 import { PlayerComponent } from "../../component/PlayerComponent";
+import {
+  registerCoreComponents,
+  setupProcessLifecycle,
+  startRegisteredComponents,
+} from "../shared/bootstrap";
 
 import { envFirst, envNumber, syncEnvForSysConfig } from "../../util/env";
 import { gameLogger, gameLogger as logger } from "../../util/logger";
@@ -44,18 +47,7 @@ async function main() {
   };
   args.miniappApiPort = getMiniappPort(args);
   logger.debug("ServerGlobals----->", args);
-  //-------------------------组件相关begin-----------------------------------------
-  const globalVarComp: GlobalVarComponent = new GlobalVarComponent();
-  gameLogger.debug("globalVarComp-------->");
-  globalVarComp.init(args);
-  ComponentManager.instance.register(
-    EComName.GlobalVarComponent,
-    globalVarComp
-  );
-
-  const sysCfgComp: SysCfgComponent = new SysCfgComponent();
-  gameLogger.debug("sysCfgComp-------->");
-  ComponentManager.instance.register(EComName.SysCfgComponent, sysCfgComp);
+  registerCoreComponents(args);
 
   /*-----------------------------com begin--------------------------------------*/
 
@@ -69,9 +61,7 @@ async function main() {
 
   /*-----------------------------com end--------------------------------------*/
 
-  await ComponentManager.instance.startAll();
-  await ComponentManager.instance.afterStartAll();
-  //-------------------------组件相关end-----------------------------------------
+  await startRegisteredComponents();
 
   // 启动 HTTP API Server（基于 ServiceType）
   await initHttpServer(args);
@@ -86,25 +76,7 @@ async function main() {
 }
 
 main();
-
-process.on("uncaughtException", function (err) {
-  logger.error("Uncaught exception:", err.message);
-});
-
-process.on("unhandledRejection", function (reason) {
-  const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
-  logger.warn("Unhandled rejection:", msg);
-});
-
-process.on("SIGINT", () => {
-  gameLogger.log("SIGINT----->");
-  stopFrontServer();
-});
-
-process.on("SIGTERM", () => {
-  gameLogger.log("SIGTERM----->");
-  stopFrontServer();
-});
+setupProcessLifecycle("front", logger, stopFrontServer);
 
 if (process.platform === "win32") {
   process.on("message", (msg) => {
