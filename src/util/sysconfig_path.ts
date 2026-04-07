@@ -3,15 +3,19 @@ import path from "path";
 
 /**
  * 相对 `dist/util` 的 sysconfig 子路径（未设置 SYSCONFIG_ROOT 时使用）。
+ * 构建产物在 dist/apps/{app}/sysconfig/，通过 GAME_TYPE/gameType 环境变量区分。
+ * 未设置时默认 drawing（向后兼容）。
  */
 export function getBaseConfigPath(
   environment: string,
   serverProvide: string
 ): string {
+  const gameType = process.env.GAME_TYPE ?? process.env.gameType ?? "drawing";
+  const base = `../apps/${gameType}/sysconfig/${environment}/`;
   if (serverProvide) {
-    return `../sysconfig/${environment}/${serverProvide}/`;
+    return `../apps/${gameType}/sysconfig/${environment}/${serverProvide}/`;
   }
-  return `../sysconfig/${environment}/`;
+  return base;
 }
 
 /**

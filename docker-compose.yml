@@ -54,15 +54,15 @@ services:
       retries: 5
       start_period: 5s
 
-  backend_app:
+  drawing_app:
     build:
       context: .
       dockerfile: Dockerfile
       pull: false
-    container_name: miniapp-backend
+    image: art-backend:latest          # 两个容器共用同一镜像，build 只执行一次
+    container_name: miniapp-drawing
     restart: unless-stopped
-    # 不要用 extra_hosts 绑死 mongo/redis 的 IP：在若干 ECS 上与固定 ipv4 组合时，会出现对 172.28.0.2/3 TCP 超时、后端一直 Waiting for MongoDB。
-    # 同 compose 网络内用服务名（db_config 里 host: mongo）由 Docker 内嵌 DNS 解析即可。
+    command: ["node", "dist/apps/drawing/front.js"]
     depends_on:
       mongo:
         condition: service_healthy
@@ -70,40 +70,68 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      # 与挂载一致：宿主机 ./src/sysconfig/production → /app/config/production
       SYSCONFIG_ROOT: /app/config
-      environment: production
       ENV: production
-      id: front_1
-      SERVER_ID: front_1
-      gameType: front
+      environment: production
+      SERVER_ID: drawing_1
+      id: drawing_1
       GAME_TYPE: front
-      httpPort: 40001
+      gameType: front
       HTTP_PORT: 40001
-      miniappApiPort: 40002
+      httpPort: 40001
       MINIAPP_PORT: 40002
-      port: 40000
+      miniappApiPort: 40002
       WS_PORT: 40000
+      port: 40000
       connectionTickTimeout: 30000
       MONGO_URI: mongodb://root:password@mongo:27017
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      # 系统监控：容器内访问宿主机 Docker 所需的项目目录路径
       COMPOSE_PROJECT_DIR: /workspace
     ports:
       - "40000:40000"
       - "40001:40001"
       - "40002:40002"
     volumes:
-      # 随 git pull 更新；在 ECS 上等同于 /root/workspace/miniapp_pro_backend/src/sysconfig
-      - ./src/sysconfig:/app/config:ro
+      - ./src/apps/drawing/sysconfig:/app/config:ro
       - ./static:/app/static
-      # 业务日志落盘到容器 /app/logs → 宿主机项目下 logs/backend（与 production/log_config 中 logs/*.log 一致）
-      - ./logs/backend:/app/logs
-      # 系统监控 API：访问宿主机 Docker daemon
+      - ./logs/drawing:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock
-      # 挂载项目根目录（供 deploy API 执行 docker compose up --build）
       - ${PWD}:/workspace:ro
+
+  begreat_app:
+    image: art-backend:latest          # 复用 drawing_app 构建的镜像，无需重复 build
+    container_name: miniapp-begreat
+    restart: unless-stopped
+    command: ["node", "dist/apps/begreat/front.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      drawing_app:                     # 确保镜像先由 drawing_app build 完成
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      SYSCONFIG_ROOT: /app/config
+      ENV: production
+      environment: production
+      SERVER_ID: begreat_1
+      id: begreat_1
+      HTTP_PORT: 41001
+      httpPort: 41001
+      MINIAPP_PORT: 41002
+      miniappApiPort: 41002
+      MONGO_URI: mongodb://root:password@mongo:27017
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "41001:41001"
+      - "41002:41002"
+    volumes:
+      - ./src/apps/begreat/sysconfig:/app/config:ro
+      - ./static:/app/static
+      - ./logs/begreat:/app/logs
 
   nginx:
     image: nginx:1.27-alpine

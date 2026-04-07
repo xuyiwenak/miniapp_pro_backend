@@ -22,8 +22,8 @@ COPY json_to_schema.mjs ./
 COPY admin-panel ./admin-panel
 
 RUN npm run build \
-  && test -f dist/sysconfig/production/log_config.json \
-  && test -f dist/sysconfig/development/log_config.json
+  && test -f dist/apps/drawing/sysconfig/production/log_config.json \
+  && test -f dist/apps/begreat/sysconfig/production/log_config.json
 
 # 移除开发依赖，仅保留生产环境需要的包
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
@@ -40,23 +40,15 @@ WORKDIR /app
 # 安装 docker CLI，用于系统监控 API 和容器管理
 RUN apk add --no-cache docker-cli
 
-# 从 builder 阶段拷贝构建产物
+# 从 builder 阶段拷贝构建产物（含 dist/ 和 node_modules/）
 COPY --from=builder /app /app
-
-# 再次从源码拷入 JSON，确保配置完整
-COPY --from=builder /app/src/sysconfig/production/*.json /app/dist/sysconfig/production/
-COPY --from=builder /app/src/sysconfig/development/*.json /app/dist/sysconfig/development/
 
 # 挂载卷
 VOLUME ["/app/static", "/app/logs"]
 
-# 暴露端口
-EXPOSE 40000 40001 40002
+# 暴露两个 app 的所有端口（compose 按需映射即可）
+EXPOSE 40000 40001 40002 41001 41002
 
-# 环境变量
-ENV SYSCONFIG_ROOT=/app/config \
-    HTTP_PORT=40001 \
-    MINIAPP_PORT=40002
-
-# 启动命令
-CMD ["node", "dist/front.js"]
+# 默认启动 drawing；begreat 容器在 compose 里用 command 覆盖
+ENV SYSCONFIG_ROOT=/app/config
+CMD ["node", "dist/apps/drawing/front.js"]
