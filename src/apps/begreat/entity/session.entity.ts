@@ -29,7 +29,7 @@ export interface IAssessmentSession {
   /** 本次测评的题目顺序（打乱后存储） */
   questionIds: string[];
   answers: {
-    questionId: string;
+    index: number;  // session 内题目序号（0-based），不暴露 questionId
     score: number;  // Likert 1-5
   }[];
   result?: IAssessmentResult;
@@ -74,8 +74,8 @@ export const SessionSchema = new Schema<IAssessmentSession>(
     questionIds: { type: [String], default: [] },
     answers: [
       {
-        questionId: { type: String, required: true },
-        score:      { type: Number, required: true, min: 1, max: 5 },
+        index: { type: Number, required: true },
+        score: { type: Number, required: true, min: 1, max: 5 },
         _id: false,
       },
     ],

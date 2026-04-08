@@ -55,6 +55,28 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
   const { sessionId } = req.body ?? {};
   if (!sessionId) { sendErr(res, "Missing sessionId", 400); return; }
 
+  // dev 模式：直接标记支付成功，跳过真实微信支付
+  const isDev = (process.env.ENV ?? process.env.environment ?? "development") === "development";
+  if (isDev) {
+    try {
+      const Sessions = getSessionModel();
+      const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
+      if (!session) { sendErr(res, "Session not found", 404); return; }
+      if (session.status !== "completed" && session.status !== "paid") {
+        sendErr(res, "Assessment not completed", 400); return;
+      }
+      if (session.status !== "paid") {
+        await Sessions.updateOne({ sessionId }, { $set: { status: "paid", paidAt: new Date() } });
+        logger.info("[payment/prepay] dev mode: auto-paid session", sessionId);
+      }
+      sendSucc(res, { devMode: true });
+    } catch (err) {
+      logger.error("[payment/prepay] dev mode exception:", err);
+      sendErr(res, "Internal error", 500);
+    }
+    return;
+  }
+
   const payCfg = getPayConfig().wx_pay;
   if (!payCfg?.mchId) {
     logger.error("[payment/prepay] wx_pay config missing");

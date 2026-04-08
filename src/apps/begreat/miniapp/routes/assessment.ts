@@ -98,12 +98,18 @@ router.get("/batch/:sessionId/:batchIndex", authMiddleware, async (req: MiniappR
 
     const Questions = getQuestionModel();
     const questions = await Questions.find({ questionId: { $in: batchIds } })
-      .select("questionId content weight -_id")
+      .select("questionId content -_id")
       .lean()
       .exec();
 
-    // 按 session 题序排列（不透露 dimension 给前端）
-    const ordered = batchIds.map((id) => questions.find((q) => q.questionId === id)).filter(Boolean);
+    // 按 session 题序排列，只返回 index + content，不暴露 questionId/dimension
+    const globalStart = batchIdx * BATCH_SIZE;
+    const ordered = batchIds
+      .map((id, i) => {
+        const q = questions.find((q) => q.questionId === id);
+        return q ? { index: globalStart + i, content: q.content } : null;
+      })
+      .filter(Boolean);
 
     const alreadyAnswered = session.answers.length;
     const totalBatches = Math.ceil(session.questionIds.length / BATCH_SIZE);
@@ -136,7 +142,7 @@ router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: Miniapp
     return;
   }
   for (const a of answers) {
-    if (!a.questionId || typeof a.score !== "number" || a.score < 1 || a.score > 5) {
+    if (typeof a.index !== "number" || typeof a.score !== "number" || a.score < 1 || a.score > 5) {
       sendErr(res, "Invalid answer format", 400);
       return;
     }
@@ -148,9 +154,9 @@ router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: Miniapp
     if (!session) { sendErr(res, "Session not found", 404); return; }
     if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
 
-    // 仅接受本 session 题库中的题目
-    const validIds = new Set(session.questionIds);
-    const valid = answers.filter((a: { questionId: string }) => validIds.has(a.questionId));
+    // 仅接受合法 index 范围内的答案
+    const total = session.questionIds.length;
+    const valid = answers.filter((a: { index: number }) => a.index >= 0 && a.index < total);
     session.answers.push(...valid);
     await session.save();
 
@@ -188,12 +194,13 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
 
     const dimMap = new Map(questionDims.map((q) => [q.questionId, q]));
 
-    // 汇总原始分
+    // 汇总原始分（通过 index → questionId 映射，不依赖客户端传来的 questionId）
     const rawRiasec: Record<string, number> = {};
     const rawBig5: Record<string, number> = {};
 
     for (const ans of session.answers) {
-      const q = dimMap.get(ans.questionId);
+      const qid = session.questionIds[ans.index];
+      const q = qid ? dimMap.get(qid) : undefined;
       if (!q) continue;
       const score = ans.score * (q.weight ?? 1);
       if (q.modelType === "RIASEC") {

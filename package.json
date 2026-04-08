@@ -25,7 +25,8 @@
     "sinon": "^21.0.1",
     "ts-node": "^10.9.2",
     "tsrpc-cli": "^2.4.5",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
   },
   "dependencies": {
     "bull": "^4.16.5",
