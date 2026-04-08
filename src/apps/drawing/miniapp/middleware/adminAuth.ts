@@ -15,6 +15,7 @@ export async function adminAuthMiddleware(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  // 统一从 Authorization: Bearer <token> 读取登录态
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) {
     sendErr(res, "Unauthorized", 401);
@@ -40,6 +41,7 @@ export async function adminAuthMiddleware(
 
   try {
     const Player = getPlayerModel(zoneId);
+    // 账号等级约定：数值越小权限越高（SuperAdmin=1, Admin=2, ...）
     const player = await Player.findOne({ userId }).select("level").lean().exec();
     if (!player) {
       sendErr(res, "User not found", 404);
@@ -51,6 +53,7 @@ export async function adminAuthMiddleware(
     }
     req.userId = userId;
     req.userLevel = player.level;
+    // 鉴权成功后把 user 信息挂到 req，供后续路由复用
     next();
   } catch (err) {
     gameLogger.error("adminAuthMiddleware exception", err);

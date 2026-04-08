@@ -134,6 +134,7 @@ router.get("/feedback", authMiddleware, async (req: MiniappRequest, res: Respons
 router.patch("/feedback/:id", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
   const feedbackId = req.params.id;
+  // 兼容两种前端请求格式：{ data: {...} } 或直接 {...}
   const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
 
   if (!feedbackId) {
@@ -160,6 +161,7 @@ router.patch("/feedback/:id", authMiddleware, async (req: MiniappRequest, res: R
 
   try {
     const Feedback = getFeedbackModel();
+    // 只允许更新“当前登录用户自己的反馈”，避免越权修改他人工单
     const doc = await Feedback.findOneAndUpdate({ _id: feedbackId, userId }, { $set: update }, { new: true })
       .lean()
       .exec();
@@ -207,6 +209,7 @@ router.get("/onboarding", authMiddleware, async (req: MiniappRequest, res: Respo
 /** 更新 onboarding 进度：每个节点调一次，只传本节点的字段 */
 router.patch("/onboarding", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
+  // 小程序历史版本同时存在两种 payload 结构，这里做统一兜底
   const body = req.body?.data ?? req.body;
   if (!body || typeof body !== "object") { sendErr(res, "Invalid body", 400); return; }
 
@@ -216,6 +219,7 @@ router.patch("/onboarding", authMiddleware, async (req: MiniappRequest, res: Res
   if (typeof body.birth === "string") update.birth = body.birth.trim().slice(0, 10);
   if (typeof body.star === "string") update.star = body.star.trim().slice(0, 10);
   if (Array.isArray(body.artTags)) {
+    // 标签白名单：只接收预置标签，且最多保留 5 个
     const valid = (body.artTags as unknown[]).filter((t): t is string => typeof t === "string" && ART_TAGS.includes(t));
     update.artTags = valid.slice(0, 5);
   }
@@ -254,6 +258,7 @@ router.post(
       return;
     }
 
+    // 上传前先走内容安全审核，避免违规图片入库
     const imgCheck = await checkImage(file.buffer, file.mimetype);
     if (!imgCheck.safe) {
       sendErr(res, "图片疑似违规，请更换后重试", 400);
@@ -321,6 +326,7 @@ router.post(
 
 router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId!;
+  // 与其他接口保持一致：支持 body.data 包装格式
   const body = req.body?.data ?? req.body;
   if (!body || typeof body !== "object") {
     sendErr(res, "Invalid body", 400);
@@ -329,6 +335,7 @@ router.post("/savePersonalInfo", authMiddleware, async (req: MiniappRequest, res
   try {
     const PersonalInfo = getPersonalInfoModel();
     const existing = await PersonalInfo.findOne({ userId }).lean().exec();
+    // 用户没传 name 时，沿用历史昵称；都没有则自动生成一个兜底昵称
     const autoName =
       (body.name as string | undefined)?.trim() ||
       (existing?.name && existing.name.trim()) ||
