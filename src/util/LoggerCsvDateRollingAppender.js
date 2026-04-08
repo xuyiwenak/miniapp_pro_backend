@@ -6,11 +6,10 @@
  * @LastEditors: lyh
  * @LastEditTime: 2024-11-11 17:25:11
  */
-/* eslint-disable no-undef */
-
-import fs from "fs";
-import os from "os";
-import streams from "streamroller";
+/* eslint-disable @typescript-eslint/no-require-imports */
+const fs = require("fs");
+const os = require("os");
+const streams = require("streamroller");
 
 const eol = os.EOL;
 
