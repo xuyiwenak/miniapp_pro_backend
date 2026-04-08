@@ -25,6 +25,7 @@ export function getMiniappPort(options: ServerGlobals): number {
 }
 
 export async function initHttpServer(options: ServerGlobals) {
+  // 主 HTTP 服务只承载 TSRPC；miniapp 走独立 Express 端口（见 getMiniappPort）
   httpGameServer = new HttpServer<ServiceType_Public>(serviceProto_Public, {
     port: options.httpPort!,
     logger: sharedHttpOptions.logger,
@@ -42,6 +43,7 @@ export async function initHttpServer(options: ServerGlobals) {
 
 export async function startHttpServer() {
   if (!httpGameServer) {
+    // 防止遗漏 init 调用导致空实例启动
     throw new Error("HttpServer not initialized");
   }
 
