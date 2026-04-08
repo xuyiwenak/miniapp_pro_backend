@@ -1,11 +1,11 @@
 # Nginx 配置位于本目录 ./nginx/（与 monorepo 根目录 nginx/ 同步维护，修改后请两处对齐或从根目录 cp -r nginx art_backend/）。
 # 在 ECS 上：仓库路径示例 /root/workspace/miniapp_pro_backend
 # 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
-# 配置目录挂载：./src/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致），子目录名需与 environment 一致（见 backend_app.environment）
+# 配置目录挂载：./src/apps/{app}/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致）
 #
-# 构建：本文件只有 backend_app 带 build:，`docker compose build` / `docker compose build backend_app` 只会构建后端镜像。
+# 构建：只有 drawing_app 带 build:，begreat_app 复用同一镜像，`docker compose build drawing_app` 即可。
 # mongo / redis / nginx 使用 pull_policy: if_not_present，本地已有镜像时 compose pull / up 不会反复从仓库拉取。
-# backend_app.build.pull: false 避免每次构建时强制拉取 Dockerfile 里的 node 基础镜像（需更新基础镜像时可临时改为 true 或 docker compose build --pull）。
+# drawing_app.build.pull: false 避免每次构建时强制拉取基础镜像（需更新时临时改为 true 或加 --pull）。
 
 services:
   mongo:
@@ -139,7 +139,8 @@ services:
     container_name: miniapp-nginx
     restart: unless-stopped
     depends_on:
-      - backend_app
+      - drawing_app
+      - begreat_app
     ports:
       - "80:80"
       - "443:443"
