@@ -10,6 +10,7 @@ import loginRoutes      from "./routes/login";
 import assessmentRoutes from "./routes/assessment";
 import reportRoutes     from "./routes/report";
 import paymentRoutes    from "./routes/payment";
+import adminRoutes      from "./routes/admin";
 
 export function createBegreatApp(): express.Express {
   const app = express();
@@ -28,6 +29,7 @@ export function createBegreatApp(): express.Express {
   app.use("/assessment", assessmentRoutes);
   app.use("/report",     reportRoutes);
   app.use("/payment",    paymentRoutes);
+  app.use("/admin",      adminRoutes);
 
   setupNotFoundHandler(app);
 
