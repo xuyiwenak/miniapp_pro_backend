@@ -7,10 +7,17 @@ import {
   computeAllNormalizedScores,
   topDimensions,
   buildPersonalityLabel,
+  getActiveNormVersion,
+  getNormMeta,
 } from "../services/CalculationEngine";
 import { matchCareers } from "../services/MatchingService";
 import type { Gender } from "../../entity/session.entity";
 import { gameLogger as logger } from "../../../../util/logger";
+import {
+  BFI2_INSTRUMENT_VERSION,
+  bfi2AdjustedScore,
+} from "../../bfi2/bfi2ItemMeta";
+import type { Big5Dim } from "../../entity/question.entity";
 
 const router = Router();
 const BATCH_SIZE = 5;
@@ -46,7 +53,13 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
 
   try {
     const Questions = getQuestionModel();
-    const all = await Questions.find({ isActive: true }).select("questionId").lean().exec();
+    const all = await Questions.find({
+        isActive: true,
+        $or: [{ gender: gender as Gender }, { gender: "both" }],
+      })
+      .select("questionId")
+      .lean()
+      .exec();
     if (all.length === 0) {
       sendErr(res, "Question bank is empty", 500);
       return;
@@ -55,12 +68,21 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
     const shuffled = shuffle(all.map((q) => q.questionId));
     const sessionId = randomBytes(16).toString("hex");
 
+    // 获取当前激活常模版本，快照到 session 保证报告稳定
+    const activeNormVersion = await getActiveNormVersion("BIG5");
+    if (!activeNormVersion) {
+      sendErr(res, "No active norm version found. Please import norms first.", 500);
+      return;
+    }
+
     const Sessions = getSessionModel();
     await Sessions.create({
       sessionId,
       openId,
       status: "in_progress",
       userProfile: { gender: gender as Gender, age: ageNum },
+      instrumentVersion: BFI2_INSTRUMENT_VERSION,
+      normVersion: activeNormVersion,
       questionIds: shuffled,
       answers: [],
     });
@@ -180,38 +202,82 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     if (!session) { sendErr(res, "Session not found", 404); return; }
     if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
 
-    if (session.answers.length < session.questionIds.length) {
-      sendErr(res, `Incomplete: ${session.answers.length}/${session.questionIds.length} answered`, 400);
+    const answerByIndex = new Map<number, number>();
+    for (const a of session.answers) answerByIndex.set(a.index, a.score);
+    if (answerByIndex.size !== session.questionIds.length) {
+      sendErr(res, `Incomplete or invalid: ${answerByIndex.size}/${session.questionIds.length} unique answers`, 400);
       return;
     }
 
     // 获取所有已答题目的维度信息
     const Questions = getQuestionModel();
     const questionDims = await Questions.find({ questionId: { $in: session.questionIds } })
-      .select("questionId modelType dimension weight -_id")
+      .select("questionId modelType dimension weight bfiItemNo bfiReverse bfiFacet -_id")
       .lean()
       .exec();
 
     const dimMap = new Map(questionDims.map((q) => [q.questionId, q]));
 
-    // 汇总原始分（通过 index → questionId 映射，不依赖客户端传来的 questionId）
     const rawRiasec: Record<string, number> = {};
-    const rawBig5: Record<string, number> = {};
+    const domainAdjSum: Partial<Record<Big5Dim, number>> = {};
+    const domainAdjCount: Partial<Record<Big5Dim, number>> = {};
+    const facetAdjSum: Record<string, number> = {};
+    const facetAdjCount: Record<string, number> = {};
 
-    for (const ans of session.answers) {
+    const sortedAnswers = [...answerByIndex.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([index, score]) => ({ index, score }));
+
+    for (const ans of sortedAnswers) {
+      if (ans.index < 0 || ans.index >= session.questionIds.length) continue;
       const qid = session.questionIds[ans.index];
       const q = qid ? dimMap.get(qid) : undefined;
       if (!q) continue;
-      const score = ans.score * (q.weight ?? 1);
       if (q.modelType === "RIASEC") {
+        const score = ans.score * (q.weight ?? 1);
         rawRiasec[q.dimension] = (rawRiasec[q.dimension] ?? 0) + score;
-      } else {
-        rawBig5[q.dimension] = (rawBig5[q.dimension] ?? 0) + score;
+        continue;
+      }
+      if (q.modelType === "BIG5" && typeof q.bfiItemNo === "number") {
+        const adj = bfi2AdjustedScore(ans.score, q.bfiItemNo);
+        const dim = q.dimension as Big5Dim;
+        domainAdjSum[dim] = (domainAdjSum[dim] ?? 0) + adj;
+        domainAdjCount[dim] = (domainAdjCount[dim] ?? 0) + 1;
+        if (q.bfiFacet) {
+          facetAdjSum[q.bfiFacet] = (facetAdjSum[q.bfiFacet] ?? 0) + adj;
+          facetAdjCount[q.bfiFacet] = (facetAdjCount[q.bfiFacet] ?? 0) + 1;
+        }
       }
     }
 
+    const big5Dims: Big5Dim[] = ["O", "C", "E", "A", "N"];
+    const rawBig5Mean: Record<string, number> = {};
+    const big5DomainSum: Record<string, number> = {};
+    for (const dim of big5Dims) {
+      const cnt = domainAdjCount[dim] ?? 0;
+      const sum = domainAdjSum[dim] ?? 0;
+      if (cnt !== 12) {
+        logger.error(`[assessment/complete] BFI-2 domain ${dim} item count ${cnt}, expected 12`);
+        sendErr(res, "Assessment data inconsistent (BFI-2)", 500);
+        return;
+      }
+      rawBig5Mean[dim] = parseFloat((sum / 12).toFixed(4));
+      big5DomainSum[dim] = parseFloat(sum.toFixed(4));
+    }
+
+    const bfi2FacetMeans: Record<string, number> = {};
+    for (const [facet, cnt] of Object.entries(facetAdjCount)) {
+      if (cnt !== 4) {
+        logger.error(`[assessment/complete] BFI-2 facet ${facet} count ${cnt}, expected 4`);
+        sendErr(res, "Assessment data inconsistent (BFI-2 facets)", 500);
+        return;
+      }
+      bfi2FacetMeans[facet] = parseFloat(((facetAdjSum[facet] ?? 0) / 4).toFixed(4));
+    }
+
     const { gender, age } = session.userProfile;
-    const { riasecNorm, big5Norm } = computeAllNormalizedScores(rawRiasec, rawBig5, gender, age);
+    const normVersion = session.normVersion!;
+    const { riasecNorm, big5Norm } = await computeAllNormalizedScores(rawRiasec, rawBig5Mean, gender, age, normVersion);
 
     // 职业匹配
     const Occupations = getOccupationModel();
@@ -222,14 +288,23 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     const topRiasec = topDimensions(riasecNorm, 2);
     const { label, summary } = buildPersonalityLabel(topRiasec);
 
+    // 常模元信息快照（写进 result，报告可展示来源）
+    const normMeta = await getNormMeta(normVersion);
+
     session.result = {
       riasecScores:     rawRiasec,
-      big5Scores:       rawBig5,
+      big5Scores:       rawBig5Mean,
+      big5DomainSum,
+      bfi2FacetMeans,
       riasecNormalized: riasecNorm,
       big5Normalized:   big5Norm,
       topCareers,
       freeSummary:      summary,
       personalityLabel: label,
+      instrumentVersion: session.instrumentVersion ?? BFI2_INSTRUMENT_VERSION,
+      normVersion,
+      normSource:        normMeta?.source ?? null,
+      normSampleSize:    normMeta?.sampleSize ?? null,
     };
     session.status = "completed";
     await session.save();

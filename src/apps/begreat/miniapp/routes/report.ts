@@ -46,9 +46,16 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         freeSummary:      result.freeSummary,
         riasecNormalized: result.riasecNormalized,
         big5Normalized:   result.big5Normalized,
+        bfi2FacetMeans:   result.bfi2FacetMeans,
         topCareers:       result.topCareers,
         competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
+        facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
         aiEraAdvice:        buildAiEraAdvice(result.riasecNormalized, result.big5Normalized),
+        normMeta: {
+          version:    result.normVersion    ?? null,
+          source:     result.normSource     ?? null,
+          sampleSize: result.normSampleSize ?? null,
+        },
       });
     }
   } catch (err) {
@@ -73,6 +80,46 @@ function buildCompetencyAnalysis(big5: Record<string, number>): Record<string, s
     void dim;
   }
   return result;
+}
+
+/**
+ * BFI-2 子维度洞察（付费专属）
+ * 对 15 个 facet 均分（1–5）中的极高（≥4.2）和极低（≤2.5）项给出具体描述
+ */
+function buildFacetInsights(facetMeans: Record<string, number>): { facet: string; label: string; score: number; insight: string }[] {
+  const META: Record<string, { label: string; high: string; low: string }> = {
+    Sociability:           { label: "社交性",   high: "你享受社交互动，善于在群体中展示自己。",           low: "你倾向于独处，在小圈子中更自在。" },
+    Assertiveness:         { label: "果断性",   high: "你习惯主导讨论，敢于表达立场。",                   low: "你更倾向于观察和倾听，偏好支持而非引领。" },
+    Energy:                { label: "活力",     high: "你精力旺盛，长时间保持高效状态对你并不困难。",     low: "你节奏偏慢，需要充足的恢复时间。" },
+    Compassion:            { label: "同情心",   high: "你对他人的情绪高度敏感，善于共情。",               low: "你处事相对理性，不易被情绪左右。" },
+    Respectfulness:        { label: "谦恭性",   high: "你注重礼仪，擅长维护和谐的人际关系。",             low: "你直言不讳，有时会显得强硬。" },
+    Trust:                 { label: "信任感",   high: "你倾向于相信他人的善意，容易建立深度合作。",       low: "你对他人持审慎态度，适合需要风险把控的岗位。" },
+    Organization:          { label: "条理性",   high: "你工作有序，文档和流程都维护得很规范。",           low: "你偏好灵活、非结构化的工作方式。" },
+    Productiveness:        { label: "效率感",   high: "你目标感强，能持续高效地推进任务。",               low: "你容易陷入拖延，建议借助外部工具提升节律。" },
+    Responsibility:        { label: "责任感",   high: "你对承诺极为认真，是团队可靠的压舱石。",           low: "你较为随性，更适合弹性较大的工作环境。" },
+    Anxiety:               { label: "焦虑倾向", high: "你对风险和不确定性较为敏感，建议刻意练习情绪调节。", low: "你面对压力时镇定自若，抗压能力突出。" },
+    Depression:            { label: "抑郁倾向", high: "你容易陷入低落情绪，建议建立固定的正念或运动习惯。", low: "你整体情绪积极，复原力强。" },
+    EmotionalVolatility:   { label: "情绪稳定性", high: "你情绪起伏较大，建议在高压场景下练习暂停与反应。", low: "你情绪波动小，能在冲突中保持冷静。" },
+    IntellectualCuriosity: { label: "求知欲",   high: "你对跨领域知识充满热情，学习新技能对你是享受。",   low: "你更关注实操而非理论，适合专注型工作。" },
+    AestheticSensitivity:  { label: "审美敏感性", high: "你对色彩、设计和艺术有天然感知，是创意工作的优势。", low: "你偏重功能而非形式，适合数据与工程导向的岗位。" },
+    CreativeImagination:   { label: "创造力",   high: "你善于打破常规，想象力是你在创新型团队的核心资产。", low: "你倾向于用成熟方案解决问题，可靠且可预期。" },
+  };
+
+  const results: { facet: string; label: string; score: number; insight: string }[] = [];
+  for (const [facet, score] of Object.entries(facetMeans)) {
+    const m = META[facet];
+    if (!m) continue;
+    if (score >= 4.2 || score <= 2.5) {
+      results.push({
+        facet,
+        label: m.label,
+        score: parseFloat(score.toFixed(2)),
+        insight: score >= 4.2 ? m.high : m.low,
+      });
+    }
+  }
+  // 按分值降序排列，最突出的特质优先展示
+  return results.sort((a, b) => Math.abs(b.score - 3) - Math.abs(a.score - 3));
 }
 
 /** AI 时代技能补全建议（付费专属） */

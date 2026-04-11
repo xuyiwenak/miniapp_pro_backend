@@ -48,7 +48,7 @@ router.get("/questions/export", adminAuth, async (_req: Request, res: Response) 
       q.modelType,
       q.dimension,
       q.weight ?? 1.0,
-      (q as any).gender ?? "both",
+      (q as any).gender ?? "male",
       (q as any).ageMin ?? 0,
       (q as any).ageMax ?? 999,
       q.isActive ? "TRUE" : "FALSE",
@@ -76,7 +76,7 @@ router.get("/questions/export", adminAuth, async (_req: Request, res: Response) 
 const VALID_MODEL  = new Set(["RIASEC", "BIG5"]);
 const VALID_RIASEC = new Set(["R", "I", "A", "S", "E", "C"]);
 const VALID_BIG5   = new Set(["O", "C", "E", "A", "N"]);
-const VALID_GENDER = new Set(["male", "female", "both"]);
+const VALID_GENDER = new Set(["male", "female"]);
 
 router.post("/questions/import", adminAuth, upload.single("file"), async (req: Request, res: Response) => {
   if (!req.file) {
@@ -111,7 +111,8 @@ router.post("/questions/import", adminAuth, upload.single("file"), async (req: R
       const weight = weightRaw !== "" && weightRaw != null ? Number(weightRaw) : 1.0;
       if (isNaN(weight) || weight <= 0)      { errors.push(`第${line}行: weight 无效`); return; }
 
-      const gender = VALID_GENDER.has(genderRaw) ? genderRaw : "both";
+      if (!VALID_GENDER.has(genderRaw)) { errors.push(`第${line}行: gender 必须为 male 或 female`); return; }
+      const gender = genderRaw;
       const ageMin = ageMinRaw !== "" && ageMinRaw != null ? Number(ageMinRaw) : 0;
       const ageMax = ageMaxRaw !== "" && ageMaxRaw != null ? Number(ageMaxRaw) : 999;
       if (isNaN(ageMin) || isNaN(ageMax) || ageMin > ageMax) {

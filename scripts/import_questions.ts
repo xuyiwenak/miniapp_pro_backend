@@ -28,15 +28,21 @@ type ModelType    = "RIASEC" | "BIG5";
 type QuestionGender = "male" | "female" | "both";
 
 interface QuestionRow {
-  questionId: string;
-  modelType:  ModelType;
-  dimension:  string;
-  content:    string;
-  weight:     number;
-  gender:     QuestionGender;
-  ageMin:     number;
-  ageMax:     number;
-  isActive:   boolean;
+  questionId:  string;
+  modelType:   ModelType;
+  dimension:   string;
+  content:     string;
+  weight:      number;
+  gender:      QuestionGender;
+  ageMin:      number;
+  ageMax:      number;
+  isActive:    boolean;
+  /** BFI-2 官方题号 1–60（仅 BIG5 且 BFI-2 题库） */
+  bfiItemNo?:  number;
+  /** 是否反向计分 */
+  bfiReverse?: boolean;
+  /** BFI-2 子维度键，如 Sociability */
+  bfiFacet?:   string;
 }
 
 // ── 校验常量 ─────────────────────────────────────────────────────────────────
@@ -91,6 +97,20 @@ function parseExcel(filePath: string): QuestionRow[] {
     const isActiveStr = String(activeRaw ?? "true").trim().toLowerCase();
     const isActive = isActiveStr !== "false" && isActiveStr !== "0" && isActiveStr !== "FALSE";
 
+    // BFI-2 专有字段（可选）
+    const bfiItemNoRaw = row["bfiItemNo"];
+    const bfiReverseRaw = row["bfiReverse"];
+    const bfiFacetRaw = String(row["bfiFacet"] ?? "").trim();
+
+    const bfiItemNo = bfiItemNoRaw !== "" && bfiItemNoRaw != null ? Number(bfiItemNoRaw) : undefined;
+    if (bfiItemNo !== undefined && (isNaN(bfiItemNo) || bfiItemNo < 1 || bfiItemNo > 60)) {
+      errors.push(`第 ${line} 行：bfiItemNo 无效（${bfiItemNoRaw}）`); return;
+    }
+    const bfiReverseStr = String(bfiReverseRaw ?? "").trim().toUpperCase();
+    const bfiReverse = bfiReverseStr === "Y" || bfiReverseStr === "TRUE" || bfiReverseStr === "1" ? true
+                     : bfiReverseStr === "N" || bfiReverseStr === "FALSE" || bfiReverseStr === "0" ? false
+                     : undefined;
+
     questions.push({
       questionId: randomBytes(8).toString("hex"),
       modelType,
@@ -101,6 +121,9 @@ function parseExcel(filePath: string): QuestionRow[] {
       ageMin,
       ageMax,
       isActive,
+      ...(bfiItemNo !== undefined && { bfiItemNo }),
+      ...(bfiReverse !== undefined && { bfiReverse }),
+      ...(bfiFacetRaw && { bfiFacet: bfiFacetRaw }),
     });
   });
 

@@ -24,6 +24,12 @@ export interface IQuestion {
   ageMax: number;
   isActive: boolean;
   createdAt: Date;
+  /** BFI-2 官方题号 1–60（仅 BIG5 且 BFI-2 题库） */
+  bfiItemNo?: number;
+  /** 是否反向计分（填答后先作 6−分） */
+  bfiReverse?: boolean;
+  /** BFI-2 子维度键（如 Sociability） */
+  bfiFacet?: string;
 }
 
 export const QuestionSchema = new Schema<IQuestion>(
@@ -33,10 +39,13 @@ export const QuestionSchema = new Schema<IQuestion>(
     dimension:  { type: String, required: true },
     content:    { type: String, required: true },
     weight:     { type: Number, default: 1.0 },
-    gender:     { type: String, enum: ["male", "female", "both"], default: "both" },
+    gender:     { type: String, enum: ["male", "female", "both"], required: true, index: true },
     ageMin:     { type: Number, default: 0 },
     ageMax:     { type: Number, default: 999 },
     isActive:   { type: Boolean, default: true, index: true },
+    bfiItemNo:  { type: Number, required: false, index: true },
+    bfiReverse: { type: Boolean, required: false },
+    bfiFacet:   { type: String, required: false },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: false } }
 );

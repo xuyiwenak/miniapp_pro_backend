@@ -1,80 +1,145 @@
 /**
- * 生成测试题库 Excel
+ * 生成 BFI-2 中文版 60 题题库 Excel（可直接用 import_questions.ts 导入）
  * 运行：ts-node scripts/gen_test_questions.ts
  * 输出：scripts/questions_test.xlsx
+ *
+ * 列说明：
+ *   content     完整题干（"我是一个……的人 N. 描述词"）
+ *   modelType   BIG5
+ *   dimension   O / C / E / A / N（五大领域）
+ *   weight      1.0（全量等权）
+ *   gender      both（BFI-2 不分性别）
+ *   ageMin      0
+ *   ageMax      999
+ *   isActive    TRUE
+ *   bfiItemNo   官方题号 1–60
+ *   bfiReverse  Y / N（反向计分标记）
+ *   bfiFacet    子维度键（如 Sociability）
  */
 import * as XLSX from "xlsx";
 import * as path from "path";
 
-const HEADERS = ["content", "modelType", "dimension", "weight", "gender", "ageMin", "ageMax", "isActive"];
-
-const QUESTIONS = [
-  // RIASEC-R
-  ["某智能制造实验室邀请你用编程控制机械臂组装零件，这让你感到？",       "RIASEC", "R", 1.0, "both",   0,   999, "TRUE"],
-  ["一场无人机竞速赛需要维修团队，负责赛后故障排查与修复，你愿意加入吗？", "RIASEC", "R", 1.0, "both",   0,   999, "TRUE"],
-  ["团队需要有人学习操作3D打印机制作产品原型，你会主动承担吗？",           "RIASEC", "R", 1.0, "both",   0,   999, "TRUE"],
-  ["公司为你配备了AR眼镜用于指导设备安装，你最可能会主动探索它吗？",       "RIASEC", "R", 1.0, "male",   18,  45,  "TRUE"],
-
-  // RIASEC-I
-  ["一份远程办公对创意员工效率影响的数据集摆在你面前，你想深入挖掘吗？",   "RIASEC", "I", 1.0, "both",   0,   999, "TRUE"],
-  ["公司AI系统给出意外预测结果，没人能解释，你会主动追查原因吗？",         "RIASEC", "I", 1.0, "both",   0,   999, "TRUE"],
-  ["你发现新算法可能提升效率30%，但需大量时间验证，你愿意投入吗？",        "RIASEC", "I", 1.0, "both",   0,   999, "TRUE"],
-  ["面对复杂的用户行为分析任务，你倾向于先拆解数据框架再动手吗？",         "RIASEC", "I", 1.0, "both",   22,  999, "TRUE"],
-
-  // RIASEC-A
-  ["公司品牌视觉需全面重新设计以适应AI时代审美，你愿意主导这个项目吗？",   "RIASEC", "A", 1.0, "both",   0,   999, "TRUE"],
-  ["一个虚拟展览需要你用生成式AI工具创作概念图，你对这个任务感兴趣吗？",   "RIASEC", "A", 1.0, "both",   0,   999, "TRUE"],
-  ["有机会从色彩到排版完全主导一款新应用的界面设计，你的感受是？",         "RIASEC", "A", 1.0, "female", 18,  40,  "TRUE"],
-  ["团队需要人撰写公司年度报告的创意叙事文案，你会主动接手吗？",           "RIASEC", "A", 1.0, "both",   0,   999, "TRUE"],
-
-  // RIASEC-S
-  ["新来的实习生对远程协作工具不熟悉，你会主动带他们上手吗？",             "RIASEC", "S", 1.0, "both",   0,   999, "TRUE"],
-  ["团队成员因工作方式分歧产生矛盾，有人找你调解，你会积极参与吗？",       "RIASEC", "S", 1.0, "both",   0,   999, "TRUE"],
-  ["有机会为公司设计一套AI工具使用培训方案，你觉得这份工作有意义吗？",     "RIASEC", "S", 1.0, "both",   0,   999, "TRUE"],
-  ["需要组织用户焦点小组访谈来收集产品反馈，你愿意主持这个过程吗？",       "RIASEC", "S", 1.0, "both",   0,   999, "TRUE"],
-
-  // RIASEC-E
-  ["你发现公司在某个AI新市场有巨大机会但无人推动，你会站出来吗？",         "RIASEC", "E", 1.0, "both",   25,  999, "TRUE"],
-  ["远程团队会议陷入僵局，你最可能主动打破沉默、推进讨论吗？",             "RIASEC", "E", 1.0, "both",   0,   999, "TRUE"],
-  ["你被提名负责一个跨部门数字化转型项目，你充满期待吗？",                 "RIASEC", "E", 1.2, "both",   25,  999, "TRUE"],
-  ["有机会向投资人展示团队新业务方向，你愿意主导这次路演吗？",             "RIASEC", "E", 1.0, "both",   0,   999, "TRUE"],
-
-  // RIASEC-C
-  ["公司要求制定AI工具使用规范手册，包含所有操作流程，你愿意主导吗？",     "RIASEC", "C", 1.0, "both",   0,   999, "TRUE"],
-  ["财务系统升级需整理历史数据并建立新分类标准，你觉得这类任务有价值吗？", "RIASEC", "C", 1.0, "both",   0,   999, "TRUE"],
-  ["团队项目管理混乱，你有机会重新梳理所有任务和截止日期，你会主动吗？",   "RIASEC", "C", 1.0, "both",   0,   999, "TRUE"],
-  ["每月整理并分析远程团队的工作量报表，你觉得这份工作令你满意吗？",       "RIASEC", "C", 1.0, "both",   0,   999, "TRUE"],
-
-  // BIG5-O
-  ["当你遇到从未使用过的AI工具时，你的第一反应是立刻尝试吗？",             "BIG5",   "O", 1.0, "both",   0,   999, "TRUE"],
-  ["同事提出完全颠覆传统工作流程的新方案，你倾向于支持探索吗？",           "BIG5",   "O", 1.0, "both",   0,   999, "TRUE"],
-  ["你是否经常主动思考某个行业在10年内可能发生的根本性变化？",             "BIG5",   "O", 1.0, "both",   0,   999, "TRUE"],
-  ["面对量子计算等抽象技术概念，你会感到好奇并主动学习吗？",               "BIG5",   "O", 1.0, "both",   0,   999, "TRUE"],
-
-  // BIG5-C
-  ["在远程办公、无人监督的环境下，你依然能保持高效的工作状态吗？",         "BIG5",   "C", 1.0, "both",   0,   999, "TRUE"],
-  ["接手细节繁多的长期项目时，你会第一步就制定详细计划吗？",               "BIG5",   "C", 1.0, "both",   0,   999, "TRUE"],
-  ["项目还剩两周、进度已达80%时，你会维持高强度推进直到完成吗？",          "BIG5",   "C", 1.0, "both",   0,   999, "TRUE"],
-  ["你在某任务中发现了一个小错误，修复它需要额外3小时，你会立刻处理吗？",  "BIG5",   "C", 1.0, "both",   0,   999, "TRUE"],
-
-  // BIG5-E
-  ["一个需要持续与10+客户沟通的新项目找到你，你感到精力充沛吗？",          "BIG5",   "E", 1.0, "both",   0,   999, "TRUE"],
-  ["公司组织线下行业交流活动，你通常会主动拓展新联系吗？",                 "BIG5",   "E", 1.0, "both",   0,   999, "TRUE"],
-  ["在陌生线上会议中主持人突然请你发言，你能轻松应对吗？",                 "BIG5",   "E", 1.0, "both",   0,   999, "TRUE"],
-  ["午休时间你更倾向于和同事交流而非独处充电吗？",                         "BIG5",   "E", 1.0, "both",   0,   999, "TRUE"],
-
-  // BIG5-A
-  ["同事的方案有明显缺陷但他非常投入，你在会议上会温和提出建议吗？",       "BIG5",   "A", 1.0, "both",   0,   999, "TRUE"],
-  ["你发现团队某成员压力极大，虽不在你职责范围，你会主动提供支持吗？",     "BIG5",   "A", 1.0, "both",   0,   999, "TRUE"],
-  ["你的意见与团队多数人不同时，你倾向于为和谐而妥协吗？",                 "BIG5",   "A", 1.0, "both",   0,   999, "TRUE"],
-  ["合作客户提出你认为不合理的要求，你会优先考虑维护关系吗？",             "BIG5",   "A", 1.0, "both",   0,   999, "TRUE"],
-
-  // BIG5-N
-  ["项目出现重大变更、所有计划需重来时，你会感到强烈焦虑吗？",             "BIG5",   "N", 1.0, "both",   0,   999, "TRUE"],
-  ["连续两周高强度工作压力下，你通常很难保持情绪平稳吗？",                 "BIG5",   "N", 1.0, "both",   0,   999, "TRUE"],
-  ["工作中犯了影响较大的错误后，你会反复自责很长时间吗？",                 "BIG5",   "N", 1.0, "both",   0,   999, "TRUE"],
-  ["面对频繁变更的需求和工作中的不确定性，你会感到明显不适吗？",           "BIG5",   "N", 1.0, "both",   0,   999, "TRUE"],
+// 60 个描述词（Zhang 等 BFI-2 中文版附录，按题号顺序）
+const DESCRIPTORS: string[] = [
+  "性格外向，喜欢交际",           // 1  E Sociability
+  "心肠柔软，有同情心",           // 2  A Compassion
+  "缺乏条理",                     // 3  C Organization  R
+  "从容，善于处理压力",           // 4  N Anxiety        R
+  "对艺术没有什么兴趣",           // 5  O AestheticSensitivity R
+  "性格坚定自信，敢于表达自己的观点", // 6  E Assertiveness
+  "为人恭谦，尊重他人",           // 7  A Respectfulness
+  "比较懒",                       // 8  C Productiveness  R
+  "经历挫折后仍能保持积极心态",   // 9  N Depression      R
+  "对许多不同的事物都感兴趣",     // 10 O IntellectualCuriosity
+  "很少觉得兴奋或者特别想要(做)什么", // 11 E Energy        R
+  "常常挑别人的毛病",             // 12 A Trust           R
+  "可信赖的，可靠的",             // 13 C Responsibility
+  "喜怒无常，情绪起伏较多",       // 14 N EmotionalVolatility
+  "善于创造，能找到聪明的方法来做事", // 15 O CreativeImagination
+  "比较安静",                     // 16 E Sociability     R
+  "对他人没有什么同情心",         // 17 A Compassion      R
+  "做事有计划有条理",             // 18 C Organization
+  "容易紧张",                     // 19 N Anxiety
+  "着迷于艺术、音乐或文学",       // 20 O AestheticSensitivity
+  "常常处于主导地位，像个领导一样", // 21 E Assertiveness
+  "常与他人意见不和",             // 22 A Respectfulness  R
+  "很难开始行动起来去完成一项任务", // 23 C Productiveness R
+  "觉得有安全感，对自己满意",     // 24 N Depression      R
+  "不喜欢知识性或者哲学性强的讨论", // 25 O IntellectualCuriosity R
+  "不如别人有活力",               // 26 E Energy          R
+  "宽宏大量",                     // 27 A Trust
+  "有时比较没有责任心",           // 28 C Responsibility  R
+  "情绪稳定，不易生气",           // 29 N EmotionalVolatility R
+  "几乎没有什么创造性",           // 30 O CreativeImagination R
+  "有时会害羞，比较内向",         // 31 E Sociability     R
+  "乐于助人，待人无私",           // 32 A Compassion
+  "习惯让事物保持整洁有序",       // 33 C Organization
+  "时常忧心忡忡，担心很多事情",   // 34 N Anxiety
+  "重视艺术与审美",               // 35 O AestheticSensitivity
+  "感觉自己很难对他人产生影响",   // 36 E Assertiveness   R
+  "有时对人比较粗鲁",             // 37 A Respectfulness  R
+  "有效率，做事有始有终",         // 38 C Productiveness
+  "时常觉得悲伤",                 // 39 N Depression
+  "思想深刻",                     // 40 O IntellectualCuriosity
+  "精力充沛",                     // 41 E Energy
+  "不相信别人，怀疑别人的意图",   // 42 A Trust           R
+  "可靠的，总是值得他人信赖",     // 43 C Responsibility
+  "能够控制自己的情绪",           // 44 N EmotionalVolatility R
+  "缺乏想象力",                   // 45 O CreativeImagination R
+  "爱说话，健谈",                 // 46 E Sociability
+  "有时对人冷淡，漠不关心",       // 47 A Compassion      R
+  "乱糟糟的，不爱收拾",           // 48 C Organization    R
+  "很少觉得焦虑或者害怕",         // 49 N Anxiety         R
+  "觉得诗歌、戏剧很无聊",         // 50 O AestheticSensitivity R
+  "更喜欢让别人来领头负责",       // 51 E Assertiveness   R
+  "待人谦逊礼让",                 // 52 A Respectfulness
+  "有恒心，能坚持把事情做完",     // 53 C Productiveness
+  "时常觉得郁郁寡欢",             // 54 N Depression
+  "对抽象的概念和想法没什么兴趣", // 55 O IntellectualCuriosity R
+  "充满热情",                     // 56 E Energy
+  "把人往最好的方面想",           // 57 A Trust
+  "有时候会做出一些不负责任的行为", // 58 C Responsibility R
+  "情绪多变，容易愤怒",           // 59 N EmotionalVolatility
+  "有创意，能想出新点子",         // 60 O CreativeImagination
 ];
+
+// 反向计分题号（Zhang 附录）
+const REVERSE = new Set([
+  3, 4, 5, 8, 9, 11, 12, 16, 17, 22, 23, 24, 25, 26, 28, 29, 30, 31, 36, 37,
+  42, 44, 45, 47, 48, 49, 50, 51, 55, 58,
+]);
+
+// 题号 -> 领域（每5题循环一次：E A C N O）
+const DOMAIN_CYCLE: Array<"E" | "A" | "C" | "N" | "O"> = ["E", "A", "C", "N", "O"];
+
+// 题号 -> 子维度
+const ITEM_FACET: Record<number, string> = {};
+const FACET_ROWS: { facet: string; items: number[] }[] = [
+  { facet: "Sociability",           items: [1, 16, 31, 46] },
+  { facet: "Assertiveness",         items: [6, 21, 36, 51] },
+  { facet: "Energy",                items: [11, 26, 41, 56] },
+  { facet: "Compassion",            items: [2, 17, 32, 47] },
+  { facet: "Respectfulness",        items: [7, 22, 37, 52] },
+  { facet: "Trust",                 items: [12, 27, 42, 57] },
+  { facet: "Organization",          items: [3, 18, 33, 48] },
+  { facet: "Productiveness",        items: [8, 23, 38, 53] },
+  { facet: "Responsibility",        items: [13, 28, 43, 58] },
+  { facet: "Anxiety",               items: [4, 19, 34, 49] },
+  { facet: "Depression",            items: [9, 24, 39, 54] },
+  { facet: "EmotionalVolatility",   items: [14, 29, 44, 59] },
+  { facet: "IntellectualCuriosity", items: [10, 25, 40, 55] },
+  { facet: "AestheticSensitivity",  items: [5, 20, 35, 50] },
+  { facet: "CreativeImagination",   items: [15, 30, 45, 60] },
+];
+for (const { facet, items } of FACET_ROWS) {
+  for (const n of items) ITEM_FACET[n] = facet;
+}
+
+const STEM = "我是一个……的人";
+
+const HEADERS = [
+  "content", "modelType", "dimension", "weight",
+  "gender", "ageMin", "ageMax", "isActive",
+  "bfiItemNo", "bfiReverse", "bfiFacet",
+];
+
+const QUESTIONS = DESCRIPTORS.map((desc, i) => {
+  const n = i + 1;
+  const domain = DOMAIN_CYCLE[(n - 1) % 5];
+  return [
+    `${STEM} ${n}. ${desc}`,  // content
+    "BIG5",                    // modelType
+    domain,                    // dimension
+    1.0,                       // weight
+    "both",                    // gender
+    0,                         // ageMin
+    999,                       // ageMax
+    "TRUE",                    // isActive
+    n,                         // bfiItemNo
+    REVERSE.has(n) ? "Y" : "N", // bfiReverse
+    ITEM_FACET[n] ?? "",        // bfiFacet
+  ];
+});
 
 const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...QUESTIONS]);
 
@@ -87,6 +152,9 @@ ws["!cols"] = [
   { wch: 8  }, // ageMin
   { wch: 8  }, // ageMax
   { wch: 10 }, // isActive
+  { wch: 10 }, // bfiItemNo
+  { wch: 12 }, // bfiReverse
+  { wch: 25 }, // bfiFacet
 ];
 
 const wb = XLSX.utils.book_new();
@@ -94,5 +162,5 @@ XLSX.utils.book_append_sheet(wb, ws, "题库");
 
 const out = path.resolve(__dirname, "questions_test.xlsx");
 XLSX.writeFile(wb, out);
-console.log(`测试题库已生成：${out}`);
-console.log(`共 ${QUESTIONS.length} 题`);
+console.log(`BFI-2 题库已生成：${out}`);
+console.log(`共 ${QUESTIONS.length} 题（60 题 BFI-2 中文版）`);

@@ -1,6 +1,8 @@
 import type { Gender } from "../../entity/session.entity";
+import type { AgeGroup } from "../../entity/norm.entity";
+import { getNormModel } from "../../dbservice/BegreatDBModel";
 
-export type AgeGroup = "18-24" | "25-34" | "35-44" | "45+";
+export type { AgeGroup };
 
 export function getAgeGroup(age: number): AgeGroup {
   if (age <= 24) return "18-24";
@@ -9,71 +11,76 @@ export function getAgeGroup(age: number): AgeGroup {
   return "45+";
 }
 
-/**
- * 2026 常模：[mean, sd]
- * 基准：4 题 × Likert 5 分 → 原始分范围 4-20，中性预期均值 12。
- * 2026 修正：
- *  - 开放性 (O/R/I/A): 年轻群体（18-24）基准均值上移 +1（同龄竞争更强）
- *  - 尽责性 (C): 中年群体（35-44）基准均值上移 +0.5
- *  - 宜人性 (A): 女性基准均值上移 +0.5
- */
-type NormTable = Record<string, Record<Gender | "all", Record<AgeGroup, [number, number]>>>;
+// ── 常模缓存 ─────────────────────────────────────────────────────────────────
+// key: `${normVersion}|${modelType}|${dimension}|${gender}|${ageGroup}`
 
-const NORMS: NormTable = {
-  // RIASEC
-  R: { all: { "18-24": [11.5,3.2], "25-34": [12.0,3.3], "35-44": [12.5,3.2], "45+": [12.0,3.0] }, male: { "18-24": [12.0,3.2], "25-34": [12.5,3.3], "35-44": [13.0,3.2], "45+": [12.5,3.0] }, female: { "18-24": [11.0,3.0], "25-34": [11.5,3.0], "35-44": [12.0,3.0], "45+": [11.5,2.8] } },
-  I: { all: { "18-24": [12.5,3.3], "25-34": [12.0,3.2], "35-44": [12.0,3.2], "45+": [11.5,3.0] }, male: { "18-24": [12.8,3.3], "25-34": [12.3,3.2], "35-44": [12.3,3.2], "45+": [11.8,3.0] }, female: { "18-24": [12.2,3.2], "25-34": [11.7,3.1], "35-44": [11.7,3.1], "45+": [11.2,2.9] } },
-  A: { all: { "18-24": [13.0,3.5], "25-34": [12.5,3.4], "35-44": [12.0,3.3], "45+": [11.5,3.2] }, male: { "18-24": [12.5,3.5], "25-34": [12.0,3.4], "35-44": [11.5,3.3], "45+": [11.0,3.2] }, female: { "18-24": [13.5,3.5], "25-34": [13.0,3.4], "35-44": [12.5,3.3], "45+": [12.0,3.2] } },
-  S: { all: { "18-24": [13.0,3.2], "25-34": [13.0,3.2], "35-44": [13.0,3.2], "45+": [12.5,3.0] }, male: { "18-24": [12.5,3.2], "25-34": [12.5,3.2], "35-44": [12.5,3.2], "45+": [12.0,3.0] }, female: { "18-24": [13.5,3.2], "25-34": [13.5,3.2], "35-44": [13.5,3.2], "45+": [13.0,3.0] } },
-  E: { all: { "18-24": [12.0,3.3], "25-34": [12.5,3.3], "35-44": [12.5,3.2], "45+": [12.0,3.0] }, male: { "18-24": [12.3,3.3], "25-34": [12.8,3.3], "35-44": [12.8,3.2], "45+": [12.3,3.0] }, female: { "18-24": [11.7,3.3], "25-34": [12.2,3.3], "35-44": [12.2,3.2], "45+": [11.7,3.0] } },
-  C: { all: { "18-24": [11.5,3.0], "25-34": [12.0,3.0], "35-44": [13.0,3.0], "45+": [13.0,3.0] }, male: { "18-24": [11.5,3.0], "25-34": [12.0,3.0], "35-44": [13.0,3.0], "45+": [13.0,3.0] }, female: { "18-24": [11.5,3.0], "25-34": [12.0,3.0], "35-44": [13.0,3.0], "45+": [13.0,3.0] } },
-  // Big Five
-  O: { all: { "18-24": [13.5,3.5], "25-34": [12.8,3.4], "35-44": [12.0,3.3], "45+": [11.5,3.2] }, male: { "18-24": [13.3,3.5], "25-34": [12.5,3.4], "35-44": [11.8,3.3], "45+": [11.3,3.2] }, female: { "18-24": [13.7,3.5], "25-34": [13.1,3.4], "35-44": [12.2,3.3], "45+": [11.7,3.2] } },
-  // C (BIG5 Conscientiousness) 与 RIASEC-C 同 key，通过 modelType 区分，但算分时传同维度字母即可
-  // 实际同字母不冲突：RIASEC 的 C 和 Big5 的 C 分开累加
-  BIG5_C: { all: { "18-24": [12.0,3.2], "25-34": [12.5,3.2], "35-44": [13.5,3.2], "45+": [13.5,3.0] }, male: { "18-24": [12.0,3.2], "25-34": [12.5,3.2], "35-44": [13.5,3.2], "45+": [13.5,3.0] }, female: { "18-24": [12.0,3.2], "25-34": [12.5,3.2], "35-44": [13.5,3.2], "45+": [13.5,3.0] } },
-  // E (Big5 Extraversion)
-  BIG5_E: { all: { "18-24": [12.5,3.3], "25-34": [12.5,3.3], "35-44": [12.0,3.2], "45+": [11.5,3.0] }, male: { "18-24": [12.5,3.3], "25-34": [12.5,3.3], "35-44": [12.0,3.2], "45+": [11.5,3.0] }, female: { "18-24": [12.5,3.3], "25-34": [12.5,3.3], "35-44": [12.0,3.2], "45+": [11.5,3.0] } },
-  // A (Big5 Agreeableness)
-  BIG5_A: { all: { "18-24": [13.0,3.2], "25-34": [13.0,3.2], "35-44": [13.0,3.2], "45+": [13.0,3.0] }, male: { "18-24": [12.5,3.2], "25-34": [12.5,3.2], "35-44": [12.5,3.2], "45+": [12.5,3.0] }, female: { "18-24": [13.5,3.2], "25-34": [13.5,3.2], "35-44": [13.5,3.2], "45+": [13.5,3.0] } },
-  // N (Neuroticism: 高 N = 低情绪稳定性)
-  N: { all: { "18-24": [12.5,3.5], "25-34": [12.0,3.4], "35-44": [11.5,3.3], "45+": [11.0,3.2] }, male: { "18-24": [12.0,3.5], "25-34": [11.5,3.4], "35-44": [11.0,3.3], "45+": [10.5,3.2] }, female: { "18-24": [13.0,3.5], "25-34": [12.5,3.4], "35-44": [12.0,3.3], "45+": [11.5,3.2] } },
-};
+type NormCache = Map<string, [number, number]>;
 
-/** Big5 维度在常模表中的 key（避免与 RIASEC 的 C/E/A 重名） */
-const BIG5_KEY_MAP: Record<string, string> = {
-  O: "O",
-  C: "BIG5_C",
-  E: "BIG5_E",
-  A: "BIG5_A",
-  N: "N",
-};
+const normCacheStore = new Map<string, NormCache>(); // per normVersion
+
+function normCacheKey(modelType: string, dimension: string, gender: string, ageGroup: string) {
+  return `${modelType}|${dimension}|${gender}|${ageGroup}`;
+}
 
 /**
- * 计算单维度 Z 分（2026 常模修正）
- * @param rawScore  原始分（RIASEC: 4-20；Big5: 4-20）
- * @param dimension RIASEC: R/I/A/S/E/C；Big5: O/C/E/A/N
- * @param gender    性别
- * @param age       年龄
- * @param isBig5    是否为 Big5 维度
+ * 加载指定版本的全部常模到内存缓存（每个版本只查一次 DB）
  */
-export function calculateNormalizedScore(
-  rawScore: number,
-  dimension: string,
-  gender: Gender,
-  age: number,
-  isBig5 = false
-): number {
+async function loadNormCache(normVersion: string): Promise<NormCache> {
+  if (normCacheStore.has(normVersion)) return normCacheStore.get(normVersion)!;
+
+  const NormModel = getNormModel();
+  const docs = await NormModel.find({ normVersion }).lean().exec();
+
+  const cache: NormCache = new Map();
+  for (const d of docs) {
+    cache.set(normCacheKey(d.modelType, d.dimension, d.gender, d.ageGroup), [d.mean, d.sd]);
+  }
+  normCacheStore.set(normVersion, cache);
+  return cache;
+}
+
+/**
+ * 查询当前激活的常模版本号（BIG5 / RIASEC 共用同一激活版本机制）
+ */
+export async function getActiveNormVersion(modelType: "BIG5" | "RIASEC" = "BIG5"): Promise<string | null> {
+  const NormModel = getNormModel();
+  const doc = await NormModel.findOne({ isActive: true, modelType }).select("normVersion").lean().exec();
+  return doc?.normVersion ?? null;
+}
+
+/**
+ * 查询常模的 source / sampleSize 等元信息（用于报告展示）
+ */
+export async function getNormMeta(normVersion: string): Promise<{ source: string; sampleSize: number | null } | null> {
+  const NormModel = getNormModel();
+  const doc = await NormModel.findOne({ normVersion }).select("source sampleSize").lean().exec();
+  if (!doc) return null;
+  return { source: doc.source, sampleSize: doc.sampleSize ?? null };
+}
+
+// ── 计分 ─────────────────────────────────────────────────────────────────────
+
+/**
+ * 计算单维度 Z 分（从 DB 缓存读常模）
+ * @param rawScore  BIG5：领域均分 1–5；RIASEC：4 题之和 4–20
+ */
+export async function calculateNormalizedScore(
+  rawScore:   number,
+  modelType:  "BIG5" | "RIASEC",
+  dimension:  string,
+  gender:     Gender,
+  age:        number,
+  normVersion: string,
+): Promise<number> {
   const ageGroup = getAgeGroup(age);
-  const key = isBig5 ? (BIG5_KEY_MAP[dimension] ?? dimension) : dimension;
-  const table = NORMS[key];
-  if (!table) return 0;
+  const cache = await loadNormCache(normVersion);
 
-  // 优先取性别专项常模，不存在时回退 all
-  const genderNorm = table[gender]?.[ageGroup] ?? table.all[ageGroup];
-  if (!genderNorm) return 0;
+  // 优先取性别分组，回退到 all
+  const [mean, sd] =
+    cache.get(normCacheKey(modelType, dimension, gender, ageGroup)) ??
+    cache.get(normCacheKey(modelType, dimension, "all", ageGroup)) ??
+    [0, 0];
 
-  const [mean, sd] = genderNorm;
   if (sd === 0) return 0;
   return parseFloat(((rawScore - mean) / sd).toFixed(3));
 }
@@ -81,20 +88,21 @@ export function calculateNormalizedScore(
 /**
  * 批量计算所有维度的 Z 分
  */
-export function computeAllNormalizedScores(
-  rawRiasec: Record<string, number>,
-  rawBig5: Record<string, number>,
-  gender: Gender,
-  age: number
-): { riasecNorm: Record<string, number>; big5Norm: Record<string, number> } {
+export async function computeAllNormalizedScores(
+  rawRiasec:        Record<string, number>,
+  rawBig5DomainMean: Record<string, number>,
+  gender:           Gender,
+  age:              number,
+  normVersion:      string,
+): Promise<{ riasecNorm: Record<string, number>; big5Norm: Record<string, number> }> {
   const riasecNorm: Record<string, number> = {};
   for (const [dim, score] of Object.entries(rawRiasec)) {
-    riasecNorm[dim] = calculateNormalizedScore(score, dim, gender, age, false);
+    riasecNorm[dim] = await calculateNormalizedScore(score, "RIASEC", dim, gender, age, normVersion);
   }
 
   const big5Norm: Record<string, number> = {};
-  for (const [dim, score] of Object.entries(rawBig5)) {
-    big5Norm[dim] = calculateNormalizedScore(score, dim, gender, age, true);
+  for (const [dim, score] of Object.entries(rawBig5DomainMean)) {
+    big5Norm[dim] = await calculateNormalizedScore(score, "BIG5", dim, gender, age, normVersion);
   }
 
   return { riasecNorm, big5Norm };
@@ -109,7 +117,7 @@ export function topDimensions(normScores: Record<string, number>, n = 2): string
 }
 
 /**
- * 根据 RIASEC 顶维度生成性格标签（2026 重写版，不引用任何官方版权文案）
+ * 根据 RIASEC 顶维度生成性格标签
  */
 export function buildPersonalityLabel(topRiasec: string[]): { label: string; summary: string } {
   const map: Record<string, { label: string; summary: string }> = {
