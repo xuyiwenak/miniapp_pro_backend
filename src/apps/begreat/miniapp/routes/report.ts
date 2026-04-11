@@ -65,13 +65,13 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
 });
 
 /** 生成 Big5 胜任力解读（付费专属） */
-function buildCompetencyAnalysis(big5: Record<string, number>): Record<string, string> {
+function buildCompetencyAnalysis(big5: Record<string, number> | undefined): Record<string, string> {
   const desc: Record<string, [string, string]> = {
-    O: ["开放性", big5["O"] > 0 ? "你对新事物的接受程度高于同龄人，在快速迭代的 AI 时代具有明显的适应优势。" : "你更倾向于经过验证的方案，在需要稳定执行的岗位中表现出色。"],
-    C: ["尽责性", big5["C"] > 0 ? "你的自律性和计划执行力优于平均水平，是需要高精度输出的岗位首选。" : "你更注重灵活应对，适合动态变化的创业环境。"],
-    E: ["外向性", big5["E"] > 0 ? "你在社交场景中精力充沛，适合需要对外沟通和资源整合的角色。" : "你善于深度专注，在独立研究和技术攻坚中表现突出。"],
-    A: ["宜人性", big5["A"] > 0 ? "你具备较强的共情能力，在用户研究、教育培训等需要换位思考的领域尤为出色。" : "你敢于在必要时坚持原则，适合需要独立判断和决策的管理角色。"],
-    N: ["情绪稳定性", (big5["N"] ?? 0) < 0 ? "你在压力下保持冷静的能力优于平均，高压项目对你来说是发光的机会。" : "你对外界变化敏感，建议选择节奏稳定、反馈及时的工作环境。"],
+    O: ["开放性", (big5?.["O"] ?? 0) > 0 ? "你对新事物的接受程度高于同龄人，在快速迭代的 AI 时代具有明显的适应优势。" : "你更倾向于经过验证的方案，在需要稳定执行的岗位中表现出色。"],
+    C: ["尽责性", (big5?.["C"] ?? 0) > 0 ? "你的自律性和计划执行力优于平均水平，是需要高精度输出的岗位首选。" : "你更注重灵活应对，适合动态变化的创业环境。"],
+    E: ["外向性", (big5?.["E"] ?? 0) > 0 ? "你在社交场景中精力充沛，适合需要对外沟通和资源整合的角色。" : "你善于深度专注，在独立研究和技术攻坚中表现突出。"],
+    A: ["宜人性", (big5?.["A"] ?? 0) > 0 ? "你具备较强的共情能力，在用户研究、教育培训等需要换位思考的领域尤为出色。" : "你敢于在必要时坚持原则，适合需要独立判断和决策的管理角色。"],
+    N: ["情绪稳定性", (big5?.["N"] ?? 0) < 0 ? "你在压力下保持冷静的能力优于平均，高压项目对你来说是发光的机会。" : "你对外界变化敏感，建议选择节奏稳定、反馈及时的工作环境。"],
   };
 
   const result: Record<string, string> = {};
@@ -123,22 +123,22 @@ function buildFacetInsights(facetMeans: Record<string, number>): { facet: string
 }
 
 /** AI 时代技能补全建议（付费专属） */
-function buildAiEraAdvice(riasec: Record<string, number>, big5: Record<string, number>): string[] {
+function buildAiEraAdvice(riasec: Record<string, number> | undefined, big5: Record<string, number> | undefined): string[] {
   const advice: string[] = [];
 
-  if ((big5["O"] ?? 0) < 0) {
+  if ((big5?.["O"] ?? 0) < 0) {
     advice.push("建议每月尝试 1 个新的 AI 工具（如 Midjourney、Cursor 或 Perplexity），主动拓宽你对技术边界的认知。");
   }
-  if ((riasec["I"] ?? 0) < 0) {
+  if ((riasec?.["I"] ?? 0) < 0) {
     advice.push("尝试将工作中的重复决策流程文档化并交给 AI 辅助，这能大幅提升你的产出效率。");
   }
-  if ((riasec["A"] ?? 0) > 0.5) {
+  if ((riasec?.["A"] ?? 0) > 0.5) {
     advice.push("你的创意优势可与生成式 AI 结合：用 AI 快速出稿、你负责审美把控，这是 2026 年内容岗位的核心竞争力。");
   }
-  if ((big5["C"] ?? 0) < 0) {
+  if ((big5?.["C"] ?? 0) < 0) {
     advice.push("使用 AI 项目管理工具（如 Notion AI 或 ClickUp）为你建立外部纪律，弥补自律性的短板。");
   }
-  if ((riasec["S"] ?? 0) > 0.5) {
+  if ((riasec?.["S"] ?? 0) > 0.5) {
     advice.push("你擅长与人建立联结，建议学习 AI 辅助用户研究工具，将你的同理心转化为可量化的产品洞察。");
   }
   if (advice.length === 0) {

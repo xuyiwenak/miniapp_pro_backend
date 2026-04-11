@@ -136,7 +136,7 @@ const rows = DESCRIPTORS.map((descriptor, i) => {
     reverse: REVERSE.has(n) ? "Y" : "N",
     textStem: STEM,
     textDescriptor: descriptor,
-    fullPrompt: `我是一个……的人 ${n}. ${descriptor}`,
+    fullPrompt: `我是一个${descriptor}的人`,
   };
 });
 

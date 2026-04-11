@@ -127,7 +127,7 @@ const QUESTIONS = DESCRIPTORS.map((desc, i) => {
   const n = i + 1;
   const domain = DOMAIN_CYCLE[(n - 1) % 5];
   return [
-    `${STEM} ${n}. ${desc}`,  // content
+    `我是一个${desc}的人`,  // content
     "BIG5",                    // modelType
     domain,                    // dimension
     1.0,                       // weight

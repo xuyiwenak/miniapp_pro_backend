@@ -11,7 +11,7 @@ import {
   getNormMeta,
 } from "../services/CalculationEngine";
 import { matchCareers } from "../services/MatchingService";
-import type { Gender } from "../../entity/session.entity";
+import type { Gender, AssessmentType } from "../../entity/session.entity";
 import { gameLogger as logger } from "../../../../util/logger";
 import {
   BFI2_INSTRUMENT_VERSION,
@@ -21,6 +21,7 @@ import type { Big5Dim } from "../../entity/question.entity";
 
 const router = Router();
 const BATCH_SIZE = 5;
+const VALID_ASSESSMENT_TYPES = new Set<AssessmentType>(["BFI2", "MBTI", "DISC"]);
 
 /** 随机打乱数组（Fisher-Yates） */
 function shuffle<T>(arr: T[]): T[] {
@@ -37,9 +38,43 @@ function shuffle<T>(arr: T[]): T[] {
  * body: { gender: 'male'|'female', age: number }
  * 创建测评 session，打乱题序，返回 sessionId 和总题数
  */
+/**
+ * GET /assessment/history
+ * 返回当前用户所有已完成（completed / paid）的测评记录，按时间倒序
+ */
+router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  try {
+    const Sessions = getSessionModel();
+    const sessions = await Sessions.find({
+      openId: req.userId,
+      status: { $in: ["completed", "paid"] },
+    })
+      .select("sessionId assessmentType status result.personalityLabel result.freeSummary createdAt -_id")
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean()
+      .exec();
+
+    const history = sessions.map((s) => ({
+      sessionId:        s.sessionId,
+      assessmentType:   s.assessmentType ?? "BFI2",
+      status:           s.status,
+      personalityLabel: s.result?.personalityLabel ?? "",
+      freeSummary:      s.result?.freeSummary ?? "",
+      createdAt:        s.createdAt,
+    }));
+
+    sendSucc(res, { history });
+  } catch (err) {
+    logger.error("[assessment/history]", err);
+    sendErr(res, "Internal error", 500);
+  }
+});
+
 router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
-  const { gender, age } = req.body ?? {};
+  const { gender, age, assessmentType: rawType } = req.body ?? {};
+  const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : "BFI2";
 
   if (!gender || !["male", "female"].includes(gender)) {
     sendErr(res, "Invalid gender", 400);
@@ -79,6 +114,7 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
     await Sessions.create({
       sessionId,
       openId,
+      assessmentType,
       status: "in_progress",
       userProfile: { gender: gender as Gender, age: ageNum },
       instrumentVersion: BFI2_INSTRUMENT_VERSION,

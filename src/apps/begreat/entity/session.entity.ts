@@ -2,6 +2,7 @@ import { Schema } from "mongoose";
 
 export type SessionStatus = "in_progress" | "completed" | "paid";
 export type Gender = "male" | "female";
+export type AssessmentType = "BFI2" | "MBTI" | "DISC";
 
 export interface ICareerMatch {
   code: string;
@@ -33,10 +34,11 @@ export interface IAssessmentResult {
 }
 
 export interface IAssessmentSession {
-  sessionId:   string;
-  openId:      string;
-  status:      SessionStatus;
-  userProfile: { gender: Gender; age: number };
+  sessionId:      string;
+  openId:         string;
+  assessmentType: AssessmentType;
+  status:         SessionStatus;
+  userProfile:    { gender: Gender; age: number };
   /** 量表版本（如 BFI2_CN_60） */
   instrumentVersion?: string;
   /** 常模版本（如 BFI2_CN_Zhang2021_college_v1） */
@@ -85,9 +87,10 @@ const ResultSchema = new Schema<IAssessmentResult>(
 
 export const SessionSchema = new Schema<IAssessmentSession>(
   {
-    sessionId:   { type: String, required: true, unique: true, index: true },
-    openId:      { type: String, required: true, index: true },
-    status:      { type: String, enum: ["in_progress", "completed", "paid"], default: "in_progress", index: true },
+    sessionId:      { type: String, required: true, unique: true, index: true },
+    openId:         { type: String, required: true, index: true },
+    assessmentType: { type: String, enum: ["BFI2", "MBTI", "DISC"], default: "BFI2", index: true },
+    status:         { type: String, enum: ["in_progress", "completed", "paid"], default: "in_progress", index: true },
     userProfile: {
       gender: { type: String, enum: ["male", "female"], required: true },
       age:    { type: Number, required: true },

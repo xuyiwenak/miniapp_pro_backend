@@ -153,12 +153,8 @@ export function bfi2AdjustedScore(rawLikert: number, itemNo: number): number {
   return base;
 }
 
-export function bfi2Stem(): string {
-  return "我是一个……的人";
-}
-
 export function bfi2ItemContent(itemNo: number): string {
   const d = BFI2_DESCRIPTORS[itemNo - 1];
   if (!d) return "";
-  return `${bfi2Stem()} ${itemNo}. ${d}`;
+  return `我是一个${d}的人`;
 }
