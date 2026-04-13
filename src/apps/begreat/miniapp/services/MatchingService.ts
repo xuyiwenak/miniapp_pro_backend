@@ -23,20 +23,16 @@ export function matchCareers(
   const results = occupations
     .filter((job) => job.isActive)
     .map((job): ICareerMatch => {
-      // ── Big Five 胜任力加权 ──────────────────────────────────
-      let score = 0;
-      // 开放性：若 Z > 阈值，AI 时代高薪职位额外加分
-      if (openness > job.requiredBig5.openness) {
-        score += 15 * job.salaryIndex;
-      }
-      // 尽责性：执行力要求高的职位
-      if (conscientiousness > job.requiredBig5.conscientiousness) {
-        score += 8;
-      }
-      // 情绪稳定性：高压岗位必备
-      if (emotionalStability > job.requiredBig5.emotionalStability) {
-        score += 7;
-      }
+      // ── Big Five 胜任力连续打分（基础分 50，按偏差加减） ────
+      // 差值 = 用户Z分 - 职业阈值，正值表示超额匹配，负值表示欠缺
+      const oDiff = openness          - job.requiredBig5.openness;
+      const cDiff = conscientiousness - job.requiredBig5.conscientiousness;
+      const nDiff = emotionalStability - job.requiredBig5.emotionalStability;
+
+      let score = 50
+        + oDiff * 12 * job.salaryIndex   // 开放性权重：与薪资指数联动
+        + cDiff * 8                       // 尽责性权重
+        + nDiff * 6;                      // 情绪稳定性权重
 
       // ── 年龄阶段乘数 ────────────────────────────────────────
       if (age >= job.ageRange.min && age <= job.ageRange.max) {
@@ -45,6 +41,9 @@ export function matchCareers(
         // 年龄不符，轻度扣分
         score *= 0.85;
       }
+
+      // 限制到 0–100 范围
+      score = Math.max(0, Math.min(100, score));
 
       return {
         code:        job.code,
