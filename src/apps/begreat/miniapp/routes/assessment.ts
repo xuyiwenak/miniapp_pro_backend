@@ -5,12 +5,12 @@ import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/
 import { getQuestionModel, getSessionModel, getOccupationModel } from "../../dbservice/BegreatDBModel";
 import {
   computeAllNormalizedScores,
-  topDimensions,
   buildPersonalityLabel,
   getActiveNormVersion,
   getNormMeta,
 } from "../services/CalculationEngine";
 import { matchCareers } from "../services/MatchingService";
+import { buildBegreatReportSnapshot } from "../services/reportTemplate";
 import type { Gender, AssessmentType } from "../../entity/session.entity";
 import { gameLogger as logger } from "../../../../util/logger";
 import {
@@ -254,7 +254,6 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
 
     const dimMap = new Map(questionDims.map((q) => [q.questionId, q]));
 
-    const rawRiasec: Record<string, number> = {};
     const domainAdjSum: Partial<Record<Big5Dim, number>> = {};
     const domainAdjCount: Partial<Record<Big5Dim, number>> = {};
     const facetAdjSum: Record<string, number> = {};
@@ -269,11 +268,6 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       const qid = session.questionIds[ans.index];
       const q = qid ? dimMap.get(qid) : undefined;
       if (!q) continue;
-      if (q.modelType === "RIASEC") {
-        const score = ans.score * (q.weight ?? 1);
-        rawRiasec[q.dimension] = (rawRiasec[q.dimension] ?? 0) + score;
-        continue;
-      }
       if (q.modelType === "BIG5" && typeof q.bfiItemNo === "number") {
         const adj = bfi2AdjustedScore(ans.score, q.bfiItemNo);
         const dim = q.dimension as Big5Dim;
@@ -313,30 +307,38 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
 
     const { gender, age } = session.userProfile;
     const normVersion = session.normVersion!;
-    const { riasecNorm, big5Norm } = await computeAllNormalizedScores(rawRiasec, rawBig5Mean, gender, age, normVersion);
+    const big5Norm = await computeAllNormalizedScores(rawBig5Mean, gender, age, normVersion);
 
     // 职业匹配
     const Occupations = getOccupationModel();
     const occupations = await Occupations.find({ isActive: true }).lean().exec();
-    const topCareers = matchCareers({ riasecNorm, big5Norm, age }, occupations);
+    const topCareers = matchCareers({ big5Norm, age }, occupations);
 
     // 性格标签
-    const topRiasec = topDimensions(riasecNorm, 2);
-    const { label, summary } = buildPersonalityLabel(topRiasec);
+    const { label, summary } = buildPersonalityLabel(big5Norm);
+
+    const report = buildBegreatReportSnapshot({
+      gender,
+      age,
+      big5Z: big5Norm,
+      personalitySummary: summary,
+      topCareers,
+    });
 
     // 常模元信息快照（写进 result，报告可展示来源）
     const normMeta = await getNormMeta(normVersion);
 
+    const freeSummary = `${report.coverLine}\n\n${report.summaryLine}`;
+
     session.result = {
-      riasecScores:     rawRiasec,
-      big5Scores:       rawBig5Mean,
+      big5Scores:    rawBig5Mean,
       big5DomainSum,
       bfi2FacetMeans,
-      riasecNormalized: riasecNorm,
-      big5Normalized:   big5Norm,
+      big5Normalized: big5Norm,
       topCareers,
-      freeSummary:      summary,
+      freeSummary,
       personalityLabel: label,
+      report,
       instrumentVersion: session.instrumentVersion ?? BFI2_INSTRUMENT_VERSION,
       normVersion,
       normSource:        normMeta?.source ?? null,
@@ -345,7 +347,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     session.status = "completed";
     await session.save();
 
-    sendSucc(res, { personalityLabel: label, freeSummary: summary, sessionId });
+    sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
   } catch (err) {
     logger.error("[assessment/complete]", err);
     sendErr(res, "Internal error", 500);

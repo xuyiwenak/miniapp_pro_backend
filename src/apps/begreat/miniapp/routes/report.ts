@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getSessionModel } from "../../dbservice/BegreatDBModel";
+import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
 
 const router = Router();
@@ -27,12 +27,15 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     const isPaid = session.status === "paid";
     const { result } = session;
 
+    const reportPayload = result.report ?? null;
+
     if (!isPaid) {
-      // 免费版：仅展示顶层标签，职业只给前3名且不含详细描述
+      // 免费版：顶层标签 + 模板报告 + 职业前 3 名（无详细描述）
       sendSucc(res, {
         isPaid: false,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
+        report:             reportPayload,
         topCareers: result.topCareers.slice(0, 3).map((c) => ({
           title:       c.title,
           matchScore:  c.matchScore,
@@ -44,13 +47,12 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         isPaid: true,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
-        riasecNormalized: result.riasecNormalized,
+        report:             reportPayload,
         big5Normalized:   result.big5Normalized,
         bfi2FacetMeans:   result.bfi2FacetMeans,
         topCareers:       result.topCareers,
         competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
         facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
-        aiEraAdvice:        buildAiEraAdvice(result.riasecNormalized, result.big5Normalized),
         normMeta: {
           version:    result.normVersion    ?? null,
           source:     result.normSource     ?? null,
@@ -122,29 +124,49 @@ function buildFacetInsights(facetMeans: Record<string, number>): { facet: string
   return results.sort((a, b) => Math.abs(b.score - 3) - Math.abs(a.score - 3));
 }
 
-/** AI 时代技能补全建议（付费专属） */
-function buildAiEraAdvice(riasec: Record<string, number> | undefined, big5: Record<string, number> | undefined): string[] {
-  const advice: string[] = [];
+/**
+ * POST /report/:sessionId/claim-image
+ * 原子性标记"已生成长图"，每个付费报告仅允许一次。
+ * 前端渲染长图前必须先调用此接口，成功后才执行本地保存。
+ */
+router.post("/:sessionId/claim-image", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const { sessionId } = req.params;
+  try {
+    const Sessions = getSessionModel();
+    const Payments = getPaymentModel();
 
-  if ((big5?.["O"] ?? 0) < 0) {
-    advice.push("建议每月尝试 1 个新的 AI 工具（如 Midjourney、Cursor 或 Perplexity），主动拓宽你对技术边界的认知。");
+    // 验证 session 属于当前用户且已付费
+    const session = await Sessions.findOne({ sessionId, openId: req.userId })
+      .select("status")
+      .lean()
+      .exec();
+    if (!session)              { sendErr(res, "Session not found", 404); return; }
+    if (session.status !== "paid") { sendErr(res, "Report not unlocked", 403); return; }
+
+    // 原子标记：只对 imageGenerated=false 的记录生效
+    const updated = await Payments.findOneAndUpdate(
+      { sessionId, status: "success", imageGenerated: false },
+      { $set: { imageGenerated: true, imageGeneratedAt: new Date() } },
+      { new: true }
+    ).lean().exec();
+
+    if (!updated) {
+      // 已生成过，或找不到对应付费记录
+      const existing = await Payments.findOne({ sessionId, status: "success" }).select("imageGenerated").lean().exec();
+      if (existing?.imageGenerated) {
+        sendErr(res, "Report image already generated", 403);
+      } else {
+        sendErr(res, "Payment record not found", 404);
+      }
+      return;
+    }
+
+    logger.info("[report/claim-image] claimed:", sessionId, req.userId);
+    sendSucc(res, { allowed: true });
+  } catch (err) {
+    logger.error("[report/claim-image]", err);
+    sendErr(res, "Internal error", 500);
   }
-  if ((riasec?.["I"] ?? 0) < 0) {
-    advice.push("尝试将工作中的重复决策流程文档化并交给 AI 辅助，这能大幅提升你的产出效率。");
-  }
-  if ((riasec?.["A"] ?? 0) > 0.5) {
-    advice.push("你的创意优势可与生成式 AI 结合：用 AI 快速出稿、你负责审美把控，这是 2026 年内容岗位的核心竞争力。");
-  }
-  if ((big5?.["C"] ?? 0) < 0) {
-    advice.push("使用 AI 项目管理工具（如 Notion AI 或 ClickUp）为你建立外部纪律，弥补自律性的短板。");
-  }
-  if ((riasec?.["S"] ?? 0) > 0.5) {
-    advice.push("你擅长与人建立联结，建议学习 AI 辅助用户研究工具，将你的同理心转化为可量化的产品洞察。");
-  }
-  if (advice.length === 0) {
-    advice.push("你的能力结构与 2026 年职场需求高度匹配，建议持续深耕核心专业，同时保持对 AI 工具的关注与实践。");
-  }
-  return advice;
-}
+});
 
 export default router;

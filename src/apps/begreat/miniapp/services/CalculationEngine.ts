@@ -40,9 +40,9 @@ async function loadNormCache(normVersion: string): Promise<NormCache> {
 }
 
 /**
- * 查询当前激活的常模版本号（BIG5 / RIASEC 共用同一激活版本机制）
+ * 查询当前激活的常模版本号
  */
-export async function getActiveNormVersion(modelType: "BIG5" | "RIASEC" = "BIG5"): Promise<string | null> {
+export async function getActiveNormVersion(modelType: "BIG5" = "BIG5"): Promise<string | null> {
   const NormModel = getNormModel();
   const doc = await NormModel.findOne({ isActive: true, modelType }).select("normVersion").lean().exec();
   return doc?.normVersion ?? null;
@@ -62,11 +62,11 @@ export async function getNormMeta(normVersion: string): Promise<{ source: string
 
 /**
  * 计算单维度 Z 分（从 DB 缓存读常模）
- * @param rawScore  BIG5：领域均分 1–5；RIASEC：4 题之和 4–20
+ * @param rawScore  BIG5 领域均分 1–5
  */
 export async function calculateNormalizedScore(
   rawScore:   number,
-  modelType:  "BIG5" | "RIASEC",
+  modelType:  "BIG5",
   dimension:  string,
   gender:     Gender,
   age:        number,
@@ -86,56 +86,39 @@ export async function calculateNormalizedScore(
 }
 
 /**
- * 批量计算所有维度的 Z 分
+ * 批量计算 Big5 各维度 Z 分
  */
 export async function computeAllNormalizedScores(
-  rawRiasec:        Record<string, number>,
   rawBig5DomainMean: Record<string, number>,
-  gender:           Gender,
-  age:              number,
-  normVersion:      string,
-): Promise<{ riasecNorm: Record<string, number>; big5Norm: Record<string, number> }> {
-  const riasecNorm: Record<string, number> = {};
-  for (const [dim, score] of Object.entries(rawRiasec)) {
-    riasecNorm[dim] = await calculateNormalizedScore(score, "RIASEC", dim, gender, age, normVersion);
-  }
-
+  gender:            Gender,
+  age:               number,
+  normVersion:       string,
+): Promise<Record<string, number>> {
   const big5Norm: Record<string, number> = {};
   for (const [dim, score] of Object.entries(rawBig5DomainMean)) {
     big5Norm[dim] = await calculateNormalizedScore(score, "BIG5", dim, gender, age, normVersion);
   }
-
-  return { riasecNorm, big5Norm };
-}
-
-/** 按 Z 分降序排列，返回 top N 维度代码 */
-export function topDimensions(normScores: Record<string, number>, n = 2): string[] {
-  return Object.entries(normScores)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([dim]) => dim);
+  return big5Norm;
 }
 
 /**
- * 根据 RIASEC 顶维度生成性格标签
+ * 根据 Big5 Z 分生成性格标签（取最突出维度；N 取反，低神经质=高稳定性）
  */
-export function buildPersonalityLabel(topRiasec: string[]): { label: string; summary: string } {
+export function buildPersonalityLabel(big5Norm: Record<string, number>): { label: string; summary: string } {
+  const scores: [string, number][] = [
+    ["O", big5Norm["O"] ?? 0],
+    ["C", big5Norm["C"] ?? 0],
+    ["E", big5Norm["E"] ?? 0],
+    ["A", big5Norm["A"] ?? 0],
+    ["N_stable", -(big5Norm["N"] ?? 0)],
+  ];
+  const [top] = scores.sort((a, b) => b[1] - a[1]);
   const map: Record<string, { label: string; summary: string }> = {
-    R:  { label: "实践开拓者", summary: "你擅长将想法转化为可触摸的成果，是团队中解决实际问题的核心力量。" },
-    I:  { label: "洞察探索者", summary: "你对未知领域充满好奇，习惯用数据和逻辑拆解复杂问题。" },
-    A:  { label: "创意表达者", summary: "你拥有敏锐的审美直觉，能将抽象概念转化为令人印象深刻的作品。" },
-    S:  { label: "连接影响者", summary: "你天生擅长理解他人需求，是团队中情感纽带与协作的推动者。" },
-    E:  { label: "进取领导者", summary: "你对目标有强烈的驱动力，善于调动资源、说服他人、推动变革。" },
-    C:  { label: "系统构建者", summary: "你对秩序和精确性有天然偏好，是流程优化和风险防范的专家。" },
-    RI: { label: "工程创新家", summary: "兼具动手能力与研究精神，在技术研发和产品实现领域有独特优势。" },
-    IA: { label: "科技美学家", summary: "将分析思维与创意表达融合，是数字产品设计的理想人才。" },
-    AE: { label: "艺术领导者", summary: "创意与行动力并驾，擅长将创新愿景带入商业落地。" },
-    SE: { label: "人文运营家", summary: "深度理解人心，同时具备驱动团队达成目标的行动能量。" },
-    IC: { label: "精密研究者", summary: "严谨的探究精神配合系统化工作习惯，是数据科学与合规领域的中坚力量。" },
-    EC: { label: "战略执行者", summary: "目标导向与精细管理的结合，让你在需要高度执行力的管理岗位上游刃有余。" },
+    O:        { label: "开放探索者", summary: "你对新事物充满好奇，善于跨界思考，是团队中创新灵感的重要来源。" },
+    C:        { label: "系统执行者", summary: "你自律严谨、目标感强，是团队中可靠的计划推进者与成果保障人。" },
+    E:        { label: "社交驱动者", summary: "你充满活力、善于表达，在需要沟通协调和资源整合的场景中游刃有余。" },
+    A:        { label: "温暖协作者", summary: "你富有同理心，注重和谐关系，是团队中情感纽带与深度协作的推动者。" },
+    N_stable: { label: "稳健应对者", summary: "你情绪稳定、抗压能力强，在高压与不确定环境中依然能够保持冷静判断。" },
   };
-
-  const key2 = topRiasec.slice(0, 2).join("");
-  const key1 = topRiasec[0] ?? "";
-  return map[key2] ?? map[key1] ?? { label: "全能型人才", summary: "你在多个维度均衡发展，具备适应多样化工作场景的弹性。" };
+  return map[top?.[0] ?? ""] ?? { label: "均衡发展者", summary: "你在多个维度均衡发展，具备适应多样化工作场景的弹性与韧性。" };
 }

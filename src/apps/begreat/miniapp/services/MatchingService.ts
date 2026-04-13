@@ -1,24 +1,20 @@
 import type { ICareerMatch } from "../../entity/session.entity";
 import type { IOccupationNorm } from "../../entity/occupation.entity";
-import { topDimensions } from "./CalculationEngine";
 
 interface MatchInput {
-  riasecNorm: Record<string, number>;
   big5Norm: Record<string, number>;
   age: number;
 }
 
 /**
- * 双轨制职业匹配算法（2026 版）
- * Track A: RIASEC 兴趣轨 → 决定推荐"广度"
- * Track B: Big Five 胜任轨 → 决定推荐"深度"与高薪加权
+ * Big Five 胜任力职业匹配算法（2026 版）
+ * 按开放性、尽责性、情绪稳定性加权打分，结合年龄阶段乘数排序
  */
 export function matchCareers(
-  { riasecNorm, big5Norm, age }: MatchInput,
+  { big5Norm, age }: MatchInput,
   occupations: IOccupationNorm[],
   limit = 10
 ): ICareerMatch[] {
-  const [top1, top2] = topDimensions(riasecNorm, 2);
   const openness          = big5Norm["O"] ?? 0;
   const conscientiousness = big5Norm["C"] ?? 0;
   // N 分越低 → 情绪越稳定 → emotionalStability = -N
@@ -27,15 +23,8 @@ export function matchCareers(
   const results = occupations
     .filter((job) => job.isActive)
     .map((job): ICareerMatch => {
-      // ── Track A: RIASEC 基础分 ──────────────────────────────
+      // ── Big Five 胜任力加权 ──────────────────────────────────
       let score = 0;
-      if (job.primaryRiasec === top1)  score += 60;
-      else if (job.primaryRiasec === top2) score += 35;
-
-      if (job.secondaryRiasec === top2) score += 20;
-      else if (job.secondaryRiasec === top1) score += 10;
-
-      // ── Track B: Big Five 胜任力加权 ────────────────────────
       // 开放性：若 Z > 阈值，AI 时代高薪职位额外加分
       if (openness > job.requiredBig5.openness) {
         score += 15 * job.salaryIndex;
@@ -63,6 +52,12 @@ export function matchCareers(
         matchScore:  parseFloat(score.toFixed(1)),
         salaryIndex: job.salaryIndex,
         description: job.description,
+        industry:    job.industry,
+        level:       job.level,
+        salary:      job.salary,
+        skills:      job.skills,
+        aiRisk:      job.aiRisk,
+        ageHints:    job.ageHints,
       };
     })
     .sort((a, b) => b.matchScore - a.matchScore)

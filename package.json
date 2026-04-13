@@ -11,7 +11,7 @@
     "dev:begreat": "ts-node src/apps/begreat/front.ts",
     "json-to-schemas-development": "node json_to_schema.mjs development",
     "json-to-schemas-production": "node json_to_schema.mjs production",
-    "test": "mocha --require ts-node/register test/**/*.test.ts"
+    "test": "TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/bull": "^4.10.4",

@@ -1,4 +1,5 @@
 import { Schema } from "mongoose";
+import type { IReportSnapshot } from "./reportResult.entity";
 
 export type SessionStatus = "in_progress" | "completed" | "paid";
 export type Gender = "male" | "female";
@@ -10,18 +11,28 @@ export interface ICareerMatch {
   matchScore: number;
   salaryIndex: number;
   description: string;
+  /** 行业分类 */
+  industry?: { primary: string; secondary: string };
+  /** 职业阶段 */
+  level?: "entry" | "mid" | "senior";
+  /** 薪资区间 */
+  salary?: { min: number; max: number; unit: "month" | "year" };
+  /** 所需技能 */
+  skills?: { required: string[]; tools: string[] };
+  /** AI 替代风险 0–1 */
+  aiRisk?: number;
+  /** 各年龄段原始说明（来自 occupation，供报告模板渲染使用） */
+  ageHints?: Partial<Record<string, string>>;
 }
 
 export interface IAssessmentResult {
-  riasecScores:     Record<string, number>;  // 原始分
   /** BFI-2 五领域均分（1–5，已反向计分） */
-  big5Scores:       Record<string, number>;
+  big5Scores:      Record<string, number>;
   /** 各域 12 题 raw 分和（12–60，已反向） */
-  big5DomainSum?:   Record<string, number>;
+  big5DomainSum?:  Record<string, number>;
   /** BFI-2 十五子维度均分（1–5） */
-  bfi2FacetMeans?:  Record<string, number>;
-  riasecNormalized: Record<string, number>;  // Z 分
-  big5Normalized:   Record<string, number>;
+  bfi2FacetMeans?: Record<string, number>;
+  big5Normalized:  Record<string, number>;
   topCareers:       ICareerMatch[];          // 匹配职业，已排序
   freeSummary:      string;                  // 免费展示标签
   personalityLabel: string;                  // 性格类型，如"艺术型领导者"
@@ -31,6 +42,8 @@ export interface IAssessmentResult {
   normSource?:      string | null;
   /** 常模参考样本量，经验常模填真实值，论文常模填 null */
   normSampleSize?:  number | null;
+  /** BFI-2 模板化报告（封面句、五维解读、摘要句等） */
+  report?: IReportSnapshot;
 }
 
 export interface IAssessmentSession {
@@ -62,18 +75,22 @@ const CareerMatchSchema = new Schema<ICareerMatch>(
     matchScore:  { type: Number, required: true },
     salaryIndex: { type: Number, required: true },
     description: { type: String, default: "" },
+    industry:    { type: Schema.Types.Mixed },
+    level:       { type: String, enum: ["entry", "mid", "senior"] },
+    salary:      { type: Schema.Types.Mixed },
+    skills:      { type: Schema.Types.Mixed },
+    aiRisk:      { type: Number },
+    ageHints:    { type: Schema.Types.Mixed },
   },
   { _id: false }
 );
 
 const ResultSchema = new Schema<IAssessmentResult>(
   {
-    riasecScores:     { type: Schema.Types.Mixed, default: {} },
-    big5Scores:       { type: Schema.Types.Mixed, default: {} },
-    big5DomainSum:    { type: Schema.Types.Mixed, default: undefined },
-    bfi2FacetMeans:   { type: Schema.Types.Mixed, default: undefined },
-    riasecNormalized: { type: Schema.Types.Mixed, default: {} },
-    big5Normalized:   { type: Schema.Types.Mixed, default: {} },
+    big5Scores:    { type: Schema.Types.Mixed, default: {} },
+    big5DomainSum: { type: Schema.Types.Mixed, default: undefined },
+    bfi2FacetMeans:{ type: Schema.Types.Mixed, default: undefined },
+    big5Normalized:{ type: Schema.Types.Mixed, default: {} },
     topCareers:       { type: [CareerMatchSchema], default: [] },
     freeSummary:      { type: String, default: "" },
     personalityLabel: { type: String, default: "" },
@@ -81,6 +98,7 @@ const ResultSchema = new Schema<IAssessmentResult>(
     normVersion:      { type: String, required: false },
     normSource:       { type: String, required: false, default: null },
     normSampleSize:   { type: Number, required: false, default: null },
+    report:           { type: Schema.Types.Mixed, required: false },
   },
   { _id: false }
 );

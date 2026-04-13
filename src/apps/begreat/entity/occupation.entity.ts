@@ -1,4 +1,7 @@
 import { Schema } from "mongoose";
+import type { AgeGroup } from "./norm.entity";
+
+export type OccupationLevel = "entry" | "mid" | "senior";
 
 export interface IOccupationNorm {
   code: string;
@@ -20,6 +23,19 @@ export interface IOccupationNorm {
   ageRange: { min: number; max: number };
   description: string;
   isActive: boolean;
+
+  /** 行业分类 */
+  industry?: { primary: string; secondary: string };
+  /** 职业阶段（入门/中级/资深） */
+  level?: OccupationLevel;
+  /** 薪资区间（元/月 或 元/年） */
+  salary?: { min: number; max: number; unit: "month" | "year" };
+  /** 所需技能 */
+  skills?: { required: string[]; tools: string[] };
+  /** AI 替代风险（0–1，值越高风险越大） */
+  aiRisk?: number;
+  /** 各年龄段情境化说明，key 为 AgeGroup */
+  ageHints?: Partial<Record<AgeGroup, string>>;
 }
 
 export const OccupationSchema = new Schema<IOccupationNorm>(
@@ -41,6 +57,23 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
     },
     description: { type: String, default: "" },
     isActive:    { type: Boolean, default: true, index: true },
+
+    industry: {
+      primary:   { type: String },
+      secondary: { type: String },
+    },
+    level:   { type: String, enum: ["entry", "mid", "senior"] },
+    salary: {
+      min:  { type: Number },
+      max:  { type: Number },
+      unit: { type: String, enum: ["month", "year"], default: "month" },
+    },
+    skills: {
+      required: { type: [String], default: [] },
+      tools:    { type: [String], default: [] },
+    },
+    aiRisk:    { type: Number, min: 0, max: 1 },
+    ageHints:  { type: Schema.Types.Mixed, default: undefined },
   },
   { timestamps: false }
 );

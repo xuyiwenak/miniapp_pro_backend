@@ -3,7 +3,7 @@ import https from "https";
 import crypto from "crypto";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getSessionModel } from "../../dbservice/BegreatDBModel";
+import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import { gameLogger as logger } from "../../../../util/logger";
 
@@ -24,14 +24,12 @@ function getPayConfig(): WxPayConfig {
   return (sysCfgComp.server_auth_config ?? {}) as WxPayConfig;
 }
 
-/** 读取私钥（PEM 格式，从文件路径加载） */
 function loadPrivateKey(keyPath: string): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const fs = require("fs") as typeof import("fs");
   return fs.readFileSync(keyPath, "utf-8");
 }
 
-/** 生成微信支付 V3 Authorization 头 */
 function buildV3Authorization(
   method: string,
   url: string,
@@ -49,25 +47,43 @@ function buildV3Authorization(
 
 /**
  * POST /payment/prepay
- * 创建微信支付预下单，返回前端拉起支付所需参数
+ * 创建预下单，同步写入 PaymentRecord(pending)
  */
 router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.body ?? {};
   if (!sessionId) { sendErr(res, "Missing sessionId", 400); return; }
 
-  // dev 模式：直接标记支付成功，跳过真实微信支付
   const isDev = (process.env.ENV ?? process.env.environment ?? "development") === "development";
+
   if (isDev) {
     try {
       const Sessions = getSessionModel();
+      const Payments = getPaymentModel();
       const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
       if (!session) { sendErr(res, "Session not found", 404); return; }
       if (session.status !== "completed" && session.status !== "paid") {
         sendErr(res, "Assessment not completed", 400); return;
       }
       if (session.status !== "paid") {
+        const outTradeNo = `bg_${sessionId}_dev`;
+        // 幂等：dev 模式下同一 session 只写一条
+        await Payments.updateOne(
+          { outTradeNo },
+          {
+            $setOnInsert: {
+              outTradeNo,
+              sessionId,
+              openId:  req.userId,
+              amount:  2900,
+              status:  "success",
+              paidAt:  new Date(),
+              imageGenerated: false,
+            },
+          },
+          { upsert: true }
+        );
         await Sessions.updateOne({ sessionId }, { $set: { status: "paid", paidAt: new Date() } });
-        logger.info("[payment/prepay] dev mode: auto-paid session", sessionId);
+        logger.info("[payment/prepay] dev mode: auto-paid", sessionId);
       }
       sendSucc(res, { devMode: true });
     } catch (err) {
@@ -86,6 +102,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
 
   try {
     const Sessions = getSessionModel();
+    const Payments = getPaymentModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
     if (!session) { sendErr(res, "Session not found", 404); return; }
     if (session.status === "paid") { sendErr(res, "Already paid", 400); return; }
@@ -100,7 +117,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       description:  "Careertest 完整报告解锁",
       out_trade_no: outTradeNo,
       notify_url:   `${process.env.PUBLIC_BASE_URL ?? ""}/payment/callback`,
-      amount:       { total: 2900, currency: "CNY" },  // 29元，单位分
+      amount:       { total: 2900, currency: "CNY" },
       payer:        { openid: req.userId },
     });
 
@@ -136,20 +153,23 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       return;
     }
 
-    // 构造前端拉起支付参数
+    // 预下单成功后写入 pending 记录
+    await Payments.create({
+      outTradeNo,
+      sessionId,
+      openId:  req.userId,
+      amount:  2900,
+      status:  "pending",
+      imageGenerated: false,
+    });
+
     const timeStamp = Math.floor(Date.now() / 1000).toString();
     const nonceStr = crypto.randomBytes(16).toString("hex");
     const pkg = `prepay_id=${wxRes.prepay_id}`;
     const signStr = `${payCfg.appId}\n${timeStamp}\n${nonceStr}\n${pkg}\n`;
     const paySign = crypto.createSign("RSA-SHA256").update(signStr).sign(privateKey, "base64");
 
-    sendSucc(res, {
-      timeStamp,
-      nonceStr,
-      package: pkg,
-      signType: "RSA",
-      paySign,
-    });
+    sendSucc(res, { timeStamp, nonceStr, package: pkg, signType: "RSA", paySign });
   } catch (err) {
     logger.error("[payment/prepay] exception:", err);
     sendErr(res, "Internal error", 500);
@@ -158,7 +178,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
 
 /**
  * POST /payment/callback
- * 微信支付 V3 回调：验签后解密通知，更新 session 状态
+ * 微信支付回调：验签解密，更新 PaymentRecord + session
  */
 router.post("/callback", async (req: Request, res: Response) => {
   const payCfg = getPayConfig().wx_pay;
@@ -174,7 +194,6 @@ router.post("/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    // AES-256-GCM 解密
     const { algorithm, associated_data, nonce, ciphertext } = resource;
     if (algorithm !== "AEAD_AES_256_GCM") {
       res.status(400).json({ code: "FAIL", message: "Unsupported algorithm" });
@@ -191,24 +210,37 @@ router.post("/callback", async (req: Request, res: Response) => {
     decipher.setAuthTag(tag);
     decipher.setAAD(Buffer.from(associated_data, "utf-8"));
     const plaintext = Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf-8");
-    const notify = JSON.parse(plaintext) as { trade_state?: string; attach?: string; out_trade_no?: string };
+    const notify = JSON.parse(plaintext) as {
+      trade_state?: string;
+      out_trade_no?: string;
+      payer?: { openid?: string };
+    };
 
     if (notify.trade_state !== "SUCCESS") {
       res.json({ code: "SUCCESS", message: "OK" });
       return;
     }
 
-    // out_trade_no 格式：bg_{sessionId}_{timestamp}
     const outTradeNo = notify.out_trade_no ?? "";
-    const sessionId  = outTradeNo.split("_")[1];
+    // out_trade_no 格式：bg_{sessionId}_{timestamp}
+    const parts     = outTradeNo.split("_");
+    const sessionId = parts[1] ?? "";
 
     if (sessionId) {
       const Sessions = getSessionModel();
+      const Payments = getPaymentModel();
+      const paidAt   = new Date();
+
+      // 幂等更新：只对 pending 状态生效，防重复回调
+      await Payments.updateOne(
+        { outTradeNo, status: "pending" },
+        { $set: { status: "success", paidAt } }
+      );
       await Sessions.updateOne(
         { sessionId, status: "completed" },
-        { $set: { status: "paid", paidAt: new Date() } }
+        { $set: { status: "paid", paidAt } }
       );
-      logger.info("[payment/callback] session paid:", sessionId);
+      logger.info("[payment/callback] session paid:", sessionId, "trade:", outTradeNo);
     }
 
     res.json({ code: "SUCCESS", message: "OK" });
@@ -231,6 +263,34 @@ router.get("/status/:sessionId", authMiddleware, async (req: MiniappRequest, res
     sendSucc(res, { status: session.status, isPaid: session.status === "paid" });
   } catch (err) {
     logger.error("[payment/status]", err);
+    sendErr(res, "Internal error", 500);
+  }
+});
+
+/**
+ * GET /payment/records
+ * 管理端：分页查询付费记录（需 admin auth，此处用 authMiddleware 代替，生产环境应加 admin 鉴权）
+ */
+router.get("/records", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const page  = Math.max(1, parseInt(String(req.query["page"]  ?? "1")));
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "20"))));
+  const status = req.query["status"] as string | undefined;
+
+  try {
+    const Payments = getPaymentModel();
+    const filter = status ? { status } : {};
+    const [records, total] = await Promise.all([
+      Payments.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .exec(),
+      Payments.countDocuments(filter),
+    ]);
+    sendSucc(res, { records, total, page, limit });
+  } catch (err) {
+    logger.error("[payment/records]", err);
     sendErr(res, "Internal error", 500);
   }
 });
