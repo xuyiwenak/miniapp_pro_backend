@@ -3,6 +3,7 @@ import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/respons
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
+import { loadReportTemplate } from "../services/reportTemplate";
 
 const router = Router();
 
@@ -30,16 +31,26 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     const reportPayload = result.report ?? null;
 
     if (!isPaid) {
-      // 免费版：顶层标签 + 模板报告 + 职业前 3 名（无详细描述）
+      // 免费版：顶层标签 + 模板报告 + 职业前 3 名（含 AI 风险标志，无详细建议）
+      const tpl = loadReportTemplate();
+      const bands = tpl.careers.ai_impact.risk_bands;
+
+      const allCareers = result.topCareers;
+      const highCount = allCareers.filter((c) => {
+        if (c.aiRisk === undefined) return false;
+        return c.aiRisk > bands.medium.max;
+      }).length;
+
       sendSucc(res, {
         isPaid: false,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
-        report:             reportPayload,
-        topCareers: result.topCareers.slice(0, 3).map((c) => ({
-          title:       c.title,
-          matchScore:  c.matchScore,
-        })),
+        report:           reportPayload,
+        topCareers: result.topCareers.slice(0, 3).map((c) => {
+          const aiRisk = buildFreeAiRisk(c.aiRisk, bands);
+          return { title: c.title, matchScore: c.matchScore, aiRisk };
+        }),
+        aiRiskSummary: { total: allCareers.length, highCount },
       });
     } else {
       // 付费版：完整报告
@@ -65,6 +76,19 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     sendErr(res, "Internal error", 500);
   }
 });
+
+/** 免费层：从原始 aiRisk (0–1) 提取风险标志（不含应对建议） */
+function buildFreeAiRisk(
+  aiRisk: number | undefined,
+  bands: ReturnType<typeof loadReportTemplate>["careers"]["ai_impact"]["risk_bands"],
+): { badge: string; riskLabel: string; bandKey: "low" | "medium" | "high" } | null {
+  if (aiRisk === undefined) return null;
+  const bandKey: "low" | "medium" | "high" =
+    aiRisk <= bands.low.max ? "low" :
+    aiRisk <= bands.medium.max ? "medium" : "high";
+  const band = bands[bandKey];
+  return { badge: band.badge, riskLabel: band.label, bandKey };
+}
 
 /** 生成 Big5 胜任力解读（付费专属） */
 function buildCompetencyAnalysis(big5: Record<string, number> | undefined): Record<string, string> {
