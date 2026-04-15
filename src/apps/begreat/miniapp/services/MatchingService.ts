@@ -46,17 +46,18 @@ export function matchCareers(
       score = Math.max(0, Math.min(100, score));
 
       return {
-        code:        job.code,
-        title:       job.title,
-        matchScore:  parseFloat(score.toFixed(1)),
-        salaryIndex: job.salaryIndex,
-        description: job.description,
-        industry:    job.industry,
-        level:       job.level,
-        salary:      job.salary,
-        skills:      job.skills,
-        aiRisk:      job.aiRisk,
-        ageHints:    job.ageHints,
+        code:           job.code,
+        title:          job.title,
+        matchScore:     parseFloat(score.toFixed(1)),
+        salaryIndex:    job.salaryIndex,
+        description:    job.description,
+        industry:       job.industry,
+        level:          job.level,
+        salary:         job.salary,
+        skills:         job.skills,
+        aiRisk:         job.aiRisk,
+        aiImpactAdvice: job.aiImpactAdvice,
+        ageHints:       job.ageHints,
       };
     })
     .sort((a, b) => b.matchScore - a.matchScore)

@@ -21,6 +21,8 @@ export interface ICareerMatch {
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险 0–1 */
   aiRisk?: number;
+  /** 职业专属 AI 应对建议（来自 occupation.aiImpactAdvice） */
+  aiImpactAdvice?: string;
   /** 各年龄段原始说明（来自 occupation，供报告模板渲染使用） */
   ageHints?: Partial<Record<string, string>>;
 }
@@ -79,8 +81,9 @@ const CareerMatchSchema = new Schema<ICareerMatch>(
     level:       { type: String, enum: ["entry", "mid", "senior"] },
     salary:      { type: Schema.Types.Mixed },
     skills:      { type: Schema.Types.Mixed },
-    aiRisk:      { type: Number },
-    ageHints:    { type: Schema.Types.Mixed },
+    aiRisk:         { type: Number },
+    aiImpactAdvice: { type: String },
+    ageHints:       { type: Schema.Types.Mixed },
   },
   { _id: false }
 );

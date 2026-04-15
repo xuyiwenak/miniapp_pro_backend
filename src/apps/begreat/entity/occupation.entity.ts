@@ -34,6 +34,8 @@ export interface IOccupationNorm {
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险（0–1，值越高风险越大） */
   aiRisk?: number;
+  /** 职业专属 AI 应对建议（优先级高于行业通用建议） */
+  aiImpactAdvice?: string;
   /** 各年龄段情境化说明，key 为 AgeGroup */
   ageHints?: Partial<Record<AgeGroup, string>>;
 }
@@ -72,8 +74,9 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
       required: { type: [String], default: [] },
       tools:    { type: [String], default: [] },
     },
-    aiRisk:    { type: Number, min: 0, max: 1 },
-    ageHints:  { type: Schema.Types.Mixed, default: undefined },
+    aiRisk:         { type: Number, min: 0, max: 1 },
+    aiImpactAdvice: { type: String },
+    ageHints:       { type: Schema.Types.Mixed, default: undefined },
   },
   { timestamps: false }
 );

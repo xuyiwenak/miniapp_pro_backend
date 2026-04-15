@@ -150,14 +150,16 @@ function resolveAiBandKey(aiRisk: number, bands: ReportTemplateJson["careers"]["
 function buildAiImpact(
   aiRisk: number | undefined,
   industryPrimary: string | undefined,
+  occupationAdvice: string | undefined,
   impactTpl: ReportTemplateJson["careers"]["ai_impact"]
 ): ICareerAiImpact | undefined {
   if (aiRisk === undefined) return undefined;
   const bandKey = resolveAiBandKey(aiRisk, impactTpl.risk_bands);
   const band = impactTpl.risk_bands[bandKey];
-  const industryAdvice = industryPrimary
-    ? (impactTpl.by_industry[industryPrimary]?.[bandKey] ?? band.general_advice)
-    : band.general_advice;
+  // 优先级：职业专属 > 行业×风险带 > 风险带通用
+  const industryAdvice = occupationAdvice
+    ?? (industryPrimary ? impactTpl.by_industry[industryPrimary]?.[bandKey] : undefined)
+    ?? band.general_advice;
   return {
     risk:           aiRisk,
     riskLabel:      band.label,
@@ -168,18 +170,33 @@ function buildAiImpact(
   };
 }
 
-function buildMatchReason(
+/** 针对单个职业生成差异化匹配原因：优先挑用户 Z 分与职业需求重叠最高的维度 */
+function buildMatchReasonForCareer(
   big5Z: Record<string, number>,
+  career: ICareerMatch,
   reasonTpl: Record<string, string>
 ): string {
-  const hits: string[] = [];
-  if ((big5Z["O"] ?? 0) > 0.4) hits.push(reasonTpl["high_O"] ?? "");
-  if ((big5Z["C"] ?? 0) > 0.4) hits.push(reasonTpl["high_C"] ?? "");
-  if ((big5Z["E"] ?? 0) > 0.4) hits.push(reasonTpl["high_E"] ?? "");
-  if ((big5Z["A"] ?? 0) > 0.4) hits.push(reasonTpl["high_A"] ?? "");
-  if ((big5Z["N"] ?? 0) < -0.4) hits.push(reasonTpl["stable_N"] ?? "");
-  const picked = hits.filter(Boolean).slice(0, 2);
-  return picked.length > 0 ? picked.join("，") : "你的综合人格特质与该职业方向高度契合";
+  // 计算用户各维度对该职业需求的"超额贡献"，取最显著的两个
+  const dims: Array<{ key: string; score: number }> = [
+    { key: "high_O", score: big5Z["O"] ?? 0 },
+    { key: "high_C", score: big5Z["C"] ?? 0 },
+    { key: "high_E", score: big5Z["E"] ?? 0 },
+    { key: "high_A", score: big5Z["A"] ?? 0 },
+    { key: "stable_N", score: -(big5Z["N"] ?? 0) },
+  ];
+
+  // 只取有效超过阈值的维度，按分值降序排，取该职业最相关的前两条
+  const thresholds: Record<string, number> = {
+    high_O: 0.3, high_C: 0.3, high_E: 0.3, high_A: 0.3, stable_N: 0.3,
+  };
+  const hits = dims
+    .filter((d) => d.score > thresholds[d.key])
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map((d) => reasonTpl[d.key] ?? "")
+    .filter(Boolean);
+
+  return hits.length > 0 ? hits.join("，") : "你的综合人格特质与该职业方向高度契合";
 }
 
 function buildCareerSection(
@@ -192,7 +209,6 @@ function buildCareerSection(
   const ct = tpl.careers;
   const intro = ct.intro_by_age_gender[ageGroup]?.[gender] ?? "";
   const ageCareerContext = ct.age_career_context[ageGroup] ?? "";
-  const matchReason = buildMatchReason(big5Z, ct.match_reasons);
 
   const annotated: IAnnotatedCareerMatch[] = careers.map((c) => {
     const industryLabel = c.industry?.primary
@@ -208,7 +224,11 @@ function buildCareerSection(
 
     const ageContextText = c.ageHints?.[ageGroup] ?? undefined;
 
-    const aiImpact = buildAiImpact(c.aiRisk, c.industry?.primary, ct.ai_impact);
+    // 每个职业独立计算匹配原因，突出与该职业最相关的特质维度
+    const matchReason = buildMatchReasonForCareer(big5Z, c, ct.match_reasons);
+
+    // 优先使用职业专属 AI 建议，其次行业通用
+    const aiImpact = buildAiImpact(c.aiRisk, c.industry?.primary, c.aiImpactAdvice, ct.ai_impact);
 
     return {
       ...c,
