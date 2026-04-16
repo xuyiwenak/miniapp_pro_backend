@@ -77,7 +77,7 @@ router.get("/questions/export", adminAuth, async (_req: Request, res: Response) 
 
 const VALID_MODEL = new Set(["BIG5"]);
 const VALID_BIG5  = new Set(["O", "C", "E", "A", "N"]);
-const VALID_GENDER = new Set(["male", "female"]);
+const VALID_GENDER = new Set(["male", "female", "both"]);
 
 router.post("/questions/import", adminAuth, upload.single("file"), async (req: Request, res: Response) => {
   if (!req.file) {
