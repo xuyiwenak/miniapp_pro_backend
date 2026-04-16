@@ -5,6 +5,7 @@
  * 题库通过 seed_begreat.ts 脚本维护，不提供 HTTP 导入/导出。
  */
 import { Router, Request, Response } from "express";
+import * as fs from "fs";
 import * as path from "path";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import { getOccupationModel } from "../../dbservice/BegreatDBModel";
