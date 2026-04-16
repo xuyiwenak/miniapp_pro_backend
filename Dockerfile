@@ -15,6 +15,7 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # 拷贝源码并构建
 COPY src ./src
+COPY tpl ./tpl
 COPY tsconfig.json ./
 COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
