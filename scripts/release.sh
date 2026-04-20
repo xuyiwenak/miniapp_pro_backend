@@ -31,7 +31,8 @@ success() { printf '\033[0;32m[release] %s\033[0m\n' "$*"; }
 err()     { printf '\033[0;31m[release] ERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # ── pre-flight ────────────────────────────────────────────────────────────────
-[[ -d .git ]] || err "not a git repository (run from project root)"
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || err "not inside a git repository"
+cd "$GIT_ROOT"
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
   err "working tree has uncommitted changes — commit or stash first"
