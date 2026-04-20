@@ -238,6 +238,33 @@ serverLogger.warn("服务器警告");
 
 ---
 
+## 分支与发布流程
+
+| 分支 | 用途 |
+|------|------|
+| `master` | 日常开发、功能合入 |
+| `release` | **线上环境**，ECS 只从此分支拉取，禁止直接往 `release` 提交 |
+
+**发布步骤**（本地执行）：
+
+```bash
+# 确保工作区干净，然后：
+./scripts/release.sh
+
+# 非交互模式（CI 或确认无误时）：
+./scripts/release.sh --yes
+```
+
+脚本会自动完成：
+1. `git pull origin master`（拉最新 master）
+2. 切换到 `release`，合并 master（保留 merge commit）
+3. `git push origin release`
+4. 切回原分支
+
+> ECS 上执行 `git pull origin release` 后再 `docker compose up -d --build` 即可完成上线。
+
+---
+
 ## 部署说明
 
 ### 1. 本地 Docker / docker-compose
