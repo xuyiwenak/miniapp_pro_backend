@@ -13,7 +13,7 @@ export function sendErr(
   message: string,
   code: number = 400
 ): void {
-  res.status(200).json({
+  res.status(code).json({
     code,
     success: false,
     message,
