@@ -87,13 +87,16 @@ function selectFromFacets(
 router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response) => {
   try {
     const Sessions = getSessionModel();
+    const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+    const pageLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
+
     const sessions = await Sessions.find({
       openId: req.userId,
       status: { $in: ["completed", "paid"] },
     })
       .select("sessionId assessmentType status result.personalityLabel result.freeSummary createdAt -_id")
       .sort({ createdAt: -1 })
-      .limit(20)
+      .limit(pageLimit)
       .lean()
       .exec();
 
@@ -129,6 +132,28 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
   }
 
   try {
+    // ── 每日测评次数限制 ──────────────────────────────────────────────
+    const DAILY_LIMITS: Record<AssessmentType, number> = {
+      BFI2_FREE: 3,
+      BFI2:      2,
+      MBTI:      2,
+      DISC:      2,
+    };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const Sessions = getSessionModel();
+    const todayCount = await Sessions.countDocuments({
+      openId,
+      assessmentType,
+      createdAt: { $gte: todayStart },
+    });
+    if (todayCount >= DAILY_LIMITS[assessmentType]) {
+      const typeLabel = assessmentType === "BFI2_FREE" ? "免费版" : "完整版";
+      sendErr(res, `今日${typeLabel}测评次数已达上限，请明天再来`, 429);
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     const Questions = getQuestionModel();
     const activeNormVersion = await getActiveNormVersion("BIG5");
     if (!activeNormVersion) {
@@ -212,7 +237,6 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
     }
 
     const sessionId = randomBytes(16).toString("hex");
-    const Sessions = getSessionModel();
     await Sessions.create({
       sessionId,
       openId,
