@@ -1,10 +1,11 @@
 import { Router, Request, Response } from "express";
 import https from "https";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
-import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import { gameLogger as logger } from "../../../../util/logger";
 
 const router = Router();
@@ -16,17 +17,34 @@ interface WxPayConfig {
     apiV3Key: string;
     serialNo: string;
     privateKeyPath: string;
+    notifyBaseUrl?: string;
   };
 }
 
+/**
+ * 读取 wx_pay_config.local.json（仅 production 环境需要）。
+ * development 环境走 devMode，直接返回空配置。
+ */
 function getPayConfig(): WxPayConfig {
-  const sysCfgComp = ComponentManager.instance.getComponent(EComName.SysCfgComponent);
-  return (sysCfgComp.server_auth_config ?? {}) as WxPayConfig;
+  const env = process.env.ENV ?? process.env.environment ?? "development";
+  if (env === "development") return {};
+
+  const localCfgPath = path.resolve(
+    __dirname,
+    `../../../../../apps/begreat/sysconfig/${env}/wx_pay_config.local.json`,
+  );
+  if (fs.existsSync(localCfgPath)) {
+    try {
+      const raw = fs.readFileSync(localCfgPath, "utf-8");
+      return JSON.parse(raw) as WxPayConfig;
+    } catch (e) {
+      logger.warn("[payment] Failed to parse wx_pay_config.local.json:", e);
+    }
+  }
+  return {};
 }
 
 function loadPrivateKey(keyPath: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fs = require("fs") as typeof import("fs");
   return fs.readFileSync(keyPath, "utf-8");
 }
 
@@ -61,7 +79,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       const Payments = getPaymentModel();
       const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
       if (!session) { sendErr(res, "Session not found", 404); return; }
-      if (session.status !== "completed" && session.status !== "paid") {
+      if (session.status !== "completed" && session.status !== "invite_unlocked" && session.status !== "paid") {
         sendErr(res, "Assessment not completed", 400); return;
       }
       if (session.status !== "paid") {
@@ -106,7 +124,9 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
     if (!session) { sendErr(res, "Session not found", 404); return; }
     if (session.status === "paid") { sendErr(res, "Already paid", 400); return; }
-    if (session.status !== "completed") { sendErr(res, "Assessment not completed", 400); return; }
+    if (session.status !== "completed" && session.status !== "invite_unlocked") {
+      sendErr(res, "Assessment not completed", 400); return;
+    }
 
     const outTradeNo = `bg_${sessionId}_${Date.now()}`;
     const privateKey = loadPrivateKey(payCfg.privateKeyPath);
@@ -116,7 +136,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       mchid:        payCfg.mchId,
       description:  "Careertest 完整报告解锁",
       out_trade_no: outTradeNo,
-      notify_url:   `${process.env.PUBLIC_BASE_URL ?? ""}/payment/callback`,
+      notify_url:   `${payCfg.notifyBaseUrl ?? process.env.PUBLIC_BASE_URL ?? ""}/payment/callback`,
       amount:       { total: 2900, currency: "CNY" },
       payer:        { openid: req.userId },
     });

@@ -1,0 +1,27 @@
+{
+  "_readme": [
+    "微信支付配置模版。",
+    "使用方式：",
+    "  1. 复制本文件，分别命名为：",
+    "       sysconfig/development/wx_pay_config.local.json",
+    "       sysconfig/production/wx_pay_config.local.json",
+    "  2. 填入真实值（local.json 已被 .gitignore 忽略，不会上传）。",
+    "  3. 证书文件 apiclient_cert.pem / apiclient_key.pem 从微信支付商户平台下载。",
+    "",
+    "字段说明：",
+    "  appId         — 小程序 AppID（wx 开头，18位）",
+    "  mchId         — 商户号（10位数字，微信支付商户平台注册后获取）",
+    "  apiV3Key      — API v3 密钥（32位字符串，商户平台「账户中心-API安全」设置）",
+    "  serialNo      — 商户 API 证书序列号（商户平台下载证书时可见）",
+    "  privateKeyPath — apiclient_key.pem 在服务器上的绝对路径",
+    "  notifyBaseUrl — 支付回调域名（需在微信支付商户平台白名单中）"
+  ],
+  "wx_pay": {
+    "appId": "wxYOUR_MINIAPP_APPID",
+    "mchId": "YOUR_10_DIGIT_MCH_ID",
+    "apiV3Key": "YOUR_32_CHAR_V3_API_KEY_HERE_XXXXXXXX",
+    "serialNo": "YOUR_CERT_SERIAL_NUMBER_HEX_STRING",
+    "privateKeyPath": "/app/config/apiclient_key.pem",
+    "notifyBaseUrl": "https://your-domain.com/begreat"
+  }
+}

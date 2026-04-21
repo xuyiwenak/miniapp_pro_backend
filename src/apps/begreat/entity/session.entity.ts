@@ -1,9 +1,9 @@
 import { Schema } from "mongoose";
 import type { IReportSnapshot } from "./reportResult.entity";
 
-export type SessionStatus = "in_progress" | "completed" | "paid";
+export type SessionStatus = "in_progress" | "completed" | "invite_unlocked" | "paid";
 export type Gender = "male" | "female";
-export type AssessmentType = "BFI2" | "MBTI" | "DISC";
+export type AssessmentType = "BFI2" | "BFI2_FREE" | "MBTI" | "DISC";
 
 export interface ICareerMatch {
   code: string;
@@ -65,6 +65,12 @@ export interface IAssessmentSession {
     score: number;  // Likert 1-5
   }[];
   result?: IAssessmentResult;
+  /** 邀请人 openId（由邀请码反查写入，start 时记录） */
+  referrerId?: string;
+  /** 是否已结算邀请积分（幂等标志） */
+  referrerCredited?: boolean;
+  /** 邀请解锁时间 */
+  inviteUnlockedAt?: Date;
   paidAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -110,8 +116,8 @@ export const SessionSchema = new Schema<IAssessmentSession>(
   {
     sessionId:      { type: String, required: true, unique: true, index: true },
     openId:         { type: String, required: true, index: true },
-    assessmentType: { type: String, enum: ["BFI2", "MBTI", "DISC"], default: "BFI2", index: true },
-    status:         { type: String, enum: ["in_progress", "completed", "paid"], default: "in_progress", index: true },
+    assessmentType: { type: String, enum: ["BFI2", "BFI2_FREE", "MBTI", "DISC"], default: "BFI2", index: true },
+    status:         { type: String, enum: ["in_progress", "completed", "invite_unlocked", "paid"], default: "in_progress", index: true },
     userProfile: {
       gender: { type: String, enum: ["male", "female"], required: true },
       age:    { type: Number, required: true },
@@ -126,8 +132,11 @@ export const SessionSchema = new Schema<IAssessmentSession>(
         _id: false,
       },
     ],
-    result: { type: ResultSchema, default: undefined },
-    paidAt: { type: Date },
+    result:            { type: ResultSchema, default: undefined },
+    referrerId:        { type: String, index: true, sparse: true },
+    referrerCredited:  { type: Boolean, default: false },
+    inviteUnlockedAt:  { type: Date },
+    paidAt:            { type: Date },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
 );

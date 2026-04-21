@@ -18,10 +18,17 @@ import {
   bfi2AdjustedScore,
 } from "../../bfi2/bfi2ItemMeta";
 import type { Big5Dim } from "../../entity/question.entity";
+import { resolveInviteCode, creditInviter } from "./invite";
 
 const router = Router();
 const BATCH_SIZE = 5;
-const VALID_ASSESSMENT_TYPES = new Set<AssessmentType>(["BFI2", "MBTI", "DISC"]);
+const VALID_ASSESSMENT_TYPES = new Set<AssessmentType>(["BFI2", "BFI2_FREE", "MBTI", "DISC"]);
+
+const BIG5_DIMS: Big5Dim[] = ["O", "C", "E", "A", "N"];
+/** BFI2_FREE: 每个大五维度取 4 题，3 个 facet 均须覆盖（分配：2+1+1） */
+const BFI2_FREE_ITEMS_PER_DIM = 4;
+/** BFI2_FREE 使用的量表版本标识 */
+const BFI2_FREE_INSTRUMENT_VERSION = "BFI2_FREE_CN_20";
 
 /** 随机打乱数组（Fisher-Yates） */
 function shuffle<T>(arr: T[]): T[] {
@@ -31,6 +38,41 @@ function shuffle<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+/**
+ * 从 facet 分组中为单个大五维度选出 targetCount 道题，确保所有 facet 至少各出 1 题。
+ * 剩余配额随机分配到 facet（加权按剩余题数）。
+ */
+function selectFromFacets(
+  facetMap: Map<string, string[]>,   // facet → questionId[]
+  targetCount: number,
+): string[] {
+  const facets = [...facetMap.keys()];
+  if (facets.length === 0) return [];
+
+  // 每个 facet 至少 1 题
+  const selected: string[] = [];
+  const remaining = new Map<string, string[]>();
+  for (const facet of facets) {
+    const pool = shuffle(facetMap.get(facet)!);
+    if (pool.length === 0) continue;
+    selected.push(pool[0]);
+    if (pool.length > 1) remaining.set(facet, pool.slice(1));
+  }
+
+  // 分配剩余配额
+  let quota = targetCount - selected.length;
+  const remainingFacets = [...remaining.keys()];
+  shuffle(remainingFacets); // 随机化分配顺序
+  for (const facet of remainingFacets) {
+    if (quota <= 0) break;
+    const pool = remaining.get(facet)!;
+    selected.push(pool[0]);
+    quota--;
+  }
+
+  return selected.slice(0, targetCount);
 }
 
 /**
@@ -73,7 +115,7 @@ router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response
 
 router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
-  const { gender, age, assessmentType: rawType } = req.body ?? {};
+  const { gender, age, assessmentType: rawType, inviteCode } = req.body ?? {};
   const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : "BFI2";
 
   if (!gender || !["male", "female"].includes(gender)) {
@@ -88,28 +130,88 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
 
   try {
     const Questions = getQuestionModel();
-    const all = await Questions.find({
-        isActive: true,
-        $or: [{ gender: gender as Gender }, { gender: "both" }],
-      })
-      .select("questionId")
-      .lean()
-      .exec();
-    if (all.length === 0) {
-      sendErr(res, "Question bank is empty", 500);
-      return;
-    }
-
-    const shuffled = shuffle(all.map((q) => q.questionId));
-    const sessionId = randomBytes(16).toString("hex");
-
-    // 获取当前激活常模版本，快照到 session 保证报告稳定
     const activeNormVersion = await getActiveNormVersion("BIG5");
     if (!activeNormVersion) {
       sendErr(res, "No active norm version found. Please import norms first.", 500);
       return;
     }
 
+    let selectedIds: string[];
+    let instrumentVersion: string;
+
+    if (assessmentType === "BFI2_FREE") {
+      // ── BFI2_FREE：每维度选 4 题，覆盖全部 3 个 facet ──────────────
+      const allWithMeta = await Questions.find({
+          isActive: true,
+          modelType: "BIG5",
+          $or: [{ gender: gender as Gender }, { gender: "both" }],
+          bfiFacet: { $exists: true, $ne: null },
+        })
+        .select("questionId dimension bfiFacet -_id")
+        .lean()
+        .exec();
+
+      if (allWithMeta.length === 0) {
+        sendErr(res, "Question bank is empty", 500);
+        return;
+      }
+
+      // 按维度 → facet 分组
+      const dimFacetMap = new Map<string, Map<string, string[]>>();
+      for (const dim of BIG5_DIMS) dimFacetMap.set(dim, new Map());
+
+      for (const q of allWithMeta) {
+        const dim = q.dimension as Big5Dim;
+        if (!BIG5_DIMS.includes(dim)) continue;
+        const facet = q.bfiFacet!;
+        const facetMap = dimFacetMap.get(dim)!;
+        if (!facetMap.has(facet)) facetMap.set(facet, []);
+        facetMap.get(facet)!.push(q.questionId);
+      }
+
+      // 校验每个维度至少有 3 个 facet 各 1 题
+      for (const dim of BIG5_DIMS) {
+        const facetMap = dimFacetMap.get(dim)!;
+        if (facetMap.size < 3) {
+          sendErr(res, `Dimension ${dim} has fewer than 3 facets in question bank`, 500);
+          return;
+        }
+      }
+
+      // 每维度按 2+1+1 策略选 4 题
+      const perDimIds: string[] = [];
+      for (const dim of BIG5_DIMS) {
+        const picked = selectFromFacets(dimFacetMap.get(dim)!, BFI2_FREE_ITEMS_PER_DIM);
+        perDimIds.push(...picked);
+      }
+
+      selectedIds = shuffle(perDimIds);
+      instrumentVersion = BFI2_FREE_INSTRUMENT_VERSION;
+    } else {
+      // ── BFI2（完整版）：全量题目打乱 ────────────────────────────────
+      const all = await Questions.find({
+          isActive: true,
+          $or: [{ gender: gender as Gender }, { gender: "both" }],
+        })
+        .select("questionId")
+        .lean()
+        .exec();
+      if (all.length === 0) {
+        sendErr(res, "Question bank is empty", 500);
+        return;
+      }
+      selectedIds = shuffle(all.map((q) => q.questionId));
+      instrumentVersion = BFI2_INSTRUMENT_VERSION;
+    }
+
+    // 解析邀请码 → referrerId（不能邀请自己）
+    let referrerId: string | undefined;
+    if (inviteCode && typeof inviteCode === "string") {
+      const resolved = await resolveInviteCode(inviteCode);
+      if (resolved && resolved !== openId) referrerId = resolved;
+    }
+
+    const sessionId = randomBytes(16).toString("hex");
     const Sessions = getSessionModel();
     await Sessions.create({
       sessionId,
@@ -117,14 +219,15 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
       assessmentType,
       status: "in_progress",
       userProfile: { gender: gender as Gender, age: ageNum },
-      instrumentVersion: BFI2_INSTRUMENT_VERSION,
+      instrumentVersion,
       normVersion: activeNormVersion,
-      questionIds: shuffled,
+      questionIds: selectedIds,
       answers: [],
+      ...(referrerId ? { referrerId } : {}),
     });
 
-    const totalBatches = Math.ceil(shuffled.length / BATCH_SIZE);
-    sendSucc(res, { sessionId, totalQuestions: shuffled.length, totalBatches });
+    const totalBatches = Math.ceil(selectedIds.length / BATCH_SIZE);
+    sendSucc(res, { sessionId, totalQuestions: selectedIds.length, totalBatches });
   } catch (err) {
     logger.error("[assessment/start]", err);
     sendErr(res, "Internal error", 500);
@@ -280,29 +383,35 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       }
     }
 
-    const big5Dims: Big5Dim[] = ["O", "C", "E", "A", "N"];
+    const isFreeVersion = session.assessmentType === "BFI2_FREE";
+    // 完整版：每维度固定 12 题；免费版：每维度 BFI2_FREE_ITEMS_PER_DIM 题
+    const expectedPerDomain = isFreeVersion ? BFI2_FREE_ITEMS_PER_DIM : 12;
+
     const rawBig5Mean: Record<string, number> = {};
     const big5DomainSum: Record<string, number> = {};
-    for (const dim of big5Dims) {
+    for (const dim of BIG5_DIMS) {
       const cnt = domainAdjCount[dim] ?? 0;
       const sum = domainAdjSum[dim] ?? 0;
-      if (cnt !== 12) {
-        logger.error(`[assessment/complete] BFI-2 domain ${dim} item count ${cnt}, expected 12`);
+      if (cnt !== expectedPerDomain) {
+        logger.error(`[assessment/complete] ${session.assessmentType} domain ${dim} item count ${cnt}, expected ${expectedPerDomain}`);
         sendErr(res, "Assessment data inconsistent (BFI-2)", 500);
         return;
       }
-      rawBig5Mean[dim] = parseFloat((sum / 12).toFixed(4));
+      rawBig5Mean[dim] = parseFloat((sum / cnt).toFixed(4));
       big5DomainSum[dim] = parseFloat(sum.toFixed(4));
     }
 
+    // 子维度均分：完整版严格校验 4 题/facet；免费版宽松（允许 1-2 题/facet）
     const bfi2FacetMeans: Record<string, number> = {};
     for (const [facet, cnt] of Object.entries(facetAdjCount)) {
-      if (cnt !== 4) {
+      if (!isFreeVersion && cnt !== 4) {
         logger.error(`[assessment/complete] BFI-2 facet ${facet} count ${cnt}, expected 4`);
         sendErr(res, "Assessment data inconsistent (BFI-2 facets)", 500);
         return;
       }
-      bfi2FacetMeans[facet] = parseFloat(((facetAdjSum[facet] ?? 0) / 4).toFixed(4));
+      if (cnt > 0) {
+        bfi2FacetMeans[facet] = parseFloat(((facetAdjSum[facet] ?? 0) / cnt).toFixed(4));
+      }
     }
 
     const { gender, age } = session.userProfile;
@@ -325,10 +434,12 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       topCareers,
     });
 
-    // 常模元信息快照（写进 result，报告可展示来源）
+    // 常模元信息快照
     const normMeta = await getNormMeta(normVersion);
 
-    const freeSummary = `${report.coverLine}\n\n${report.summaryLine}`;
+    // 免费版在 freeSummary 中注明为快速版
+    const versionNote = isFreeVersion ? "\n\n（基于20题快速版，精度低于60题完整版）" : "";
+    const freeSummary = `${report.coverLine}\n\n${report.summaryLine}${versionNote}`;
 
     session.result = {
       big5Scores:    rawBig5Mean,
@@ -346,6 +457,13 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     };
     session.status = "completed";
     await session.save();
+
+    // 触发邀请积分（异步，不阻塞响应）
+    if (session.referrerId && !session.referrerCredited) {
+      creditInviter(session.referrerId, sessionId).catch((e) =>
+        logger.error("[assessment/complete] creditInviter failed:", e)
+      );
+    }
 
     sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
   } catch (err) {

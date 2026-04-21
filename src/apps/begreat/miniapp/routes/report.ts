@@ -10,8 +10,10 @@ const router = Router();
 
 /**
  * GET /report/:sessionId
- * 免费：返回 personalityLabel + freeSummary + topCareers 前3名标题
- * 付费：返回完整 result（所有职业 + Big5 详情 + 胜任力分析）
+ *
+ * Tier-0 free (completed):          personalityLabel + freeSummary + top3 标题+匹配分+AI风险徽章
+ * Tier-1 invite_unlocked:           + Big5图 + 胜任力 + top3 含描述/行业/技能（无薪资/AI建议）
+ * Tier-2 paid:                      完整报告
  */
 router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
@@ -30,24 +32,72 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     const authCfg = (sysCfgComp.server_auth_config ?? {}) as { paymentEnabled?: boolean };
     const paymentEnabled = authCfg.paymentEnabled !== false;
 
-    const isPaid = paymentEnabled ? session.status === "paid" : true;
+    const isPaid           = paymentEnabled ? session.status === "paid" : true;
+    const isInviteUnlocked = !isPaid && session.status === "invite_unlocked";
     const { result } = session;
-
     const reportPayload = result.report ?? null;
+    const tpl   = loadReportTemplate();
+    const bands = tpl.careers.ai_impact.risk_bands;
+    const allCareers = result.topCareers;
+    const highCount = allCareers.filter(
+      (c) => c.aiRisk !== undefined && c.aiRisk > bands.medium.max
+    ).length;
 
-    if (!isPaid) {
-      // 免费版：顶层标签 + 模板报告 + 职业前 3 名（含 AI 风险标志，无详细建议）
-      const tpl = loadReportTemplate();
-      const bands = tpl.careers.ai_impact.risk_bands;
-
-      const allCareers = result.topCareers;
-      const highCount = allCareers.filter((c) => {
-        if (c.aiRisk === undefined) return false;
-        return c.aiRisk > bands.medium.max;
-      }).length;
+    if (isPaid) {
+      // ── Tier-2: 完整报告 ─────────────────────────────────────────────
+      sendSucc(res, {
+        isPaid: true,
+        isInviteUnlocked: false,
+        personalityLabel:   result.personalityLabel,
+        freeSummary:        result.freeSummary,
+        report:             reportPayload,
+        big5Normalized:     result.big5Normalized,
+        bfi2FacetMeans:     result.bfi2FacetMeans,
+        topCareers:         result.topCareers,
+        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
+        facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
+        normMeta: {
+          version:    result.normVersion    ?? null,
+          source:     result.normSource     ?? null,
+          sampleSize: result.normSampleSize ?? null,
+        },
+      });
+    } else if (isInviteUnlocked) {
+      // ── Tier-1: 邀请解锁层 ───────────────────────────────────────────
+      // 职业：top3，含描述/行业/技能，无薪资/AI建议
+      const top3Invite = result.topCareers.slice(0, 3).map((c) => ({
+        code:        c.code,
+        title:       c.title,
+        matchScore:  c.matchScore,
+        description: c.description,
+        industry:    c.industry,
+        level:       c.level,
+        skills:      c.skills ? { required: c.skills.required ?? [] } : undefined,
+        aiRisk:      buildFreeAiRisk(c.aiRisk, bands),   // 只显示徽章，无建议
+        // salary / aiImpactAdvice / ageHints 不返回
+      }));
 
       sendSucc(res, {
-        isPaid: false,
+        isPaid:           false,
+        isInviteUnlocked: true,
+        personalityLabel:   result.personalityLabel,
+        freeSummary:        result.freeSummary,
+        report:             reportPayload,
+        big5Normalized:     result.big5Normalized,
+        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
+        topCareers:         top3Invite,
+        aiRiskSummary:      { total: allCareers.length, highCount },
+        normMeta: {
+          version:    result.normVersion    ?? null,
+          source:     result.normSource     ?? null,
+          sampleSize: result.normSampleSize ?? null,
+        },
+      });
+    } else {
+      // ── Tier-0: 免费层 ───────────────────────────────────────────────
+      sendSucc(res, {
+        isPaid:           false,
+        isInviteUnlocked: false,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
         report:           reportPayload,
@@ -56,24 +106,6 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
           return { title: c.title, matchScore: c.matchScore, aiRisk };
         }),
         aiRiskSummary: { total: allCareers.length, highCount },
-      });
-    } else {
-      // 付费版：完整报告
-      sendSucc(res, {
-        isPaid: true,
-        personalityLabel: result.personalityLabel,
-        freeSummary:      result.freeSummary,
-        report:             reportPayload,
-        big5Normalized:   result.big5Normalized,
-        bfi2FacetMeans:   result.bfi2FacetMeans,
-        topCareers:       result.topCareers,
-        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
-        facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
-        normMeta: {
-          version:    result.normVersion    ?? null,
-          source:     result.normSource     ?? null,
-          sampleSize: result.normSampleSize ?? null,
-        },
       });
     }
   } catch (err) {
