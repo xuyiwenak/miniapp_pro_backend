@@ -34,6 +34,7 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
 
     const isPaid           = paymentEnabled ? session.status === "paid" : true;
     const isInviteUnlocked = !isPaid && session.status === "invite_unlocked";
+    const isFreeVersion    = session.assessmentType === "BFI2_FREE";
     const { result } = session;
     const reportPayload = result.report ?? null;
     const tpl   = loadReportTemplate();
@@ -43,11 +44,31 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
       (c) => c.aiRisk !== undefined && c.aiRisk > bands.medium.max
     ).length;
 
+    // ── BFI2_FREE: 始终返回简洁免费版，与支付状态无关 ──────────────────
+    if (isFreeVersion) {
+      sendSucc(res, {
+        isPaid:           false,
+        isInviteUnlocked: false,
+        isFreeVersion:    true,
+        assessmentType:   session.assessmentType,
+        personalityLabel: result.personalityLabel,
+        freeSummary:      result.freeSummary,
+        topCareers: result.topCareers.slice(0, 3).map((c) => ({
+          code:        c.code,
+          title:       c.title,
+          matchScore:  c.matchScore,
+          description: c.description || "",
+        })),
+      });
+      return;
+    }
+
     if (isPaid) {
       // ── Tier-2: 完整报告 ─────────────────────────────────────────────
       sendSucc(res, {
         isPaid: true,
         isInviteUnlocked: false,
+        isFreeVersion:    false,
         personalityLabel:   result.personalityLabel,
         freeSummary:        result.freeSummary,
         report:             reportPayload,
@@ -94,16 +115,16 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         },
       });
     } else {
-      // ── Tier-0: 免费层 ───────────────────────────────────────────────
+      // ── Tier-0: BFI2 免费层（未付费、未邀请解锁） ────────────────────
       sendSucc(res, {
         isPaid:           false,
         isInviteUnlocked: false,
+        isFreeVersion:    false,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
-        report:           reportPayload,
         topCareers: result.topCareers.slice(0, 3).map((c) => {
           const aiRisk = buildFreeAiRisk(c.aiRisk, bands);
-          return { title: c.title, matchScore: c.matchScore, aiRisk };
+          return { code: c.code, title: c.title, matchScore: c.matchScore, aiRisk };
         }),
         aiRiskSummary: { total: allCareers.length, highCount },
       });

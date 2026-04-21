@@ -147,7 +147,8 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
       assessmentType,
       createdAt: { $gte: todayStart },
     });
-    if (todayCount >= DAILY_LIMITS[assessmentType]) {
+    const isDev = (process.env.environment ?? "development") === "development";
+    if (!isDev && todayCount >= DAILY_LIMITS[assessmentType]) {
       const typeLabel = assessmentType === "BFI2_FREE" ? "免费版" : "完整版";
       sendErr(res, `今日${typeLabel}测评次数已达上限，请明天再来`, 429);
       return;
@@ -445,7 +446,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     // 职业匹配
     const Occupations = getOccupationModel();
     const occupations = await Occupations.find({ isActive: true }).lean().exec();
-    const topCareers = matchCareers({ big5Norm, age }, occupations);
+    const topCareers = matchCareers({ big5Norm, age }, occupations, 20);
 
     // 性格标签
     const { label, summary } = buildPersonalityLabel(big5Norm);
