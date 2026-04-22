@@ -4,7 +4,7 @@ import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
 import { loadReportTemplate } from "../services/reportTemplate";
-import { ComponentManager, EComName } from "../../../../common/BaseComponent";
+import { getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
 
 const router = Router();
 
@@ -28,9 +28,7 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
       return;
     }
 
-    const sysCfgComp = ComponentManager.instance.getComponent(EComName.SysCfgComponent);
-    const authCfg = (sysCfgComp.server_auth_config ?? {}) as { paymentEnabled?: boolean };
-    const paymentEnabled = authCfg.paymentEnabled !== false;
+    const paymentEnabled = getRuntimeConfig().payment_enabled;
 
     const isPaid           = paymentEnabled ? session.status === "paid" : true;
     const isInviteUnlocked = !isPaid && session.status === "invite_unlocked";

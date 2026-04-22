@@ -14,7 +14,8 @@
     "  apiV3Key      — API v3 密钥（32位字符串，商户平台「账户中心-API安全」设置）",
     "  serialNo      — 商户 API 证书序列号（商户平台下载证书时可见）",
     "  privateKeyPath — apiclient_key.pem 在服务器上的绝对路径",
-    "  notifyBaseUrl — 支付回调域名（需在微信支付商户平台白名单中）"
+    "  notifyBaseUrl — 支付回调域名（需在微信支付商户平台白名单中）",
+    "  price_fen     — 支付金额（单位：分），默认 2900 即 ¥29，测试时可改为 1 即 ¥0.01"
   ],
   "wx_pay": {
     "appId": "wxYOUR_MINIAPP_APPID",
@@ -22,6 +23,7 @@
     "apiV3Key": "YOUR_32_CHAR_V3_API_KEY_HERE_XXXXXXXX",
     "serialNo": "YOUR_CERT_SERIAL_NUMBER_HEX_STRING",
     "privateKeyPath": "/app/config/apiclient_key.pem",
-    "notifyBaseUrl": "https://your-domain.com/begreat"
+    "notifyBaseUrl": "https://your-domain.com/begreat",
+    "price_fen": 2900
   }
 }

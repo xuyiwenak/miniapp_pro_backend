@@ -7,6 +7,7 @@ import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/respons
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
+import { getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
 
 const router = Router();
 
@@ -64,6 +65,16 @@ function buildV3Authorization(
 }
 
 /**
+ * GET /payment/config
+ * 下发支付配置给前端（当前价格）
+ */
+router.get("/config", (_req, res: Response) => {
+  const { price_fen: fen } = getRuntimeConfig();
+  const yuan = (fen / 100).toFixed(2).replace(/\.00$/, "");
+  sendSucc(res, { priceFen: fen, priceText: `¥${yuan}` });
+});
+
+/**
  * POST /payment/prepay
  * 创建预下单，同步写入 PaymentRecord(pending)
  */
@@ -85,6 +96,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       if (session.status !== "paid") {
         const outTradeNo = `bg_${sessionId}_dev`;
         // 幂等：dev 模式下同一 session 只写一条
+        const priceFen = getRuntimeConfig().price_fen;
         await Payments.updateOne(
           { outTradeNo },
           {
@@ -92,7 +104,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
               outTradeNo,
               sessionId,
               openId:  req.userId,
-              amount:  2900,
+              amount:  priceFen,
               status:  "success",
               paidAt:  new Date(),
               imageGenerated: false,
@@ -131,13 +143,14 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
     const outTradeNo = `bg_${sessionId}_${Date.now()}`;
     const privateKey = loadPrivateKey(payCfg.privateKeyPath);
 
+    const priceFen = getRuntimeConfig().price_fen;
     const reqBody = JSON.stringify({
       appid:        payCfg.appId,
       mchid:        payCfg.mchId,
       description:  "Careertest 完整报告解锁",
       out_trade_no: outTradeNo,
       notify_url:   `${payCfg.notifyBaseUrl ?? process.env.PUBLIC_BASE_URL ?? ""}/payment/callback`,
-      amount:       { total: 2900, currency: "CNY" },
+      amount:       { total: priceFen, currency: "CNY" },
       payer:        { openid: req.userId },
     });
 
@@ -173,12 +186,12 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       return;
     }
 
-    // 预下单成功后写入 pending 记录
+    // 预下单成功后写入 pending 记录（priceFen 已在上方读取）
     await Payments.create({
       outTradeNo,
       sessionId,
       openId:  req.userId,
-      amount:  2900,
+      amount:  priceFen,
       status:  "pending",
       imageGenerated: false,
     });

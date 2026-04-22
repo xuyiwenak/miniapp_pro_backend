@@ -10,6 +10,7 @@ import * as path from "path";
 import { ComponentManager, EComName } from "../../../../common/BaseComponent";
 import { getOccupationModel } from "../../dbservice/BegreatDBModel";
 import { gameLogger as logger } from "../../../../util/logger";
+import { reloadRuntimeConfig, getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
 
 const router = Router();
 
@@ -27,6 +28,28 @@ function adminAuth(req: Request, res: Response, next: () => void) {
   }
   next();
 }
+
+// ── 热加载运行时配置 ──────────────────────────────────────────────────────────
+//
+// POST /admin/reload-config
+// 重新读取 runtime_config.json，无需重启容器立即生效。
+// 当前生效配置可通过 GET /admin/config 查看。
+
+router.post("/reload-config", adminAuth, (_req: Request, res: Response) => {
+  try {
+    const current = reloadRuntimeConfig();
+    logger.info("[admin/reload-config] runtime config reloaded");
+    res.json({ success: true, config: current });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error("[admin/reload-config] failed:", msg);
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+
+router.get("/config", adminAuth, (_req: Request, res: Response) => {
+  res.json({ success: true, config: getRuntimeConfig() });
+});
 
 // ── 职业种子数据导入 ──────────────────────────────────────────────────────────
 //

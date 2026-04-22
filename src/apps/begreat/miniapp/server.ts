@@ -12,8 +12,11 @@ import reportRoutes     from "./routes/report";
 import paymentRoutes    from "./routes/payment";
 import inviteRoutes     from "./routes/invite";
 import adminRoutes      from "./routes/admin";
+import { initRuntimeConfig } from "../config/BegreatRuntimeConfig";
 
 export function createBegreatApp(): express.Express {
+  initRuntimeConfig();
+
   const app = express();
   setupCommonMiniappApp(app, {
     logger,
