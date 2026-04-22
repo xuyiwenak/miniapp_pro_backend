@@ -65,6 +65,13 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
 
     if (isPaid) {
       // ── Tier-2: 完整报告 ─────────────────────────────────────────────
+      const all = result.topCareers;                      // 按匹配度降序，最多 20 条
+      const top5    = all.slice(0, 5);
+      // bottom5：末尾 5 条倒序（最不适合的排第一）
+      const bottom5 = all.length >= 10
+        ? [...all.slice(-5)].reverse()
+        : [];
+
       sendSucc(res, {
         isPaid: true,
         isInviteUnlocked: false,
@@ -74,7 +81,8 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         report:             reportPayload,
         big5Normalized:     result.big5Normalized,
         bfi2FacetMeans:     result.bfi2FacetMeans,
-        topCareers:         result.topCareers,
+        topCareers:         top5,
+        bottomCareers:      bottom5,
         competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
         facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
         normMeta: {
