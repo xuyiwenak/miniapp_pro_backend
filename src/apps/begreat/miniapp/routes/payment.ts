@@ -140,7 +140,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
       sendErr(res, "Assessment not completed", 400); return;
     }
 
-    const outTradeNo = `bg_${sessionId}_${Date.now()}`;
+    const outTradeNo = `bg_${sessionId.substring(0, 22)}_${Date.now().toString().slice(-6)}`;
     const privateKey = loadPrivateKey(payCfg.privateKeyPath);
 
     const priceFen = getRuntimeConfig().price_fen;
@@ -255,25 +255,26 @@ router.post("/callback", async (req: Request, res: Response) => {
     }
 
     const outTradeNo = notify.out_trade_no ?? "";
-    // out_trade_no 格式：bg_{sessionId}_{timestamp}
-    const parts     = outTradeNo.split("_");
-    const sessionId = parts[1] ?? "";
 
-    if (sessionId) {
+    if (outTradeNo) {
       const Sessions = getSessionModel();
       const Payments = getPaymentModel();
       const paidAt   = new Date();
 
       // 幂等更新：只对 pending 状态生效，防重复回调
-      await Payments.updateOne(
+      const payment = await Payments.findOneAndUpdate(
         { outTradeNo, status: "pending" },
-        { $set: { status: "success", paidAt } }
+        { $set: { status: "success", paidAt } },
+        { new: true }
       );
-      await Sessions.updateOne(
-        { sessionId, status: "completed" },
-        { $set: { status: "paid", paidAt } }
-      );
-      logger.info("[payment/callback] session paid:", sessionId, "trade:", outTradeNo);
+
+      if (payment?.sessionId) {
+        await Sessions.updateOne(
+          { sessionId: payment.sessionId, status: "completed" },
+          { $set: { status: "paid", paidAt } }
+        );
+        logger.info("[payment/callback] session paid:", payment.sessionId, "trade:", outTradeNo);
+      }
     }
 
     res.json({ code: "SUCCESS", message: "OK" });
