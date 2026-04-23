@@ -6,7 +6,7 @@ import path from "path";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
-import { gameLogger as logger } from "../../../../util/logger";
+import { paymentLogger as logger } from "../../../../util/logger";
 import { getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
 
 const router = Router();

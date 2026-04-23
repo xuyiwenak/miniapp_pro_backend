@@ -44,3 +44,4 @@ export const serverLogger = log4js.getLogger("server");
 export const gameLogger = log4js.getLogger("game");
 export const prop_history_csvLogger = log4js.getLogger("prop_history_csv");
 export const cozeDebugLogger = log4js.getLogger("coze_debug");
+export const paymentLogger = log4js.getLogger("payment");
