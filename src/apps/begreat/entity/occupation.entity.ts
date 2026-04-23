@@ -18,8 +18,9 @@ export interface IOccupationNorm {
   };
   /** 2026 高薪指数 0-1 */
   salaryIndex: number;
-  /** 年龄适配系数 */
-  ageBonusMultiplier: number;
+  /** 年龄适配系数（按年龄段分段配置） */
+  ageBonusMultiplier: Record<AgeGroup, number>;
+  /** 年龄适用范围（用于过滤不符合年龄段的职业） */
   ageRange: { min: number; max: number };
   description: string;
   isActive: boolean;
@@ -52,7 +53,10 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
       emotionalStability:{ type: Number, default: 0 },
     },
     salaryIndex:         { type: Number, default: 0.5 },
-    ageBonusMultiplier:  { type: Number, default: 1.0 },
+    ageBonusMultiplier:  {
+      type: Schema.Types.Mixed,
+      default: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 }
+    },
     ageRange: {
       min: { type: Number, default: 18 },
       max: { type: Number, default: 60 },

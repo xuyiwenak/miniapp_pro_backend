@@ -118,7 +118,7 @@ router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response
 
 router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
-  const { gender, age, assessmentType: rawType, inviteCode } = req.body ?? {};
+  const { gender, age, assessmentType: rawType } = req.body ?? {};
   const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : "BFI2";
 
   if (!gender || !["male", "female"].includes(gender)) {
@@ -230,13 +230,6 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
       instrumentVersion = BFI2_INSTRUMENT_VERSION;
     }
 
-    // 解析邀请码 → referrerId（不能邀请自己）
-    let referrerId: string | undefined;
-    if (inviteCode && typeof inviteCode === "string") {
-      const resolved = await resolveInviteCode(inviteCode);
-      if (resolved && resolved !== openId) referrerId = resolved;
-    }
-
     const sessionId = randomBytes(16).toString("hex");
     await Sessions.create({
       sessionId,
@@ -248,7 +241,6 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
       normVersion: activeNormVersion,
       questionIds: selectedIds,
       answers: [],
-      ...(referrerId ? { referrerId } : {}),
     });
 
     const totalBatches = Math.ceil(selectedIds.length / BATCH_SIZE);
@@ -482,13 +474,6 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     };
     session.status = "completed";
     await session.save();
-
-    // 触发邀请积分（异步，不阻塞响应）
-    if (session.referrerId && !session.referrerCredited) {
-      creditInviter(session.referrerId, sessionId).catch((e) =>
-        logger.error("[assessment/complete] creditInviter failed:", e)
-      );
-    }
 
     sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
   } catch (err) {

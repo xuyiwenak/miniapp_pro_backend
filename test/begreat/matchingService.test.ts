@@ -12,7 +12,7 @@ function makeJob(overrides: Partial<IOccupationNorm>): IOccupationNorm {
     secondaryRiasec: "R",
     requiredBig5:    { openness: 0, conscientiousness: 0, emotionalStability: 0 },
     salaryIndex:     0.5,
-    ageBonusMultiplier: 1.0,
+    ageBonusMultiplier: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 },
     ageRange:        { min: 18, max: 60 },
     description:     "",
     isActive:        true,
@@ -84,7 +84,7 @@ describe("MatchingService.matchCareers", () => {
     assert.ok(sweHighO.matchScore > sweLowO.matchScore, "高开放性应拉高高薪职业匹配分");
   });
 
-  it("Big5 尽责性高 → 额外 +8 分", () => {
+  it("Big5 尽责性差值 2.0 → 总分差 16 分（2.0 × 8）", () => {
     const withC = matchCareers(
       { riasecNorm: { I: 1.0 }, big5Norm: { C: 1.0 }, age: 25 },
       JOBS
@@ -95,10 +95,10 @@ describe("MatchingService.matchCareers", () => {
     );
     const sweC  = withC.find((r) => r.code === "SWE")!;
     const sweNC = noC.find((r)  => r.code === "SWE")!;
-    assert.ok(sweC.matchScore - sweNC.matchScore === 8, `尽责性加分应为 8，得 ${sweC.matchScore - sweNC.matchScore}`);
+    assert.ok(sweC.matchScore - sweNC.matchScore === 16, `尽责性加分应为 16，得 ${sweC.matchScore - sweNC.matchScore}`);
   });
 
-  it("情绪稳定（N 低）→ 额外 +7 分", () => {
+  it("情绪稳定性差值 2.0 → 总分差 12 分（2.0 × 6）", () => {
     const stable   = matchCareers(
       { riasecNorm: { I: 1.0 }, big5Norm: { N: -1.0 }, age: 25 },
       JOBS
@@ -109,13 +109,32 @@ describe("MatchingService.matchCareers", () => {
     );
     const sweS = stable.find((r)   => r.code === "SWE")!;
     const sweU = unstable.find((r) => r.code === "SWE")!;
-    assert.ok(sweS.matchScore - sweU.matchScore === 7, `情绪稳定加分应为 7，得 ${sweS.matchScore - sweU.matchScore}`);
+    assert.ok(sweS.matchScore - sweU.matchScore === 12, `情绪稳定加分应为 12，得 ${sweS.matchScore - sweU.matchScore}`);
+  });
+
+  it("年龄符合时使用对应年龄组的系数", () => {
+    const job = makeJob({
+      code: "PRIME", title: "黄金期职位",
+      primaryRiasec: "I",
+      ageRange: { min: 18, max: 50 },
+      ageBonusMultiplier: { "18-24": 0.9, "25-34": 1.2, "35-44": 1.1, "45+": 1.0 }
+    });
+    const age25 = matchCareers({ riasecNorm: { I: 1.0 }, big5Norm: {}, age: 25 }, [job]);
+    const age30 = matchCareers({ riasecNorm: { I: 1.0 }, big5Norm: {}, age: 30 }, [job]);
+    const age35 = matchCareers({ riasecNorm: { I: 1.0 }, big5Norm: {}, age: 35 }, [job]);
+
+    // 25岁和30岁都在25-34年龄段，应该分数相同
+    assert.strictEqual(age25[0]!.matchScore, age30[0]!.matchScore, "同一年龄段分数应相同");
+
+    // 25-34年龄段(1.2)的分数应该高于35-44年龄段(1.1)
+    assert.ok(age25[0]!.matchScore > age35[0]!.matchScore, "黄金年龄段分数应更高");
   });
 
   it("年龄不符时 matchScore 乘以 0.85", () => {
     const youngJob = makeJob({
       code: "YOUNG", title: "青年职位",
       primaryRiasec: "I", ageRange: { min: 18, max: 24 },
+      ageBonusMultiplier: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 }
     });
     const inRange  = matchCareers({ riasecNorm: { I: 1.0 }, big5Norm: {}, age: 22 }, [youngJob]);
     const outRange = matchCareers({ riasecNorm: { I: 1.0 }, big5Norm: {}, age: 40 }, [youngJob]);

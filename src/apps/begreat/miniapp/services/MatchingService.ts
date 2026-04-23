@@ -1,9 +1,20 @@
 import type { ICareerMatch } from "../../entity/session.entity";
 import type { IOccupationNorm } from "../../entity/occupation.entity";
+import type { AgeGroup } from "../../entity/norm.entity";
 
 interface MatchInput {
   big5Norm: Record<string, number>;
   age: number;
+}
+
+/**
+ * 根据年龄返回对应的年龄组
+ */
+function getAgeGroup(age: number): AgeGroup {
+  if (age >= 45) return "45+";
+  if (age >= 35) return "35-44";
+  if (age >= 25) return "25-34";
+  return "18-24";
 }
 
 /**
@@ -23,20 +34,22 @@ export function matchCareers(
   const results = occupations
     .filter((job) => job.isActive)
     .map((job): ICareerMatch => {
-      // ── Big Five 胜任力连续打分（基础分 50，按偏差加减） ────
+      // ── Big Five 胜任力连续打分（基础分 60，按偏差加减） ────
       // 差值 = 用户Z分 - 职业阈值，正值表示超额匹配，负值表示欠缺
       const oDiff = openness          - job.requiredBig5.openness;
       const cDiff = conscientiousness - job.requiredBig5.conscientiousness;
       const nDiff = emotionalStability - job.requiredBig5.emotionalStability;
 
-      let score = 50
+      let score = 60
         + oDiff * 12 * job.salaryIndex   // 开放性权重：与薪资指数联动
         + cDiff * 8                       // 尽责性权重
         + nDiff * 6;                      // 情绪稳定性权重
 
       // ── 年龄阶段乘数 ────────────────────────────────────────
       if (age >= job.ageRange.min && age <= job.ageRange.max) {
-        score *= job.ageBonusMultiplier;
+        // 年龄符合范围，使用对应年龄组的系数
+        const ageGroup = getAgeGroup(age);
+        score *= job.ageBonusMultiplier[ageGroup];
       } else {
         // 年龄不符，轻度扣分
         score *= 0.85;

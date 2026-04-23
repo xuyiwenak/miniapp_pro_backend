@@ -72,6 +72,10 @@ export interface IAssessmentSession {
   /** 邀请解锁时间 */
   inviteUnlockedAt?: Date;
   paidAt?: Date;
+  /** 管理员赠送解锁标记（用于内测、合作伙伴等场景） */
+  grantedByAdmin?: boolean;
+  /** 赠送原因/备注 */
+  grantReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -137,6 +141,8 @@ export const SessionSchema = new Schema<IAssessmentSession>(
     referrerCredited:  { type: Boolean, default: false },
     inviteUnlockedAt:  { type: Date },
     paidAt:            { type: Date },
+    grantedByAdmin:    { type: Boolean, default: false, index: true },
+    grantReason:       { type: String },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
 );

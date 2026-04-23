@@ -12,8 +12,7 @@ const router = Router();
  * GET /report/:sessionId
  *
  * Tier-0 free (completed):          personalityLabel + freeSummary + top3 标题+匹配分+AI风险徽章
- * Tier-1 invite_unlocked:           + Big5图 + 胜任力 + top3 含描述/行业/技能（无薪资/AI建议）
- * Tier-2 paid:                      完整报告
+ * Tier-1 paid (or granted):         完整报告
  */
 router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
@@ -30,9 +29,13 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
 
     const paymentEnabled = getRuntimeConfig().payment_enabled;
 
-    const isPaid           = paymentEnabled ? session.status === "paid" : true;
-    const isInviteUnlocked = !isPaid && session.status === "invite_unlocked";
-    const isFreeVersion    = session.assessmentType === "BFI2_FREE";
+    const isPaid        = paymentEnabled ? session.status === "paid" : true;
+    const isFreeVersion = session.assessmentType === "BFI2_FREE";
+
+    // 日志：管理员赠送的报告
+    if (session.grantedByAdmin) {
+      logger.info(`[report/get] Admin granted: ${sessionId}, reason: ${session.grantReason || "N/A"}`);
+    }
     const { result } = session;
     const reportPayload = result.report ?? null;
     const tpl   = loadReportTemplate();
@@ -45,9 +48,8 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     // ── BFI2_FREE: 始终返回简洁免费版，与支付状态无关 ──────────────────
     if (isFreeVersion) {
       sendSucc(res, {
-        isPaid:           false,
-        isInviteUnlocked: false,
-        isFreeVersion:    true,
+        isPaid:        false,
+        isFreeVersion: true,
         assessmentType:   session.assessmentType,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
@@ -62,7 +64,7 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     }
 
     if (isPaid) {
-      // ── Tier-2: 完整报告 ─────────────────────────────────────────────
+      // ── Tier-1: 完整报告（付费或管理员赠送） ──────────────────────────
       const all = result.topCareers;                      // 按匹配度降序，最多 20 条
       const top5    = all.slice(0, 5);
       // bottom5：末尾 5 条倒序（最不适合的排第一）
@@ -71,9 +73,8 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         : [];
 
       sendSucc(res, {
-        isPaid: true,
-        isInviteUnlocked: false,
-        isFreeVersion:    false,
+        isPaid:         true,
+        isFreeVersion:  false,
         personalityLabel:   result.personalityLabel,
         freeSummary:        result.freeSummary,
         report:             reportPayload,
@@ -89,43 +90,11 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
           sampleSize: result.normSampleSize ?? null,
         },
       });
-    } else if (isInviteUnlocked) {
-      // ── Tier-1: 邀请解锁层 ───────────────────────────────────────────
-      // 职业：top3，含描述/行业/技能，无薪资/AI建议
-      const top3Invite = result.topCareers.slice(0, 3).map((c) => ({
-        code:        c.code,
-        title:       c.title,
-        matchScore:  c.matchScore,
-        description: c.description,
-        industry:    c.industry,
-        level:       c.level,
-        skills:      c.skills ? { required: c.skills.required ?? [] } : undefined,
-        aiRisk:      buildFreeAiRisk(c.aiRisk, bands),   // 只显示徽章，无建议
-        // salary / aiImpactAdvice / ageHints 不返回
-      }));
-
-      sendSucc(res, {
-        isPaid:           false,
-        isInviteUnlocked: true,
-        personalityLabel:   result.personalityLabel,
-        freeSummary:        result.freeSummary,
-        report:             reportPayload,
-        big5Normalized:     result.big5Normalized,
-        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
-        topCareers:         top3Invite,
-        aiRiskSummary:      { total: allCareers.length, highCount },
-        normMeta: {
-          version:    result.normVersion    ?? null,
-          source:     result.normSource     ?? null,
-          sampleSize: result.normSampleSize ?? null,
-        },
-      });
     } else {
-      // ── Tier-0: BFI2 免费层（未付费、未邀请解锁） ────────────────────
+      // ── Tier-0: BFI2 免费层（未付费） ────────────────────────────────
       sendSucc(res, {
-        isPaid:           false,
-        isInviteUnlocked: false,
-        isFreeVersion:    false,
+        isPaid:        false,
+        isFreeVersion: false,
         personalityLabel: result.personalityLabel,
         freeSummary:      result.freeSummary,
         topCareers: result.topCareers.slice(0, 3).map((c) => {

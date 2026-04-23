@@ -2,7 +2,7 @@ import http from "http";
 import express from "express";
 
 type CommonMiniappAppOptions = {
-  logger: { info: (...args: unknown[]) => void };
+  logger: { info: (...args: unknown[]) => void; debug: (...args: unknown[]) => void };
   logPrefix: string;
   jsonLimit: string;
   cors?: {
@@ -18,7 +18,7 @@ export function setupCommonMiniappApp(
   options: CommonMiniappAppOptions,
 ): void {
   app.use((req, _res, next) => {
-    options.logger.info(`[${options.logPrefix}] ${req.method} ${req.path ?? req.url}`);
+    options.logger.debug(`[${options.logPrefix}] ${req.method} ${req.path ?? req.url}`);
     next();
   });
 
