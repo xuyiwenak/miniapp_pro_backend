@@ -158,6 +158,7 @@ router.post("/prepay", authMiddleware, async (req: MiniappRequest, res: Response
         headers: {
           "Content-Type":  "application/json",
           "Accept":        "application/json",
+          "User-Agent":    "Mozilla/5.0",
           "Authorization": auth,
         },
       };
@@ -278,18 +279,195 @@ router.post("/callback", async (req: Request, res: Response) => {
 });
 
 /**
+ * 查询微信订单状态（主动查询，不依赖回调）
+ * 用于回调失败时的补偿机制
+ */
+async function queryWxPaymentStatus(outTradeNo: string): Promise<{
+  success: boolean;
+  tradeState?: string;
+  errorMsg?: string;
+}> {
+  const payCfg = getPayConfig().wx_pay;
+  if (!payCfg?.mchId) {
+    logger.error("[payment/query] wx_pay config missing");
+    return { success: false, errorMsg: "Payment not configured" };
+  }
+
+  try {
+    const privateKey = loadPrivateKey(payCfg.privateKeyPath);
+    const urlPath = `/v3/pay/transactions/out-trade-no/${outTradeNo}?mchid=${payCfg.mchId}`;
+    const auth = buildV3Authorization("GET", urlPath, "", payCfg.mchId, payCfg.serialNo, privateKey);
+
+    logger.info(`[payment/query] Querying WeChat order: ${outTradeNo}`);
+
+    const wxRes = await new Promise<any>((resolve, reject) => {
+      const options = {
+        hostname: "api.mch.weixin.qq.com",
+        path: urlPath,
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "Mozilla/5.0",
+          "Authorization": auth,
+        },
+      };
+      const httpReq = https.request(options, (r) => {
+        let data = "";
+        r.on("data", (c) => (data += c));
+        r.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            reject(new Error("Invalid wx response"));
+          }
+        });
+      });
+      httpReq.on("error", reject);
+      httpReq.end();
+    });
+
+    if (wxRes.code) {
+      logger.warn(`[payment/query] WeChat query failed: ${outTradeNo}`, wxRes);
+      return { success: false, errorMsg: wxRes.message || "Unknown error" };
+    }
+
+    const tradeState = wxRes.trade_state;
+    logger.info(`[payment/query] Order ${outTradeNo} state: ${tradeState}`);
+    return { success: true, tradeState };
+  } catch (err) {
+    logger.error(`[payment/query] Exception querying ${outTradeNo}:`, err);
+    return { success: false, errorMsg: "Query failed" };
+  }
+}
+
+/**
  * GET /payment/status/:sessionId
  * 前端轮询支付状态
+ *
+ * 增强逻辑：如果订单状态为pending，主动查询微信订单状态
+ * 解决回调通知不可靠的问题
  */
 router.get("/status/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
   try {
     const Sessions = getSessionModel();
+    const Payments = getPaymentModel();
+
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).select("status paidAt").lean().exec();
     if (!session) { sendErr(res, "Session not found", 404); return; }
-    sendSucc(res, { status: session.status, isPaid: session.status === "paid" });
+
+    // 如果已经支付成功，直接返回
+    if (session.status === "paid") {
+      sendSucc(res, { status: session.status, isPaid: true });
+      return;
+    }
+
+    // 如果状态是completed，查找对应的待支付订单
+    if (session.status === "completed" || session.status === "invite_unlocked") {
+      const payment = await Payments.findOne({ sessionId, openId: req.userId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec();
+
+      // 如果有pending状态的订单，主动查询微信订单状态
+      if (payment && payment.status === "pending") {
+        logger.info(`[payment/status] Found pending order ${payment.outTradeNo}, querying WeChat...`);
+
+        const queryResult = await queryWxPaymentStatus(payment.outTradeNo);
+
+        if (queryResult.success && queryResult.tradeState === "SUCCESS") {
+          // 支付成功，更新数据库
+          const paidAt = new Date();
+          logger.info(`[payment/status] WeChat confirmed payment success: ${payment.outTradeNo}, updating DB...`);
+
+          await Payments.updateOne(
+            { outTradeNo: payment.outTradeNo },
+            { $set: { status: "success", paidAt } }
+          );
+          await Sessions.updateOne(
+            { sessionId },
+            { $set: { status: "paid", paidAt } }
+          );
+
+          logger.info(`[payment/status] DB updated successfully for session: ${sessionId}`);
+          sendSucc(res, { status: "paid", isPaid: true });
+          return;
+        } else if (queryResult.success) {
+          logger.info(`[payment/status] WeChat order ${payment.outTradeNo} state: ${queryResult.tradeState}`);
+        }
+      }
+    }
+
+    // 重新查询session状态，因为可能在上面的逻辑中被更新了
+    const updatedSession = await Sessions.findOne({ sessionId, openId: req.userId }).select("status").lean().exec();
+    const isPaid = updatedSession?.status === "paid";
+    sendSucc(res, { status: updatedSession?.status || session.status, isPaid });
   } catch (err) {
     logger.error("[payment/status]", err);
+    sendErr(res, "Internal error", 500);
+  }
+});
+
+/**
+ * POST /payment/query/:outTradeNo
+ * 手动触发查询微信订单状态并更新数据库
+ * 用于测试或手动补偿回调失败的订单
+ */
+router.post("/query/:outTradeNo", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const { outTradeNo } = req.params;
+
+  try {
+    const Payments = getPaymentModel();
+    const Sessions = getSessionModel();
+
+    // 查找订单
+    const payment = await Payments.findOne({ outTradeNo }).lean().exec();
+    if (!payment) {
+      sendErr(res, "Order not found", 404);
+      return;
+    }
+
+    // 验证订单所属用户
+    if (payment.openId !== req.userId) {
+      sendErr(res, "Unauthorized", 403);
+      return;
+    }
+
+    logger.info(`[payment/query] Manual query triggered for order: ${outTradeNo}`);
+
+    // 查询微信订单状态
+    const queryResult = await queryWxPaymentStatus(outTradeNo);
+
+    if (!queryResult.success) {
+      logger.warn(`[payment/query] Query failed for ${outTradeNo}: ${queryResult.errorMsg}`);
+      sendErr(res, `Query failed: ${queryResult.errorMsg}`, 500);
+      return;
+    }
+
+    const tradeState = queryResult.tradeState;
+
+    if (tradeState === "SUCCESS") {
+      // 支付成功，更新数据库
+      const paidAt = new Date();
+      logger.info(`[payment/query] Payment confirmed SUCCESS: ${outTradeNo}, updating DB...`);
+
+      await Payments.updateOne(
+        { outTradeNo },
+        { $set: { status: "success", paidAt } }
+      );
+      await Sessions.updateOne(
+        { sessionId: payment.sessionId },
+        { $set: { status: "paid", paidAt } }
+      );
+
+      logger.info(`[payment/query] DB updated successfully for order: ${outTradeNo}`);
+      sendSucc(res, { tradeState, updated: true, message: "Payment confirmed and DB updated" });
+    } else {
+      logger.info(`[payment/query] Order ${outTradeNo} current state: ${tradeState}`);
+      sendSucc(res, { tradeState, updated: false, message: `Order state: ${tradeState}` });
+    }
+  } catch (err) {
+    logger.error("[payment/query] Exception:", err);
     sendErr(res, "Internal error", 500);
   }
 });
