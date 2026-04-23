@@ -2,12 +2,12 @@ import { Router, Request, Response } from "express";
 import https from "https";
 import crypto from "crypto";
 import fs from "fs";
-import path from "path";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
 import { paymentLogger as logger } from "../../../../util/logger";
 import { getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
+import { loadSysConfigJson } from "../../../../util/load_json";
 
 const router = Router();
 
@@ -30,19 +30,12 @@ function getPayConfig(): WxPayConfig {
   const env = process.env.ENV ?? process.env.environment ?? "development";
   if (env === "development") return {};
 
-  const localCfgPath = path.resolve(
-    __dirname,
-    `../../../../../apps/begreat/sysconfig/${env}/wx_pay_config.local.json`,
-  );
-  if (fs.existsSync(localCfgPath)) {
-    try {
-      const raw = fs.readFileSync(localCfgPath, "utf-8");
-      return JSON.parse(raw) as WxPayConfig;
-    } catch (e) {
-      logger.warn("[payment] Failed to parse wx_pay_config.local.json:", e);
-    }
+  const [data, msg] = loadSysConfigJson("wx_pay_config.local.json");
+  if (!data) {
+    logger.warn(`[payment] Failed to load wx_pay_config.local.json: ${msg}`);
+    return {};
   }
-  return {};
+  return data as WxPayConfig;
 }
 
 function loadPrivateKey(keyPath: string): string {
