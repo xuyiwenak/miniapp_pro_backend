@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Gender, ICareerMatch } from "../../entity/session.entity";
 import type { IBig5ReportDimension, IReportSnapshot, IAnnotatedCareerMatch, ICareerSection, ICareerAiImpact } from "../../entity/reportResult.entity";
+import type { OccupationAgeGroup } from "../../entity/occupation.entity";
 import { getAgeGroup } from "./CalculationEngine";
 import type { AgeGroup } from "../../entity/norm.entity";
 
@@ -137,6 +138,14 @@ function growthHint(big5T: Record<string, number>): string {
   return "小步试错、建立可持续的改进节奏";
 }
 
+function getOccupationAgeGroup(age: number): OccupationAgeGroup {
+  if (age >= 45) return "45+";
+  if (age >= 31) return "31-35";
+  if (age >= 25) return "25-30";
+  if (age >= 22) return "22-24";
+  return "18-21";
+}
+
 // ── 职业区块构建 ──────────────────────────────────────────────────────────────
 
 type AiBandKey = "low" | "medium" | "high";
@@ -176,6 +185,25 @@ function buildMatchReasonForCareer(
   career: ICareerMatch,
   reasonTpl: Record<string, string>
 ): string {
+  if (career.scoreBreakdown) {
+    const dimLabels: Array<{ label: string; value: number }> = [
+      { label: "开放性", value: career.scoreBreakdown.openness },
+      { label: "尽责性", value: career.scoreBreakdown.conscientiousness },
+      { label: "情绪稳定性", value: career.scoreBreakdown.emotionalStability },
+    ]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 2);
+
+    const dimPart = dimLabels
+      .map((d) => `${d.label}贴合度${d.value >= 0 ? "较高" : "较弱"}`)
+      .join("，");
+    const agePart = career.scoreBreakdown.ageMultiplier >= 1
+      ? "年龄阶段对该职业有加成"
+      : "年龄阶段对该职业有一定折减";
+
+    return `${dimPart}，${agePart}`;
+  }
+
   // 计算用户各维度对该职业需求的"超额贡献"，取最显著的两个
   const dims: Array<{ key: string; score: number }> = [
     { key: "high_O", score: big5Z["O"] ?? 0 },
@@ -202,6 +230,7 @@ function buildMatchReasonForCareer(
 function buildCareerSection(
   careers: ICareerMatch[],
   ageGroup: AgeGroup,
+  age: number,
   gender: Gender,
   big5Z: Record<string, number>,
   tpl: ReportTemplateJson
@@ -209,6 +238,8 @@ function buildCareerSection(
   const ct = tpl.careers;
   const intro = ct.intro_by_age_gender[ageGroup]?.[gender] ?? "";
   const ageCareerContext = ct.age_career_context[ageGroup] ?? "";
+
+  const occupationAgeGroup = getOccupationAgeGroup(age);
 
   const annotated: IAnnotatedCareerMatch[] = careers.map((c) => {
     const industryLabel = c.industry?.primary
@@ -222,7 +253,7 @@ function buildCareerSection(
         ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === "month" ? "月" : "年"}`
         : undefined;
 
-    const ageContextText = c.ageHints?.[ageGroup] ?? undefined;
+    const ageContextText = c.ageHints?.[occupationAgeGroup] ?? undefined;
 
     // 每个职业独立计算匹配原因，突出与该职业最相关的特质维度
     const matchReason = buildMatchReasonForCareer(big5Z, c, ct.match_reasons);
@@ -324,7 +355,7 @@ export function buildBegreatReportSnapshot(input: {
   });
 
   const careerSection = input.topCareers?.length
-    ? buildCareerSection(input.topCareers, ageGroup, input.gender, input.big5Z, tpl)
+    ? buildCareerSection(input.topCareers, ageGroup, input.age, input.gender, input.big5Z, tpl)
     : undefined;
 
   return {

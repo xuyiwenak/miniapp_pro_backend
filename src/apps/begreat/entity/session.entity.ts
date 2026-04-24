@@ -25,6 +25,38 @@ export interface ICareerMatch {
   aiImpactAdvice?: string;
   /** 各年龄段原始说明（来自 occupation，供报告模板渲染使用） */
   ageHints?: Partial<Record<string, string>>;
+  /** 各维度贡献拆解（单位：分） */
+  scoreBreakdown?: {
+    openness: number;
+    conscientiousness: number;
+    emotionalStability: number;
+    ageMultiplier: number;
+    softPenaltyMultiplier?: number;
+  };
+  /** 命中的不推荐规则信息（仅用于解释） */
+  ruleAdjustments?: {
+    softHitIds?: string[];
+    softHitReasons?: string[];
+    advice?: string;
+  };
+}
+
+export interface IExcludedCareer {
+  code: string;
+  title: string;
+  reasons: string[];
+  ruleIds: string[];
+  advice?: string;
+}
+
+export interface ISoftAdjustedCareer {
+  code: string;
+  title: string;
+  matchScore: number;
+  softPenaltyMultiplier: number;
+  reasons: string[];
+  ruleIds: string[];
+  advice?: string;
 }
 
 export interface IAssessmentResult {
@@ -36,6 +68,9 @@ export interface IAssessmentResult {
   bfi2FacetMeans?: Record<string, number>;
   big5Normalized:  Record<string, number>;
   topCareers:       ICareerMatch[];          // 匹配职业，已排序
+  excludedCareers?: IExcludedCareer[];       // 兼容字段：被 hard 规则过滤的职业（含原因）
+  hardExcluded?:    IExcludedCareer[];       // 新字段：hard 规则命中列表
+  softAdjusted?:    ISoftAdjustedCareer[];   // 新字段：soft 规则命中列表（已降权）
   freeSummary:      string;                  // 免费展示标签
   personalityLabel: string;                  // 性格类型，如"艺术型领导者"
   instrumentVersion?: string;
@@ -94,6 +129,7 @@ const CareerMatchSchema = new Schema<ICareerMatch>(
     aiRisk:         { type: Number },
     aiImpactAdvice: { type: String },
     ageHints:       { type: Schema.Types.Mixed },
+    scoreBreakdown: { type: Schema.Types.Mixed },
   },
   { _id: false }
 );
@@ -105,6 +141,9 @@ const ResultSchema = new Schema<IAssessmentResult>(
     bfi2FacetMeans:{ type: Schema.Types.Mixed, default: undefined },
     big5Normalized:{ type: Schema.Types.Mixed, default: {} },
     topCareers:       { type: [CareerMatchSchema], default: [] },
+    excludedCareers:  { type: [Schema.Types.Mixed], default: [] },
+    hardExcluded:     { type: [Schema.Types.Mixed], default: [] },
+    softAdjusted:     { type: [Schema.Types.Mixed], default: [] },
     freeSummary:      { type: String, default: "" },
     personalityLabel: { type: String, default: "" },
     instrumentVersion: { type: String, required: false },

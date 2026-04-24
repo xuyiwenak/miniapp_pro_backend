@@ -15,6 +15,17 @@ export interface IOccupationNorm {
     openness: number;
     conscientiousness: number;
     emotionalStability: number;
+    /** 外向性（可选，仅销售/市场/HR等职业需要） */
+    extraversion?: number;
+    /** 宜人性（可选，仅教育/咨询/医疗等职业需要） */
+    agreeableness?: number;
+  };
+  /** 硬性门槛：低于此值不推荐（可选，仅高风险职业需要） */
+  minimumRequirements?: {
+    emotionalStability?: number;
+    conscientiousness?: number;
+    extraversion?: number;
+    agreeableness?: number;
   };
   /** 2026 高薪指数 0-1 */
   salaryIndex: number;
@@ -51,6 +62,14 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
       openness:          { type: Number, default: 0 },
       conscientiousness: { type: Number, default: 0 },
       emotionalStability:{ type: Number, default: 0 },
+      extraversion:      { type: Number },
+      agreeableness:     { type: Number },
+    },
+    minimumRequirements: {
+      emotionalStability: { type: Number },
+      conscientiousness:  { type: Number },
+      extraversion:       { type: Number },
+      agreeableness:      { type: Number },
     },
     salaryIndex:         { type: Number, default: 0.5 },
     ageBonusMultiplier:  {
