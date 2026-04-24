@@ -3,7 +3,7 @@ import { Schema } from "mongoose";
 export type OccupationLevel = "entry" | "mid" | "senior";
 
 /** 职业匹配使用的年龄分组（与常模 AgeGroup 不同） */
-export type OccupationAgeGroup = "18-21" | "22-24" | "25-30" | "31-35" | "45+";
+export type OccupationAgeGroup = "18-21" | "22-24" | "25-30" | "31-35" | "36-44" | "45+";
 
 /** 职业排除规则（硬规则/软规则共用结构） */
 export interface IExcludeRule {
@@ -58,7 +58,7 @@ export interface IOccupationNorm {
   industry?: { primary: string; secondary: string };
   /** 职业阶段（入门/中级/资深） */
   level?: OccupationLevel;
-  /** 薪资区间（元/月 或 元/年） */
+  /** 薪资区间（千元/月 或 千元/年，如 min:18 表示 18K/月） */
   salary?: { min: number; max: number; unit: "month" | "year" };
   /** 所需技能 */
   skills?: { required: string[]; tools: string[] };
