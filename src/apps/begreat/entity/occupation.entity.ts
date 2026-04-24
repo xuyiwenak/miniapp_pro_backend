@@ -1,7 +1,19 @@
 import { Schema } from "mongoose";
-import type { AgeGroup } from "./norm.entity";
 
 export type OccupationLevel = "entry" | "mid" | "senior";
+
+/** 职业匹配使用的年龄分组（与常模 AgeGroup 不同） */
+export type OccupationAgeGroup = "18-21" | "22-24" | "25-30" | "31-35" | "45+";
+
+/** 职业排除规则（硬规则/软规则共用结构） */
+export interface IExcludeRule {
+  id: string;
+  metric: string;
+  op: "<" | "<=" | ">" | ">=" | "==" | "in" | "not_in";
+  value: number | number[];
+  penalty?: number;
+  reason: string;
+}
 
 export interface IOccupationNorm {
   code: string;
@@ -27,10 +39,16 @@ export interface IOccupationNorm {
     extraversion?: number;
     agreeableness?: number;
   };
+  /** 动态排除/降权规则（支持硬排除和软降权） */
+  excludeRules?: {
+    hard: IExcludeRule[];
+    soft: IExcludeRule[];
+    advice?: string;
+  };
   /** 2026 高薪指数 0-1 */
   salaryIndex: number;
   /** 年龄适配系数（按年龄段分段配置） */
-  ageBonusMultiplier: Record<AgeGroup, number>;
+  ageBonusMultiplier: Partial<Record<OccupationAgeGroup, number>>;
   /** 年龄适用范围（用于过滤不符合年龄段的职业） */
   ageRange: { min: number; max: number };
   description: string;
@@ -48,8 +66,8 @@ export interface IOccupationNorm {
   aiRisk?: number;
   /** 职业专属 AI 应对建议（优先级高于行业通用建议） */
   aiImpactAdvice?: string;
-  /** 各年龄段情境化说明，key 为 AgeGroup */
-  ageHints?: Partial<Record<AgeGroup, string>>;
+  /** 各年龄段情境化说明，key 为 OccupationAgeGroup */
+  ageHints?: Partial<Record<OccupationAgeGroup, string>>;
 }
 
 export const OccupationSchema = new Schema<IOccupationNorm>(
@@ -74,8 +92,9 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
     salaryIndex:         { type: Number, default: 0.5 },
     ageBonusMultiplier:  {
       type: Schema.Types.Mixed,
-      default: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 }
+      default: { "18-21": 1.0, "22-24": 1.0, "25-30": 1.0, "31-35": 1.0, "45+": 1.0 },
     },
+    excludeRules:        { type: Schema.Types.Mixed, default: undefined },
     ageRange: {
       min: { type: Number, default: 18 },
       max: { type: Number, default: 60 },

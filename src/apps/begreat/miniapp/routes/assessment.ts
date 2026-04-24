@@ -9,7 +9,7 @@ import {
   getActiveNormVersion,
   getNormMeta,
 } from "../services/CalculationEngine";
-import { matchCareers } from "../services/MatchingService";
+import { matchCareersWithDiagnostics } from "../services/MatchingService";
 import { buildBegreatReportSnapshot } from "../services/reportTemplate";
 import type { Gender, AssessmentType } from "../../entity/session.entity";
 import { gameLogger as logger } from "../../../../util/logger";
@@ -435,10 +435,14 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     const normVersion = session.normVersion!;
     const big5Norm = await computeAllNormalizedScores(rawBig5Mean, gender, age, normVersion);
 
-    // 职业匹配
+    // 职业匹配（含诊断信息：硬排除、软降权）
     const Occupations = getOccupationModel();
     const occupations = await Occupations.find({ isActive: true }).lean().exec();
-    const topCareers = matchCareers({ big5Norm, age }, occupations, 20);
+    const { topCareers, hardExcluded, softAdjusted } = matchCareersWithDiagnostics(
+      { big5Norm, age },
+      occupations,
+      10,
+    );
 
     // 性格标签
     const { label, summary } = buildPersonalityLabel(big5Norm);
@@ -464,6 +468,8 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       bfi2FacetMeans,
       big5Normalized: big5Norm,
       topCareers,
+      hardExcluded,
+      softAdjusted,
       freeSummary,
       personalityLabel: label,
       report,

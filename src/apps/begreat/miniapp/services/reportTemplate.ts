@@ -179,6 +179,13 @@ function buildAiImpact(
   };
 }
 
+function shortenText(text: string | undefined, maxLen = 120): string | undefined {
+  if (!text) return undefined;
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLen) return normalized;
+  return `${normalized.slice(0, maxLen)}...`;
+}
+
 /** 针对单个职业生成差异化匹配原因：优先挑用户 Z 分与职业需求重叠最高的维度 */
 function buildMatchReasonForCareer(
   big5Z: Record<string, number>,
@@ -253,7 +260,7 @@ function buildCareerSection(
         ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === "month" ? "月" : "年"}`
         : undefined;
 
-    const ageContextText = c.ageHints?.[occupationAgeGroup] ?? undefined;
+    const ageContextText = shortenText(c.ageHints?.[occupationAgeGroup], 120);
 
     // 每个职业独立计算匹配原因，突出与该职业最相关的特质维度
     const matchReason = buildMatchReasonForCareer(big5Z, c, ct.match_reasons);

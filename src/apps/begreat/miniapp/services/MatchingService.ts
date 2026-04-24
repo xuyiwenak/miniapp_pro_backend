@@ -146,13 +146,19 @@ function scoreCareer(
   let cDiff = conscientiousness - job.requiredBig5.conscientiousness;
   let nDiff = emotionalStability - job.requiredBig5.emotionalStability;
 
-  // 🔧 修复: 如果用户特质高于职业要求，只按一半差距计算
-  // 理由: 开放性、尽责性、情绪稳定性都是"越高越好"，超出不应该严重扣分
-  if (oDiff > 0) oDiff *= 0.5;  // 用户更有创造力，减少惩罚
-  if (cDiff > 0) cDiff *= 0.5;  // 用户更严谨，减少惩罚
-  if (nDiff > 0) nDiff *= 0.5;  // 用户更稳定，减少惩罚
+  // 如果用户特质高于职业要求，只按一半差距计算（越高越好的维度，超出不扣分）
+  if (oDiff > 0) oDiff *= 0.5;
+  if (cDiff > 0) cDiff *= 0.5;
+  if (nDiff > 0) nDiff *= 0.5;
 
-  // 优化1: 动态调整情绪稳定性权重 - 高压职业(要求≥0.3)提高权重
+  // 单维度差值限幅：防止单个极端维度（如极高N）压垮整体得分
+  // Z 分超过 ±1.5 后差距已足够表达"明显不适合"，继续放大无实际意义
+  const DIFF_CAP = 1.5;
+  oDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, oDiff));
+  cDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, cDiff));
+  nDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, nDiff));
+
+  // 动态调整情绪稳定性权重 - 高压职业(要求≥0.3)提高权重
   const isHighStressJob = job.requiredBig5.emotionalStability >= 0.3;
   const stabilityWeight = isHighStressJob ? 1.3 : 0.95;
 
@@ -185,13 +191,21 @@ function scoreCareer(
   const distance = Math.sqrt(weightedSquares);
 
   // logistic 映射：中段更敏感，头尾拉开
-  const steepness = 1.2;
-  const center = 1.35;
+  // center 从 1.35 放宽到 1.8，steepness 从 1.2 降低到 1.0，避免分数过度向低端压缩
+  const steepness = 1.0;
+  const center = 1.8;
   const baseScore = 100 / (1 + Math.exp(steepness * (distance - center)));
 
-  // 优化4: 改进的年龄调整机制
-  const ageMultiplier = ageMultiplierForJob(input.age, job);
-  const withAge = baseScore * ageMultiplier * softPenaltyMultiplier;
+  // 年龄调整：对范围内使用乘法加成；范围外最低不低于 0.75，防止极端年龄把低 base 压到接近 0
+  const rawAgeMult = ageMultiplierForJob(input.age, job);
+  const ageMultiplier = input.age >= job.ageRange.min && input.age <= job.ageRange.max
+    ? rawAgeMult
+    : Math.max(0.75, rawAgeMult);
+
+  // 软规则惩罚最低不低于 0.85，防止多条规则叠乘把已偏低的分数进一步压垮
+  const safeSoftPenalty = Math.max(0.85, softPenaltyMultiplier);
+
+  const withAge = baseScore * ageMultiplier * safeSoftPenalty;
   const finalScore = clampScore(withAge);
 
   return { finalScore, breakdown, ageMultiplier };
@@ -233,21 +247,38 @@ export function matchCareersWithDiagnostics(
   });
 
   const results = jobsAfterExclude
-    // 优化5: 硬性门槛过滤
+    // 硬性门槛过滤：不满足最低要求的职业纳入 hardExcluded，附带中文原因说明
     .filter((job) => {
       if (!job.minimumRequirements) return true;
       const req = job.minimumRequirements;
+      const failedReasons: string[] = [];
+      const failedIds: string[] = [];
 
       if (req.emotionalStability !== undefined && emotionalStability < req.emotionalStability) {
-        return false;
+        failedReasons.push(`情绪稳定性不足（该职业要求 ≥ ${req.emotionalStability.toFixed(2)}，当前 ${emotionalStability.toFixed(2)}）`);
+        failedIds.push("min_req_emotional_stability");
       }
       if (req.conscientiousness !== undefined && conscientiousness < req.conscientiousness) {
-        return false;
+        failedReasons.push(`尽责性不足（该职业要求 ≥ ${req.conscientiousness.toFixed(2)}，当前 ${conscientiousness.toFixed(2)}）`);
+        failedIds.push("min_req_conscientiousness");
       }
       if (req.extraversion !== undefined && extraversion < req.extraversion) {
-        return false;
+        failedReasons.push(`外向性不足（该职业要求 ≥ ${req.extraversion.toFixed(2)}，当前 ${extraversion.toFixed(2)}）`);
+        failedIds.push("min_req_extraversion");
       }
       if (req.agreeableness !== undefined && agreeableness < req.agreeableness) {
+        failedReasons.push(`宜人性不足（该职业要求 ≥ ${req.agreeableness.toFixed(2)}，当前 ${agreeableness.toFixed(2)}）`);
+        failedIds.push("min_req_agreeableness");
+      }
+
+      if (failedReasons.length > 0) {
+        hardExcluded.push({
+          code: job.code,
+          title: job.title,
+          reasons: failedReasons,
+          ruleIds: failedIds,
+          advice: job.excludeRules?.advice ?? "建议先提升相关特质，再重新评估该职业的适合度。",
+        });
         return false;
       }
       return true;

@@ -66,11 +66,17 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
     if (isPaid) {
       // ── Tier-1: 完整报告（付费或管理员赠送） ──────────────────────────
       const all = result.topCareers;                      // 按匹配度降序，最多 20 条
-      const top5    = all.slice(0, 5);
-      // bottom5：末尾 5 条倒序（最不适合的排第一）
-      const bottom5 = all.length >= 10
-        ? [...all.slice(-5)].reverse()
+      const top5 = all.slice(0, 5);
+      // bottomCareers：取排名末尾 5 条，从最差到次差排列（跳过已在 top5 中的职业）
+      const bottom5 = all.length > 5
+        ? [...all.slice(5)].reverse().slice(0, 5)
         : [];
+
+      // hardExcluded：优先取新字段，兼容旧数据（excludedCareers），最多返回 5 条
+      const hardExcluded = (result.hardExcluded?.length
+        ? result.hardExcluded
+        : (result.excludedCareers ?? [])).slice(0, 5);
+      const softAdjusted = (result.softAdjusted ?? []).slice(0, 5);
 
       sendSucc(res, {
         isPaid:         true,
@@ -82,6 +88,8 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
         bfi2FacetMeans:     result.bfi2FacetMeans,
         topCareers:         top5,
         bottomCareers:      bottom5,
+        hardExcluded,
+        softAdjusted,
         competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
         facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
         normMeta: {
