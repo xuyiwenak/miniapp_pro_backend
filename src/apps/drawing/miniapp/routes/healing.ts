@@ -16,7 +16,7 @@ import { getHealDailyLimit, getHealDailyUsage, incrementHealDailyUsage } from ".
 
 const router = Router();
 
-const OSS_PREFIX = "oss://";
+const OSS_PREFIX = 'oss://';
 
 /**
  * 疗愈分析预估完成时长（秒）。
@@ -25,6 +25,59 @@ const OSS_PREFIX = "oss://";
  * 两处数值应保持一致。
  */
 const HEALING_ESTIMATED_SECONDS = 600;
+
+// ========== 分数计算常量 ==========
+/** 哈希函数中的质数乘数 */
+const HASH_PRIME_MULTIPLIER = 31;
+
+/** 分数归一化：最小值偏移量 */
+const SCORE_MIN_OFFSET = 20;
+
+/** 分数归一化：缩放系数 */
+const SCORE_SCALE_FACTOR = 75;
+
+/** 分数归一化：最小值阈值 */
+const SCORE_MIN_THRESHOLD = 5;
+
+/** 分数归一化：最大值阈值 */
+const SCORE_MAX_THRESHOLD = 98;
+
+/** 文本情绪分析的权重增益 */
+const TEXT_EMOTION_BOOST = 0.25;
+
+/** 随机数生成的缩放系数 */
+const RNG_SCALE_FACTOR = 0.8;
+
+/** Coze输出解包的最大递归深度 */
+const MAX_UNWRAP_DEPTH = 5;
+
+/** Coze输出截断长度（用于日志） */
+const COZE_OUTPUT_TRUNCATE_LENGTH = 1000;
+
+/** 能量分数的最小值 */
+const ENERGY_SCORE_MIN = 0;
+
+/** 能量分数的最大值 */
+const ENERGY_SCORE_MAX = 10;
+
+/** 能量分数的默认值（当无法解析时） */
+const ENERGY_SCORE_DEFAULT = 5;
+
+/** 能量分数转换为情绪分数的基础偏移 */
+const ENERGY_TO_EMOTION_OFFSET = 10;
+
+/** 能量分数转换为情绪分数的缩放系数 */
+const ENERGY_TO_EMOTION_SCALE = 80;
+
+// 情绪维度系数（从能量分数推导各维度）
+const EMOTION_COEFFICIENT_JOY = 0.9;
+const EMOTION_COEFFICIENT_CALM = 0.6;
+const EMOTION_COEFFICIENT_ANXIETY = 0.3;
+const EMOTION_COEFFICIENT_FEAR = 0.2;
+const EMOTION_COEFFICIENT_SOLITUDE = 0.15;
+const EMOTION_COEFFICIENT_PASSION = 0.85;
+const EMOTION_COEFFICIENT_SOCIAL_AVERSION = 0.2;
+const EMOTION_COEFFICIENT_VITALITY = 0.95;
 
 /**
  * 情绪维度配置 —— 后端唯一配置源
@@ -49,7 +102,7 @@ type EmotionKey = typeof SCORE_DIMENSIONS[number]["key"];
 function hashStringToSeed(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+    hash = (hash * HASH_PRIME_MULTIPLIER + input.charCodeAt(i)) >>> 0;
   }
   return hash || 1;
 }
@@ -68,8 +121,8 @@ function normalizeScores(raw: Record<string, number>): Record<string, number> {
   const result: Record<string, number> = {};
   SCORE_DIMENSIONS.forEach(({ key }) => {
     const v = raw[key] ?? 0;
-    const scaled = 20 + v * 75;
-    result[key] = Math.round(Math.max(5, Math.min(98, scaled)));
+    const scaled = SCORE_MIN_OFFSET + v * SCORE_SCALE_FACTOR;
+    result[key] = Math.round(Math.max(SCORE_MIN_THRESHOLD, Math.min(SCORE_MAX_THRESHOLD, scaled)));
   });
   return result;
 }
@@ -79,14 +132,14 @@ function analyzeTextTendencies(text: string): Record<string, number> {
   const containsAny = (words: string[]) => words.some((w) => lower.includes(w.toLowerCase()));
   const boosts: Record<string, number> = {};
 
-  if (containsAny(["阳光", "温暖", "愉悦", "开心", "喜悦", "快乐"]))       boosts["joy"]             = 0.25;
-  if (containsAny(["宁静", "平静", "治愈", "放松", "冥想", "安静"]))        boosts["calm"]            = 0.25;
-  if (containsAny(["焦虑", "压力", "紧张", "deadline", "加班", "疲惫"]))   boosts["anxiety"]         = 0.25;
-  if (containsAny(["恐惧", "害怕", "恐慌", "不安", "惊恐"]))               boosts["fear"]            = 0.25;
-  if (containsAny(["孤独", "独处", "疏离", "隔绝", "沉默"]))               boosts["solitude"]        = 0.25;
-  if (containsAny(["热情", "激情", "澎湃", "燃烧", "雀跃"]))               boosts["passion"]         = 0.25;
-  if (containsAny(["不想社交", "回避", "冷漠", "抵触", "排斥"]))           boosts["social_aversion"] = 0.25;
-  if (containsAny(["活力", "精力", "元气", "充沛", "奔放"]))               boosts["vitality"]        = 0.25;
+  if (containsAny(['阳光', '温暖', '愉悦', '开心', '喜悦', '快乐']))       boosts['joy']             = TEXT_EMOTION_BOOST;
+  if (containsAny(['宁静', '平静', '治愈', '放松', '冥想', '安静']))        boosts['calm']            = TEXT_EMOTION_BOOST;
+  if (containsAny(['焦虑', '压力', '紧张', 'deadline', '加班', '疲惫']))   boosts['anxiety']         = TEXT_EMOTION_BOOST;
+  if (containsAny(['恐惧', '害怕', '恐慌', '不安', '惊恐']))               boosts['fear']            = TEXT_EMOTION_BOOST;
+  if (containsAny(['孤独', '独处', '疏离', '隔绝', '沉默']))               boosts['solitude']        = TEXT_EMOTION_BOOST;
+  if (containsAny(['热情', '激情', '澎湃', '燃烧', '雀跃']))               boosts['passion']         = TEXT_EMOTION_BOOST;
+  if (containsAny(['不想社交', '回避', '冷漠', '抵触', '排斥']))           boosts['social_aversion'] = TEXT_EMOTION_BOOST;
+  if (containsAny(['活力', '精力', '元气', '充沛', '奔放']))               boosts['vitality']        = TEXT_EMOTION_BOOST;
 
   return boosts;
 }
@@ -100,14 +153,14 @@ function buildColorAnalysis(): string {
 }
 
 function generateMockScoresForWork(work: IWork): Record<string, number> {
-  const seedSource = `${work.workId}|${work.authorId ?? ""}|${work.desc ?? ""}|${(work.tags ?? []).join(",")}`;
+  const seedSource = `${work.workId}|${work.authorId ?? ''}|${work.desc ?? ''}|${(work.tags ?? []).join(',')}`;
   const seed = hashStringToSeed(seedSource);
   const rng = createRng(seed);
-  const boosts = analyzeTextTendencies(`${work.desc ?? ""} ${(work.tags ?? []).join(" ")}`);
+  const boosts = analyzeTextTendencies(`${work.desc ?? ''} ${(work.tags ?? []).join(' ')}`);
 
   const raw: Record<string, number> = {};
   SCORE_DIMENSIONS.forEach(({ key }) => {
-    raw[key] = Math.min(1, Math.max(0, rng() * 0.8 + (boosts[key] ?? 0)));
+    raw[key] = Math.min(1, Math.max(0, rng() * RNG_SCALE_FACTOR + (boosts[key] ?? 0)));
   });
 
   return normalizeScores(raw);
@@ -192,16 +245,16 @@ export interface ParsedHealingReport {
  */
 function unwrapCozeOutput(raw: string): Record<string, unknown> {
   let obj: unknown = JSON.parse(raw);
-  for (let depth = 0; depth < 5 && obj !== null && typeof obj === "object"; depth++) {
+  for (let depth = 0; depth < MAX_UNWRAP_DEPTH && obj !== null && typeof obj === 'object'; depth++) {
     const o = obj as Record<string, unknown>;
     // ── [DEBUG] 每层解包结果 ───────────────────────────────────────
     logger.info(`[coze-debug] unwrap depth=${depth} keys:`, Object.keys(o));
     const next = o.Output ?? o.output;
     if (next == null) {
-      cozeDebugLogger.info("[coze-debug] unwrap final object:", JSON.stringify(o).slice(0, 1000));
+      cozeDebugLogger.info('[coze-debug] unwrap final object:', JSON.stringify(o).slice(0, COZE_OUTPUT_TRUNCATE_LENGTH));
       return o as Record<string, unknown>;
     }
-    obj = typeof next === "string" ? JSON.parse(next) : next;
+    obj = typeof next === 'string' ? JSON.parse(next) : next;
   }
   return (obj as Record<string, unknown>) ?? {};
 }
@@ -210,22 +263,22 @@ function unwrapCozeOutput(raw: string): Record<string, unknown> {
  * 根据 line_analysis.energy_score (0-10) 推导四项情绪分数，保证雷达图有数据
  */
 function scoresFromEnergyScore(energyScore: number): Record<string, number> {
-  const e = Math.max(0, Math.min(10, Number(energyScore) || 5));
-  const t = (e / 10) * 80 + 10; // 高能量 → 高活跃度
+  const e = Math.max(ENERGY_SCORE_MIN, Math.min(ENERGY_SCORE_MAX, Number(energyScore) || ENERGY_SCORE_DEFAULT));
+  const t = (e / ENERGY_SCORE_MAX) * ENERGY_TO_EMOTION_SCALE + ENERGY_TO_EMOTION_OFFSET; // 高能量 → 高活跃度
   // 按语义推导各维度：高能量→活力/热情/快乐高，平静/焦虑/恐惧低
   const derived: Record<string, number> = {
-    joy:             t * 0.9,
-    calm:            100 - t * 0.6,
-    anxiety:         t * 0.3,
-    fear:            t * 0.2,
-    solitude:        (100 - t) * 0.5,
-    passion:         t * 0.85,
-    social_aversion: (100 - t) * 0.4,
-    vitality:        t * 0.95,
+    joy:             t * EMOTION_COEFFICIENT_JOY,
+    calm:            100 - t * EMOTION_COEFFICIENT_CALM,
+    anxiety:         t * EMOTION_COEFFICIENT_ANXIETY,
+    fear:            t * EMOTION_COEFFICIENT_FEAR,
+    solitude:        (100 - t) * EMOTION_COEFFICIENT_SOLITUDE,
+    passion:         t * EMOTION_COEFFICIENT_PASSION,
+    social_aversion: (100 - t) * EMOTION_COEFFICIENT_SOCIAL_AVERSION,
+    vitality:        t * EMOTION_COEFFICIENT_VITALITY,
   };
   const result: Record<string, number> = {};
   SCORE_DIMENSIONS.forEach(({ key }) => {
-    result[key] = Math.max(5, Math.min(98, Math.round(derived[key] ?? 50)));
+    result[key] = Math.max(SCORE_MIN_THRESHOLD, Math.min(SCORE_MAX_THRESHOLD, Math.round(derived[key] ?? 50)));
   });
   return result;
 }

@@ -5,10 +5,9 @@
     "primaryRiasec": "I",
     "secondaryRiasec": "R",
     "requiredBig5": {
-      "openness": 0.55,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.2,
-      "extraversion": 0
+      "openness": 0.35,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0
     },
     "salaryIndex": 0.75,
     "ageBonusMultiplier": {
@@ -73,8 +72,7 @@
         }
       ],
       "advice": "如你对软件工程师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "TECH_PM",
@@ -82,11 +80,9 @@
     "primaryRiasec": "E",
     "secondaryRiasec": "A",
     "requiredBig5": {
-      "openness": 0.5,
-      "conscientiousness": 0.4,
-      "emotionalStability": 0.30000000000000004,
-      "extraversion": 0.2,
-      "agreeableness": 0.2
+      "openness": 0.3,
+      "conscientiousness": 0.3,
+      "emotionalStability": 0.1
     },
     "salaryIndex": 0.72,
     "ageBonusMultiplier": {
@@ -151,8 +147,7 @@
         }
       ],
       "advice": "如你对产品经理仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "TECH_DS",
@@ -160,7 +155,7 @@
     "primaryRiasec": "I",
     "secondaryRiasec": "C",
     "requiredBig5": {
-      "openness": 0.9,
+      "openness": 0.4,
       "conscientiousness": 0.4,
       "emotionalStability": 0
     },
@@ -228,8 +223,7 @@
         }
       ],
       "advice": "如你对数据科学家仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "TECH_AI",
@@ -237,7 +231,7 @@
     "primaryRiasec": "I",
     "secondaryRiasec": "R",
     "requiredBig5": {
-      "openness": 1,
+      "openness": 0.5,
       "conscientiousness": 0.4,
       "emotionalStability": 0
     },
@@ -304,8 +298,7 @@
         }
       ],
       "advice": "如你对AI 工程师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "TECH_UX",
@@ -313,11 +306,9 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "I",
     "requiredBig5": {
-      "openness": 0.9,
+      "openness": 0.4,
       "conscientiousness": 0.25,
-      "emotionalStability": 0.1,
-      "extraversion": 0.2,
-      "agreeableness": 0.2
+      "emotionalStability": 0.1
     },
     "salaryIndex": 0.6,
     "ageBonusMultiplier": {
@@ -390,8 +381,7 @@
         }
       ],
       "advice": "如你对UX 设计师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "TECH_OPS",
@@ -399,9 +389,9 @@
     "primaryRiasec": "E",
     "secondaryRiasec": "C",
     "requiredBig5": {
-      "openness": 0.30000000000000004,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.4
+      "openness": 0.1,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.55,
     "ageBonusMultiplier": {
@@ -474,8 +464,7 @@
         }
       ],
       "advice": "如你对技术运营仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "BIZ_MKT",
@@ -483,10 +472,9 @@
     "primaryRiasec": "E",
     "secondaryRiasec": "A",
     "requiredBig5": {
-      "openness": 0.5,
-      "conscientiousness": 0.35,
-      "emotionalStability": 0.30000000000000004,
-      "extraversion": 0.4
+      "openness": 0.3,
+      "conscientiousness": 0.25,
+      "emotionalStability": 0.1
     },
     "salaryIndex": 0.58,
     "ageBonusMultiplier": {
@@ -551,8 +539,7 @@
         }
       ],
       "advice": "如你对市场营销经理仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "BIZ_CONSULT",
@@ -562,8 +549,7 @@
     "requiredBig5": {
       "openness": 0.4,
       "conscientiousness": 0.5,
-      "emotionalStability": 0.6,
-      "extraversion": 0.3
+      "emotionalStability": 0.3
     },
     "salaryIndex": 0.88,
     "ageBonusMultiplier": {
@@ -628,10 +614,6 @@
         }
       ],
       "advice": "如你对管理咨询顾问仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "conscientiousness": 0.2,
-      "emotionalStability": 0.2
     }
   },
   {
@@ -640,9 +622,9 @@
     "primaryRiasec": "E",
     "secondaryRiasec": "C",
     "requiredBig5": {
-      "openness": 0.30000000000000004,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.4
+      "openness": 0.1,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.5,
     "ageBonusMultiplier": {
@@ -715,8 +697,7 @@
         }
       ],
       "advice": "如你对电商运营仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "BIZ_HR",
@@ -724,11 +705,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "E",
     "requiredBig5": {
-      "openness": 0.4,
-      "conscientiousness": 0.4,
-      "emotionalStability": 0.4,
-      "extraversion": 0.3,
-      "agreeableness": 0.4
+      "openness": 0.2,
+      "conscientiousness": 0.3,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.52,
     "ageBonusMultiplier": {
@@ -793,8 +772,7 @@
         }
       ],
       "advice": "如你对人力资源经理仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "CREATIVE_GD",
@@ -802,10 +780,9 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "R",
     "requiredBig5": {
-      "openness": 1.1,
+      "openness": 0.5,
       "conscientiousness": 0.2,
-      "emotionalStability": 0,
-      "extraversion": 0.1
+      "emotionalStability": 0
     },
     "salaryIndex": 0.52,
     "ageBonusMultiplier": {
@@ -878,8 +855,7 @@
         }
       ],
       "advice": "如你对品牌视觉设计师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "CREATIVE_CONTENT",
@@ -887,10 +863,9 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "E",
     "requiredBig5": {
-      "openness": 1.1,
+      "openness": 0.5,
       "conscientiousness": 0.2,
-      "emotionalStability": 0,
-      "extraversion": 0
+      "emotionalStability": 0
     },
     "salaryIndex": 0.55,
     "ageBonusMultiplier": {
@@ -963,8 +938,7 @@
         }
       ],
       "advice": "如你对内容创作者仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "CREATIVE_ART",
@@ -972,10 +946,9 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "E",
     "requiredBig5": {
-      "openness": 1.2,
+      "openness": 0.6,
       "conscientiousness": 0.2,
-      "emotionalStability": 0.1,
-      "extraversion": 0.1
+      "emotionalStability": 0.1
     },
     "salaryIndex": 0.7,
     "ageBonusMultiplier": {
@@ -1040,8 +1013,7 @@
         }
       ],
       "advice": "如你对艺术总监仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "MED_DOC",
@@ -1051,9 +1023,7 @@
     "requiredBig5": {
       "openness": 0.2,
       "conscientiousness": 0.6,
-      "emotionalStability": 0.8,
-      "extraversion": 0.2,
-      "agreeableness": 0.3
+      "emotionalStability": 0.4
     },
     "salaryIndex": 0.8,
     "ageBonusMultiplier": {
@@ -1126,10 +1096,6 @@
         }
       ],
       "advice": "如你对临床医生仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "conscientiousness": 0.3,
-      "emotionalStability": 0.3
     }
   },
   {
@@ -1140,9 +1106,7 @@
     "requiredBig5": {
       "openness": 0.3,
       "conscientiousness": 0.35,
-      "emotionalStability": 1,
-      "extraversion": 0.2,
-      "agreeableness": 0.5
+      "emotionalStability": 0.5
     },
     "salaryIndex": 0.6,
     "ageBonusMultiplier": {
@@ -1215,10 +1179,6 @@
         }
       ],
       "advice": "如你对心理咨询师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "emotionalStability": 0.4,
-      "agreeableness": 0.2
     }
   },
   {
@@ -1227,10 +1187,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "C",
     "requiredBig5": {
-      "openness": 0.4,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.4,
-      "agreeableness": 0.3
+      "openness": 0.2,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.48,
     "ageBonusMultiplier": {
@@ -1303,8 +1262,7 @@
         }
       ],
       "advice": "如你对健康管理师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "EDU_TEACHER",
@@ -1312,11 +1270,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "A",
     "requiredBig5": {
-      "openness": 0.4,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.5,
-      "extraversion": 0.2,
-      "agreeableness": 0.4
+      "openness": 0.2,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.3
     },
     "salaryIndex": 0.45,
     "ageBonusMultiplier": {
@@ -1381,10 +1337,6 @@
         }
       ],
       "advice": "如你对学科教师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "agreeableness": 0.1,
-      "emotionalStability": 0.1
     }
   },
   {
@@ -1393,11 +1345,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "E",
     "requiredBig5": {
-      "openness": 0.5,
-      "conscientiousness": 0.4,
-      "emotionalStability": 0.4,
-      "extraversion": 0.3,
-      "agreeableness": 0.3
+      "openness": 0.3,
+      "conscientiousness": 0.3,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.6,
     "ageBonusMultiplier": {
@@ -1462,8 +1412,7 @@
         }
       ],
       "advice": "如你对企业培训师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "ENG_MECH",
@@ -1472,7 +1421,7 @@
     "secondaryRiasec": "I",
     "requiredBig5": {
       "openness": 0.1,
-      "conscientiousness": 0.7,
+      "conscientiousness": 0.5,
       "emotionalStability": 0.2
     },
     "salaryIndex": 0.6,
@@ -1538,8 +1487,7 @@
         }
       ],
       "advice": "如你对机械工程师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "ENG_ARCH",
@@ -1547,7 +1495,7 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "R",
     "requiredBig5": {
-      "openness": 0.9,
+      "openness": 0.4,
       "conscientiousness": 0.4,
       "emotionalStability": 0.1
     },
@@ -1615,8 +1563,7 @@
         }
       ],
       "advice": "如你对建筑设计师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "ENG_ELE",
@@ -1625,7 +1572,7 @@
     "secondaryRiasec": "C",
     "requiredBig5": {
       "openness": 0.1,
-      "conscientiousness": 0.7,
+      "conscientiousness": 0.5,
       "emotionalStability": 0.3
     },
     "salaryIndex": 0.65,
@@ -1691,8 +1638,7 @@
         }
       ],
       "advice": "如你对电气工程师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "FIN_IA",
@@ -1702,7 +1648,7 @@
     "requiredBig5": {
       "openness": 0.3,
       "conscientiousness": 0.5,
-      "emotionalStability": 0.8
+      "emotionalStability": 0.4
     },
     "salaryIndex": 0.9,
     "ageBonusMultiplier": {
@@ -1775,10 +1721,6 @@
         }
       ],
       "advice": "如你对投资分析师仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "emotionalStability": 0.3,
-      "conscientiousness": 0.2
     }
   },
   {
@@ -1788,7 +1730,7 @@
     "secondaryRiasec": "I",
     "requiredBig5": {
       "openness": 0,
-      "conscientiousness": 0.9,
+      "conscientiousness": 0.6,
       "emotionalStability": 0.2
     },
     "salaryIndex": 0.5,
@@ -1870,9 +1812,6 @@
         }
       ],
       "advice": "如你对财务会计仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "conscientiousness": 0.4
     }
   },
   {
@@ -1881,10 +1820,9 @@
     "primaryRiasec": "E",
     "secondaryRiasec": "S",
     "requiredBig5": {
-      "openness": 0.30000000000000004,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.5,
-      "extraversion": 0.4
+      "openness": 0.1,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.3
     },
     "salaryIndex": 0.55,
     "ageBonusMultiplier": {
@@ -1957,8 +1895,7 @@
         }
       ],
       "advice": "如你对保险规划顾问仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "SOC_SW",
@@ -1966,11 +1903,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "A",
     "requiredBig5": {
-      "openness": 0.4,
-      "conscientiousness": 0.4,
-      "emotionalStability": 0.6,
-      "extraversion": 0.2,
-      "agreeableness": 0.5
+      "openness": 0.2,
+      "conscientiousness": 0.3,
+      "emotionalStability": 0.4
     },
     "salaryIndex": 0.35,
     "ageBonusMultiplier": {
@@ -2035,10 +1970,6 @@
         }
       ],
       "advice": "如你对社会工作者仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {
-      "agreeableness": 0.2,
-      "emotionalStability": 0.2
     }
   },
   {
@@ -2047,11 +1978,9 @@
     "primaryRiasec": "S",
     "secondaryRiasec": "E",
     "requiredBig5": {
-      "openness": 0.5,
-      "conscientiousness": 0.5,
-      "emotionalStability": 0.4,
-      "extraversion": 0.2,
-      "agreeableness": 0.4
+      "openness": 0.3,
+      "conscientiousness": 0.4,
+      "emotionalStability": 0.2
     },
     "salaryIndex": 0.4,
     "ageBonusMultiplier": {
@@ -2116,8 +2045,7 @@
         }
       ],
       "advice": "如你对公益项目经理仍有明确兴趣，建议先通过项目实践补齐关键短板，再进行二次测评与岗位验证。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "LAW_ATT",
@@ -2127,7 +2055,7 @@
     "requiredBig5": {
       "openness": 0.2,
       "conscientiousness": 0.5,
-      "emotionalStability": 0.7,
+      "emotionalStability": 0.4,
       "extraversion": 0.3
     },
     "minimumRequirements": {
@@ -2206,7 +2134,7 @@
     "secondaryRiasec": "E",
     "requiredBig5": {
       "openness": 0.1,
-      "conscientiousness": 0.8,
+      "conscientiousness": 0.5,
       "emotionalStability": 0.3
     },
     "minimumRequirements": {
@@ -2352,9 +2280,6 @@
         }
       ],
       "advice": "销售成功依赖行业积累，建议选择自己熟悉的行业作为切入点，快速建立专业背书。"
-    },
-    "minimumRequirements": {
-      "extraversion": 0.2
     }
   },
   {
@@ -2364,7 +2289,7 @@
     "secondaryRiasec": "I",
     "requiredBig5": {
       "openness": -0.1,
-      "conscientiousness": 1,
+      "conscientiousness": 0.6,
       "emotionalStability": 0.3
     },
     "minimumRequirements": {
@@ -2441,7 +2366,7 @@
     "primaryRiasec": "I",
     "secondaryRiasec": "R",
     "requiredBig5": {
-      "openness": 1.5,
+      "openness": 0.7,
       "conscientiousness": 0.5,
       "emotionalStability": 0.1,
       "extraversion": -0.2
@@ -2509,9 +2434,6 @@
         }
       ],
       "advice": "科研道路需要长期坚持，建议优先评估学历背景与研究兴趣的匹配度，再规划具体方向。"
-    },
-    "minimumRequirements": {
-      "openness": 0.3
     }
   },
   {
@@ -2589,9 +2511,6 @@
         }
       ],
       "advice": "在线教育讲师需要内容与运营双线驱动，建议先打磨核心课程，再考虑规模化推广。"
-    },
-    "minimumRequirements": {
-      "extraversion": 0.1
     }
   },
   {
@@ -2688,9 +2607,9 @@
     "primaryRiasec": "C",
     "secondaryRiasec": "S",
     "requiredBig5": {
-      "openness": 0.1,
-      "conscientiousness": 0.6,
-      "emotionalStability": 0.5
+      "openness": -0.1,
+      "conscientiousness": 0.5,
+      "emotionalStability": 0.3
     },
     "salaryIndex": 0.48,
     "ageBonusMultiplier": {
@@ -2751,8 +2670,7 @@
       ],
       "soft": [],
       "advice": "若年龄临近上限，建议优先关注事业单位或国有企业通道，作为公职类岗位的替代路径。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "SELF_ENTREP",
@@ -2836,8 +2754,7 @@
         }
       ],
       "advice": "创业前建议先在行业内积累3-5年经验，找到真实需求再全力投入，降低资源浪费。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "CREATIVE_GAME",
@@ -2845,7 +2762,7 @@
     "primaryRiasec": "A",
     "secondaryRiasec": "I",
     "requiredBig5": {
-      "openness": 1.3,
+      "openness": 0.6,
       "conscientiousness": 0.35,
       "emotionalStability": 0,
       "extraversion": -0.1
@@ -2913,8 +2830,7 @@
         }
       ],
       "advice": "游戏设计师需要玩家直觉与系统思维并重，建议通过作品集和 Demo 展现创意能力来突破入行门槛。"
-    },
-    "minimumRequirements": {}
+    }
   },
   {
     "code": "MEDIA_SHORT",
@@ -2990,7 +2906,6 @@
         }
       ],
       "advice": "新媒体运营需要对内容平台保持高度敏感，建议先用个人账号验证内容方向，再进入商业化路径。"
-    },
-    "minimumRequirements": {}
+    }
   }
 ]

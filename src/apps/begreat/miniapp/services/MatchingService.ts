@@ -1,5 +1,15 @@
-import type { ICareerMatch, IExcludedCareer, ISoftAdjustedCareer } from "../../entity/session.entity";
-import type { IOccupationNorm, OccupationAgeGroup, IExcludeRule } from "../../entity/occupation.entity";
+import type { ICareerMatch, IExcludedCareer, ISoftAdjustedCareer } from '../../entity/session.entity';
+import type { IOccupationNorm, OccupationAgeGroup, IExcludeRule } from '../../entity/occupation.entity';
+
+// ========== 年龄分组常量 ==========
+const AGE_GROUP_45_PLUS = 45;
+const AGE_GROUP_31_35 = 31;
+const AGE_GROUP_25_30 = 25;
+const AGE_GROUP_22_24 = 22;
+
+// ========== 分数常量 ==========
+const SCORE_MIN = 0;
+const SCORE_MAX = 100;
 
 interface MatchInput {
   big5Norm: Record<string, number>; // O, C, E, A, N
@@ -30,15 +40,15 @@ interface MatchDiagnostics {
  * 根据年龄返回对应的年龄组
  */
 function getAgeGroup(age: number): OccupationAgeGroup {
-  if (age >= 45) return "45+";
-  if (age >= 31) return "31-35";
-  if (age >= 25) return "25-30";
-  if (age >= 22) return "22-24";
-  return "18-21";
+  if (age >= AGE_GROUP_45_PLUS) return '45+';
+  if (age >= AGE_GROUP_31_35) return '31-35';
+  if (age >= AGE_GROUP_25_30) return '25-30';
+  if (age >= AGE_GROUP_22_24) return '22-24';
+  return '18-21';
 }
 
 function clampScore(score: number): number {
-  return Math.max(0, Math.min(100, score));
+  return Math.max(SCORE_MIN, Math.min(SCORE_MAX, score));
 }
 
 function readMetric(rule: IExcludeRule, input: MatchInput): number {

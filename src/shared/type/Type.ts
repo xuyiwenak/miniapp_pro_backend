@@ -73,7 +73,7 @@ export enum eAccountType {
   test,
 }
 export enum eEmailSendCodeType {
-  Register = "Register",
+  Register = 'Register',
 }
 /*-----------------------------register end---------------------------------------------------*/
 
