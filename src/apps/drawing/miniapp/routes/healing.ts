@@ -215,6 +215,184 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
 
 export { buildHealingResponse };
 
+// ========== Helper Functions for /coze/callback Route ==========
+
+/**
+ * 验证 Coze webhook 的 token
+ * @returns true 如果验证通过或无需验证，false 如果验证失败
+ */
+function verifyWebhookToken(req: Request, res: Response): boolean {
+  const cfg = getCozeConfig();
+  const secret = cfg.webhookSecret?.trim();
+
+  if (!secret) return true; // 无密钥配置，放行
+
+  const token = req.query?.token;
+  if (typeof token !== 'string' || token !== secret) {
+    res.status(403).json({ code: 403, success: false, message: 'Forbidden' });
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 根据 Coze 工作流执行状态处理疗愈分析结果
+ */
+async function handleWebhookStatus(
+  runId: string,
+  status: string,
+  output: string | null,
+  errorMessage: string | undefined,
+  res: Response,
+): Promise<void> {
+  const upper = status.toUpperCase();
+
+  // 失败状态
+  if (upper === 'FAIL' || upper === 'FAILED' || errorMessage) {
+    await markHealingFailedByRunId(runId);
+    res.status(200).json({ code: 200, success: true });
+    return;
+  }
+
+  // 运行中状态（忽略）
+  if (upper === 'RUNNING' || upper === 'PENDING') {
+    res.status(200).json({ code: 200, success: true, message: 'ignored' });
+    return;
+  }
+
+  // 成功状态
+  if (upper === 'SUCCESS' || upper === 'SUCCEEDED' || output != null) {
+    const out = output ?? '{}';
+    await applyHealingSuccessFromRunId(runId, out);
+    res.status(200).json({ code: 200, success: true });
+    return;
+  }
+
+  // 无法识别的状态
+  res.status(400).json({ code: 400, success: false, message: 'Unrecognized webhook payload' });
+}
+
+// ========== Helper Functions for /analyze Route ==========
+
+/**
+ * 检查用户每日疗愈分析配额
+ * @throws 如果配额已用完，通过 sendErr 发送 429 错误
+ */
+async function checkDailyQuota(userId: string, res: Response): Promise<boolean> {
+  try {
+    const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
+    const zoneId = playerComp?.getDefaultZoneId();
+    if (!zoneId) return true;
+
+    const Player = getPlayerModel(zoneId);
+    const player = await Player.findOne({ userId }).select('level').lean().exec();
+    const isSuperAdmin = player?.level === AccountLevel.SuperAdmin;
+
+    if (isSuperAdmin) return true;
+
+    const [limit, used] = await Promise.all([getHealDailyLimit(), getHealDailyUsage(userId)]);
+    if (used >= limit) {
+      sendErr(res, `今日分析次数已用完（每日限${limit}次），请明天再试`, 429);
+      return false;
+    }
+
+    return true;
+  } catch (quotaErr) {
+    logger.error('heal quota check error', (quotaErr as Error).message);
+    return true; // 配额检查失败时放行，不影响主功能
+  }
+}
+
+/**
+ * 验证作品存在且用户有权限访问
+ * @throws 如果作品不存在或无权限，通过 sendErr 发送错误
+ */
+async function validateWorkOwnership(workId: string, userId: string, res: Response): Promise<IWork | null> {
+  const Work = getWorkModel();
+  const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+
+  if (!work) {
+    sendErr(res, 'Work not found', 404);
+    return null;
+  }
+
+  if (work.authorId && work.authorId !== userId) {
+    sendErr(res, 'Forbidden', 403);
+    return null;
+  }
+
+  return work;
+}
+
+/**
+ * 构造 Coze 工作流参数
+ */
+function buildWorkflowParams(work: IWork): Record<string, string> {
+  const rawImageUrl = work.images?.[0]?.url ?? '';
+  const imageUrl = resolveImageUrl(rawImageUrl);
+
+  return {
+    workId: work.workId,
+    desc: work.desc ?? '',
+    tags: (work.tags ?? []).join(','),
+    imageUrl,
+    image_url: imageUrl, // 兼容工作流里使用 snake_case 变量名
+  };
+}
+
+/**
+ * 初始化作品的疗愈分析状态为 pending
+ */
+async function initializePendingHealing(workId: string, runId: string): Promise<void> {
+  const Work = getWorkModel();
+  await Work.updateOne(
+    { workId },
+    {
+      $set: {
+        healing: {
+          scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 0])),
+          summary: '',
+          colorAnalysis: '',
+          status: 'pending',
+          isPublic: false,
+          cozeRunId: runId,
+          submittedAt: new Date(),
+        },
+      },
+    },
+  ).exec();
+}
+
+/**
+ * 设置 Coze 工作流的 fallback 轮询（在 webhook 失败时）
+ */
+function scheduleFallbackPoll(workId: string, runId: string): void {
+  const cozeCfg = getCozeConfig();
+  const fallbackMs = cozeCfg.fallbackPollAfterMs ?? 0;
+
+  if (fallbackMs <= 0) return;
+
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const Work = getWorkModel();
+        const pending = (await Work.findOne({ workId, 'healing.status': 'pending' }).lean().exec()) as IWork | null;
+        if (!pending) return;
+
+        const out = await queryWorkflowOutputOnce(runId);
+        if (out === null) return;
+
+        await applyHealingSuccessFromRunId(runId, out);
+      } catch (err) {
+        logger.error('Coze fallback poll failed workId=', workId, (err as Error).message);
+        const Work = getWorkModel();
+        await Work.updateOne({ workId }, { $set: { 'healing.status': 'failed' } }).exec();
+      }
+    })();
+  }, fallbackMs);
+}
+
 /** Coze 新版输出中的线条分析 */
 interface CozeLineAnalysis {
   energy_score?: number;
@@ -283,6 +461,79 @@ function scoresFromEnergyScore(energyScore: number): Record<string, number> {
   return result;
 }
 
+// ========== Helper Functions for parseCozeOutput ==========
+
+/**
+ * 解析色彩分析字段
+ */
+function parseColorAnalysis(colorAnalysisObj: CozeColorAnalysis | undefined): {
+  colorAnalysis: string;
+  keyColors?: string[];
+} {
+  const keyColors = Array.isArray(colorAnalysisObj?.key_colors) ? colorAnalysisObj.key_colors : undefined;
+  const interpretation = colorAnalysisObj?.interpretation ?? '';
+
+  const colorAnalysis =
+    interpretation + (keyColors?.length ? (interpretation ? ' 主色：' : '主色：') + keyColors.join('、') : '');
+
+  return { colorAnalysis, keyColors: keyColors?.length ? keyColors : undefined };
+}
+
+/**
+ * 解析摘要字段
+ */
+function parseSummary(output: Record<string, unknown>): string {
+  return (
+    String(output.insight ?? output.summary ?? output.healingSummary ?? '').trim() ||
+    String(output.composition_report ?? '').trim()
+  );
+}
+
+/**
+ * 解析情绪分数
+ */
+function parseScores(output: Record<string, unknown>, lineAnalysisObj: CozeLineAnalysis | undefined): Record<string, number> {
+  const rawScores = output.scores as Record<string, number> | undefined;
+  const hasDimScore = SCORE_DIMENSIONS.some(
+    ({ key }) => typeof output[key] === 'number' || typeof rawScores?.[key] === 'number',
+  );
+
+  // 情况1：直接包含维度分数
+  if (hasDimScore) {
+    const scores: Record<string, number> = {};
+    SCORE_DIMENSIONS.forEach(({ key }) => {
+      scores[key] = Number(output[key] ?? rawScores?.[key] ?? 50);
+    });
+    return scores;
+  }
+
+  // 情况2：从 energy_score 推导
+  if (typeof lineAnalysisObj?.energy_score === 'number') {
+    return scoresFromEnergyScore(lineAnalysisObj.energy_score);
+  }
+
+  // 情况3：使用默认值
+  return Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50]));
+}
+
+/**
+ * 解析线条分析字段
+ */
+function parseLineAnalysis(lineAnalysisObj: CozeLineAnalysis | undefined): CozeLineAnalysis | undefined {
+  if (!lineAnalysisObj) return undefined;
+
+  const hasContent =
+    lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score != null;
+
+  if (!hasContent) return undefined;
+
+  return {
+    interpretation: lineAnalysisObj.interpretation,
+    style: lineAnalysisObj.style,
+    energy_score: lineAnalysisObj.energy_score,
+  };
+}
+
 /**
  * 解析 Coze 工作流返回的 output JSON，兼容新版结构（insight/color_analysis/line_analysis 等）与旧版
  */
@@ -290,50 +541,24 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
   const fallback: ParsedHealingReport = {
     scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50])),
     summary: raw.slice(0, 500),
-    colorAnalysis: "",
+    colorAnalysis: '',
   };
+
   try {
     const output = unwrapCozeOutput(raw) as Record<string, unknown>;
 
+    // 解析各个字段
     const colorAnalysisObj = output.color_analysis as CozeColorAnalysis | undefined;
     const lineAnalysisObj = output.line_analysis as CozeLineAnalysis | undefined;
-    const keyColors = Array.isArray(colorAnalysisObj?.key_colors) ? colorAnalysisObj.key_colors : undefined;
-    const colorInterpretation = colorAnalysisObj?.interpretation ?? "";
-    const colorAnalysis =
-      colorInterpretation +
-      (keyColors?.length ? (colorInterpretation ? " 主色：" : "主色：") + keyColors.join("、") : "");
 
-    const summary =
-      String(output.insight ?? output.summary ?? output.healingSummary ?? "").trim() ||
-      String(output.composition_report ?? "").trim();
-
-    const rawScores = output.scores as Record<string, number> | undefined;
-    const hasDimScore = SCORE_DIMENSIONS.some(
-      ({ key }) => typeof output[key] === "number" || typeof rawScores?.[key] === "number",
-    );
-    let scores: Record<string, number>;
-    if (hasDimScore) {
-      scores = {};
-      SCORE_DIMENSIONS.forEach(({ key }) => {
-        scores[key] = Number(output[key] ?? rawScores?.[key] ?? 50);
-      });
-    } else if (typeof lineAnalysisObj?.energy_score === "number") {
-      scores = scoresFromEnergyScore(lineAnalysisObj.energy_score);
-    } else {
-      scores = Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50]));
-    }
+    const { colorAnalysis, keyColors } = parseColorAnalysis(colorAnalysisObj);
+    const summary = parseSummary(output);
+    const scores = parseScores(output, lineAnalysisObj);
+    const lineAnalysis = parseLineAnalysis(lineAnalysisObj);
 
     const compositionReport =
-      typeof output.composition_report === "string" ? output.composition_report.trim() : undefined;
-    const suggestion = typeof output.suggestion === "string" ? output.suggestion.trim() : undefined;
-    const lineAnalysis =
-      lineAnalysisObj && (lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score != null)
-        ? {
-          interpretation: lineAnalysisObj.interpretation,
-          style: lineAnalysisObj.style,
-          energy_score: lineAnalysisObj.energy_score,
-        }
-        : undefined;
+      typeof output.composition_report === 'string' ? output.composition_report.trim() : undefined;
+    const suggestion = typeof output.suggestion === 'string' ? output.suggestion.trim() : undefined;
 
     return {
       scores,
@@ -342,7 +567,7 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
       compositionReport: compositionReport || undefined,
       lineAnalysis,
       suggestion,
-      keyColors: keyColors?.length ? keyColors : undefined,
+      keyColors,
     };
   } catch {
     return fallback;
@@ -465,26 +690,17 @@ async function markHealingFailedByRunId(runId: string): Promise<void> {
 }
 
 /** Coze 异步完成回调（无用户 JWT；可选 webhookSecret 作为 query token） */
-router.post("/coze/callback", async (req: Request, res: Response) => {
-  const cfg = getCozeConfig();
-  const secret = cfg.webhookSecret?.trim();
-  if (secret) {
-    const t = req.query?.token;
-    if (typeof t !== "string" || t !== secret) {
-      res.status(403).json({ code: 403, success: false, message: "Forbidden" });
-      return;
-    }
-  }
+router.post('/coze/callback', async (req: Request, res: Response) => {
+  // 验证 webhook token
+  if (!verifyWebhookToken(req, res)) return;
 
-  // ── [DEBUG] 原始请求体 ──────────────────────────────────────────
-  cozeDebugLogger.info("[coze-debug] raw body:", JSON.stringify(req.body));
+  cozeDebugLogger.info('[coze-debug] raw body:', JSON.stringify(req.body));
 
   try {
     const parsed = parseCozeWebhookPayload(req.body);
     const runId = parsed.runId?.trim();
 
-    // ── [DEBUG] 解包后字段 ─────────────────────────────────────────
-    cozeDebugLogger.info("[coze-debug] parsed webhook:", {
+    cozeDebugLogger.info('[coze-debug] parsed webhook:', {
       runId: parsed.runId,
       executeStatus: parsed.executeStatus,
       errorMessage: parsed.errorMessage,
@@ -492,151 +708,62 @@ router.post("/coze/callback", async (req: Request, res: Response) => {
     });
 
     if (!runId) {
-      logger.error("Coze webhook missing run_id, body=", JSON.stringify(req.body).slice(0, 800));
-      res.status(400).json({ code: 400, success: false, message: "Missing run id" });
+      logger.error('Coze webhook missing run_id, body=', JSON.stringify(req.body).slice(0, 800));
+      res.status(400).json({ code: 400, success: false, message: 'Missing run id' });
       return;
     }
 
-    const statusRaw = (parsed.executeStatus ?? "").trim();
-    const upper = statusRaw.toUpperCase();
-
-    if (upper === "FAIL" || upper === "FAILED" || parsed.errorMessage) {
-      await markHealingFailedByRunId(runId);
-      res.status(200).json({ code: 200, success: true });
-      return;
-    }
-
-    if (upper === "RUNNING" || upper === "PENDING") {
-      res.status(200).json({ code: 200, success: true, message: "ignored" });
-      return;
-    }
-
-    if (upper === "SUCCESS" || upper === "SUCCEEDED" || parsed.output != null) {
-      const out = parsed.output ?? "{}";
-      await applyHealingSuccessFromRunId(runId, out);
-      res.status(200).json({ code: 200, success: true });
-      return;
-    }
-
-    res.status(400).json({ code: 400, success: false, message: "Unrecognized webhook payload" });
+    const status = (parsed.executeStatus ?? '').trim();
+    await handleWebhookStatus(runId, status, parsed.output ?? null, parsed.errorMessage, res);
   } catch (err) {
-    logger.error("Coze webhook handler error", (err as Error).message);
-    res.status(500).json({ code: 500, success: false, message: "Internal error" });
+    logger.error('Coze webhook handler error', (err as Error).message);
+    res.status(500).json({ code: 500, success: false, message: 'Internal error' });
   }
 });
 
-router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
 
-  logRequest("healing.ts:analyze:entry", "healing analyze request", {
-    req,
-    requestBody: body,
-  });
+  logRequest('healing.ts:analyze:entry', 'healing analyze request', { req, requestBody: body });
 
   if (!workId) {
-    sendErr(res, "Missing workId", 400);
+    sendErr(res, 'Missing workId', 400);
     return;
   }
 
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
 
-  // ── 每日配额检查 ──
-  try {
-    const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
-    const zoneId = playerComp?.getDefaultZoneId();
-    if (zoneId) {
-      const Player = getPlayerModel(zoneId);
-      const player = await Player.findOne({ userId }).select("level").lean().exec();
-      const isSuperAdmin = player?.level === AccountLevel.SuperAdmin;
-      if (!isSuperAdmin) {
-        const [limit, used] = await Promise.all([getHealDailyLimit(), getHealDailyUsage(userId)]);
-        if (used >= limit) {
-          sendErr(res, `今日分析次数已用完（每日限${limit}次），请明天再试`, 429);
-          return;
-        }
-      }
-    }
-  } catch (quotaErr) {
-    logger.error("heal quota check error", (quotaErr as Error).message);
-    // 配额检查失败时放行，不影响主功能
-  }
+  // 检查每日配额
+  const quotaOk = await checkDailyQuota(userId, res);
+  if (!quotaOk) return;
 
   try {
-    const Work = getWorkModel();
-    const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
-    if (!work) {
-      sendErr(res, "Work not found", 404);
-      return;
-    }
+    // 验证作品所有权
+    const work = await validateWorkOwnership(workId, userId, res);
+    if (!work) return;
 
-    if (work.authorId && work.authorId !== userId) {
-      sendErr(res, "Forbidden", 403);
-      return;
-    }
-
-    // 构造传给 Coze 工作流的参数（OSS 图片自动签名为临时 URL）
-    // 注意：parameters 的 key 必须与 Coze 工作流「开始节点」里配置的变量名完全一致
-    const rawImageUrl = work.images?.[0]?.url ?? "";
-    const imageUrl = resolveImageUrl(rawImageUrl);
-    const workflowParams: Record<string, string> = {
-      workId: work.workId,
-      desc: work.desc ?? "",
-      tags: (work.tags ?? []).join(","),
-      imageUrl,
-      image_url: imageUrl, // 兼容工作流里使用 snake_case 变量名
-    };
-
+    // 提交工作流
+    const workflowParams = buildWorkflowParams(work);
     const runId = await submitWorkflow(workflowParams);
 
-    // 提交成功后计入当日用量（失败时不计）
+    // 计入当日用量
     void incrementHealDailyUsage(userId).catch(() => {});
 
-    // 立即标记为 pending 状态并记录 runId
-    await Work.updateOne(
-      { workId },
-      {
-        $set: {
-          healing: {
-            scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 0])),
-            summary: "",
-            colorAnalysis: "",
-            status: "pending",
-            isPublic: false,
-            cozeRunId: runId,
-            submittedAt: new Date(),
-          },
-        },
-      },
-    ).exec();
+    // 初始化 pending 状态
+    await initializePendingHealing(workId, runId);
 
-    // 立即返回前端 pending 状态（完成由 Coze POST /healing/coze/callback 写库）
-    sendSucc(res, { workId, status: "pending", runId });
+    // 返回响应
+    sendSucc(res, { workId, status: 'pending', runId });
 
-    const cozeCfg = getCozeConfig();
-    const fallbackMs = cozeCfg.fallbackPollAfterMs ?? 0;
-    if (fallbackMs > 0) {
-      setTimeout(() => {
-        void (async () => {
-          try {
-            const pending = (await Work.findOne({ workId, "healing.status": "pending" }).lean().exec()) as IWork | null;
-            if (!pending) return;
-            const out = await queryWorkflowOutputOnce(runId);
-            if (out === null) return;
-            await applyHealingSuccessFromRunId(runId, out);
-          } catch (err) {
-            logger.error("Coze fallback poll failed workId=", workId, (err as Error).message);
-            await Work.updateOne({ workId }, { $set: { "healing.status": "failed" } }).exec();
-          }
-        })();
-      }, fallbackMs);
-    }
+    // 设置 fallback 轮询
+    scheduleFallbackPoll(workId, runId);
   } catch (err) {
-    logRequestError("healing.ts:analyze:error", "healing analyze error", {
+    logRequestError('healing.ts:analyze:error', 'healing analyze error', {
       req,
       requestBody: { workId },
       statusCode: 500,
@@ -645,7 +772,7 @@ router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Respons
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Analyze failed", 500);
+    sendErr(res, 'Analyze failed', 500);
   }
 });
 
