@@ -252,6 +252,37 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
 });
 
 /**
+ * GET /assessment/questions/:sessionId
+ * 一次性返回全部题目（仅 index + content，不含 dimension）
+ */
+router.get("/questions/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const { sessionId } = req.params;
+  try {
+    const Sessions = getSessionModel();
+    const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
+    if (!session) { sendErr(res, "Session not found", 404); return; }
+    if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
+
+    const Questions = getQuestionModel();
+    const rows = await Questions.find({ questionId: { $in: session.questionIds } })
+      .select("questionId content -_id")
+      .lean()
+      .exec();
+
+    const qMap = new Map(rows.map((q) => [q.questionId, q.content as string]));
+    const questions = session.questionIds.map((id, i) => ({
+      index: i,
+      content: qMap.get(id) ?? "",
+    }));
+
+    sendSucc(res, { questions, totalQuestions: questions.length });
+  } catch (err) {
+    logger.error("[assessment/questions]", err);
+    sendErr(res, "Internal error", 500);
+  }
+});
+
+/**
  * GET /assessment/batch/:sessionId/:batchIndex
  * 返回第 batchIndex 批题目（5题），不含 dimension/modelType（防刷题）
  */
@@ -358,6 +389,17 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     if (!session) { sendErr(res, "Session not found", 404); return; }
     if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
 
+    // 优先使用 body 中提交的答案（新流程），否则回退到分批写入的答案（旧流程）
+    const bodyAnswers: { index: number; score: number }[] | undefined = req.body?.answers;
+    if (bodyAnswers && bodyAnswers.length > 0) {
+      const total = session.questionIds.length;
+      const valid = bodyAnswers.filter(
+        (a) => typeof a.index === "number" && typeof a.score === "number" &&
+               a.score >= 1 && a.score <= 5 && a.index >= 0 && a.index < total
+      );
+      session.answers = valid;
+    }
+
     const answerByIndex = new Map<number, number>();
     for (const a of session.answers) answerByIndex.set(a.index, a.score);
     if (answerByIndex.size !== session.questionIds.length) {
@@ -461,6 +503,13 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     // 免费版在 freeSummary 中注明为快速版
     const versionNote = isFreeVersion ? "\n\n（基于20题快速版，精度低于60题完整版）" : "";
     const freeSummary = `${report.coverLine}\n\n${report.summaryLine}${versionNote}`;
+
+    if (isFreeVersion) {
+      // 快速版：结果不落库，计算完直接删除 session
+      await session.deleteOne();
+      sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report, topCareers });
+      return;
+    }
 
     session.result = {
       big5Scores:    rawBig5Mean,
