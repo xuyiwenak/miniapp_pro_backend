@@ -10,7 +10,7 @@ function makeJob(overrides: Partial<IOccupationNorm>): IOccupationNorm {
     secondaryRiasec: "R",
     requiredBig5:    { openness: 0, conscientiousness: 0, emotionalStability: 0 },
     salaryIndex:     0.5,
-    ageBonusMultiplier: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 },
+    ageBonusMultiplier: { '18-21': 1.0, '22-24': 1.0, '25-30': 1.0, '31-35': 1.0, '36-44': 1.0, '45+': 1.0 },
     ageRange:        { min: 18, max: 60 },
     description:     "",
     isActive:        true,
@@ -120,7 +120,7 @@ describe("MatchingService.matchCareers", () => {
       code: "YOUNG",
       title: "青年职位",
       ageRange: { min: 18, max: 24 },
-      ageBonusMultiplier: { "18-24": 1.0, "25-34": 1.0, "35-44": 1.0, "45+": 1.0 },
+      ageBonusMultiplier: { '18-21': 1.0, '22-24': 1.0, '25-30': 1.0, '31-35': 1.0, '36-44': 1.0, '45+': 1.0 },
     });
     const inRange = matchCareers({ big5Norm: { O: 0.1, C: 0.2, N: 0.1 }, age: 22 }, [youngJob]);
     const outRange = matchCareers({ big5Norm: { O: 0.1, C: 0.2, N: 0.1 }, age: 40 }, [youngJob]);
@@ -164,12 +164,12 @@ describe("MatchingService.matchCareers", () => {
     const job = makeJob({
       code: "HINT",
       primaryRiasec: "I",
-      ageHints: { "25-34": "这是成长期建议" },
+      ageHints: { '25-30': '这是成长期建议' },
     });
     const results = matchCareers(
       { big5Norm: {}, age: 28 },
       [job]
     );
-    assert.strictEqual(results[0]!.ageHints?.["25-34"], "这是成长期建议");
+    assert.strictEqual(results[0]!.ageHints?.['25-30'], '这是成长期建议');
   });
 });

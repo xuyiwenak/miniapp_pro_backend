@@ -1,21 +1,21 @@
-import { Router, Response } from "express";
-import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
-import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
+import { Router, Response } from 'express';
+import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
+import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import {
   getInviteCodeModel,
   getInviteRewardModel,
   getSessionModel,
-} from "../../dbservice/BegreatDBModel";
-import { gameLogger as logger } from "../../../../util/logger";
+} from '../../dbservice/BegreatDBModel';
+import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 
 /** 6 位邀请码字符集（去除易混淆字符 0/O/1/I） */
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 6;
 
 function generateCode(): string {
-  let code = "";
+  let code = '';
   for (let i = 0; i < CODE_LEN; i++) {
     code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   }
@@ -26,7 +26,7 @@ function generateCode(): string {
  * GET /invite/my-code
  * 获取（或首次创建）当前用户的邀请码
  */
-router.get("/my-code", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/my-code', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
   try {
     const InviteCodes = getInviteCodeModel();
@@ -34,14 +34,14 @@ router.get("/my-code", authMiddleware, async (req: MiniappRequest, res: Response
 
     if (!record) {
       // 生成唯一邀请码（碰撞重试最多 5 次）
-      let code = "";
+      let code = '';
       for (let attempt = 0; attempt < 5; attempt++) {
         const candidate = generateCode();
         const exists = await InviteCodes.findOne({ code: candidate }).lean().exec();
         if (!exists) { code = candidate; break; }
       }
       if (!code) {
-        sendErr(res, "Failed to generate invite code", 500);
+        sendErr(res, 'Failed to generate invite code', 500);
         return;
       }
       record = await InviteCodes.create({ code, openId });
@@ -49,8 +49,8 @@ router.get("/my-code", authMiddleware, async (req: MiniappRequest, res: Response
 
     sendSucc(res, { code: record.code });
   } catch (err) {
-    logger.error("[invite/my-code]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[invite/my-code]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -58,7 +58,7 @@ router.get("/my-code", authMiddleware, async (req: MiniappRequest, res: Response
  * GET /invite/stats
  * 查询当前用户的邀请积分和累计邀请数
  */
-router.get("/stats", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/stats', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
   try {
     const InviteRewards = getInviteRewardModel();
@@ -68,8 +68,8 @@ router.get("/stats", authMiddleware, async (req: MiniappRequest, res: Response) 
       totalInvited: reward?.totalInvited ?? 0,
     });
   } catch (err) {
-    logger.error("[invite/stats]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[invite/stats]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -77,7 +77,7 @@ router.get("/stats", authMiddleware, async (req: MiniappRequest, res: Response) 
  * POST /invite/claim-unlock/:sessionId
  * 消费 1 个邀请积分，将指定 60 题 session 解锁为 invite_unlocked 层
  */
-router.post("/claim-unlock/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/claim-unlock/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
   const openId = req.userId!;
 
@@ -86,16 +86,16 @@ router.post("/claim-unlock/:sessionId", authMiddleware, async (req: MiniappReque
     const InviteRewards = getInviteRewardModel();
 
     const session = await Sessions.findOne({ sessionId, openId }).lean().exec();
-    if (!session) { sendErr(res, "Session not found", 404); return; }
-    if (session.assessmentType !== "BFI2") {
-      sendErr(res, "Invite unlock only applies to full 60-question assessment", 400);
+    if (!session) { sendErr(res, 'Session not found', 404); return; }
+    if (session.assessmentType !== 'BFI2') {
+      sendErr(res, 'Invite unlock only applies to full 60-question assessment', 400);
       return;
     }
-    if (session.status !== "completed") {
-      if (session.status === "invite_unlocked" || session.status === "paid") {
-        sendErr(res, "Report already unlocked", 400);
+    if (session.status !== 'completed') {
+      if (session.status === 'invite_unlocked' || session.status === 'paid') {
+        sendErr(res, 'Report already unlocked', 400);
       } else {
-        sendErr(res, "Assessment not completed yet", 400);
+        sendErr(res, 'Assessment not completed yet', 400);
       }
       return;
     }
@@ -108,20 +108,20 @@ router.post("/claim-unlock/:sessionId", authMiddleware, async (req: MiniappReque
     ).lean().exec();
 
     if (!updated) {
-      sendErr(res, "Insufficient invite credits", 403);
+      sendErr(res, 'Insufficient invite credits', 403);
       return;
     }
 
     await Sessions.updateOne(
       { sessionId },
-      { $set: { status: "invite_unlocked", inviteUnlockedAt: new Date() } }
+      { $set: { status: 'invite_unlocked', inviteUnlockedAt: new Date() } }
     );
 
-    logger.info("[invite/claim-unlock] unlocked:", sessionId, "by:", openId);
+    logger.info('[invite/claim-unlock] unlocked:', sessionId, 'by:', openId);
     sendSucc(res, { credits: updated.freeUnlockCredits });
   } catch (err) {
-    logger.error("[invite/claim-unlock]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[invite/claim-unlock]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -150,9 +150,7 @@ export async function creditInviter(inviterOpenId: string, referredSessionId: st
     const InviteRewards = getInviteRewardModel();
     const Sessions      = getSessionModel();
 
-    // 幂等：检查该 session 的 referrerId 是否已被处理过（通过查 session 的 referrerId 字段）
-    const session = await Sessions.findOne({ sessionId: referredSessionId }).select("referrerId referrerCredited").lean().exec();
-    // referrerCredited 字段不存在时视为 false — 通过 updateOne $setOnInsert 实现幂等
+    // 幂等：通过 $setOnInsert 实现；referrerCredited 标记防止重复结算
     await InviteRewards.findOneAndUpdate(
       { openId: inviterOpenId },
       {
@@ -163,8 +161,8 @@ export async function creditInviter(inviterOpenId: string, referredSessionId: st
     );
     // 标记 session 已结算，防止服务器重启后重复结算
     await Sessions.updateOne({ sessionId: referredSessionId }, { $set: { referrerCredited: true } });
-    logger.info("[invite/credit]", inviterOpenId, "credited for session", referredSessionId);
+    logger.info('[invite/credit]', inviterOpenId, 'credited for session', referredSessionId);
   } catch (err) {
-    logger.error("[invite/credit] error:", err);
+    logger.error('[invite/credit] error:', err);
   }
 }

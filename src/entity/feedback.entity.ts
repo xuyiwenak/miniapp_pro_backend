@@ -1,10 +1,10 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
 export interface IFeedback {
   userId: string;
   title: string;
   content: string;
-  status: "pending" | "processing" | "resolved";
+  status: 'pending' | 'processing' | 'resolved';
   reply?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -17,8 +17,8 @@ export const FeedbackSchema = new Schema<IFeedback>(
     content: { type: String, required: true, maxlength: 300 },
     status: {
       type: String,
-      enum: ["pending", "processing", "resolved"],
-      default: "pending",
+      enum: ['pending', 'processing', 'resolved'],
+      default: 'pending',
       required: true,
       index: true,
     },

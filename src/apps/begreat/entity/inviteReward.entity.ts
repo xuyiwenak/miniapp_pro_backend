@@ -1,4 +1,4 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
 export interface IInviteReward {
   openId:             string;
@@ -14,5 +14,5 @@ export const InviteRewardSchema = new Schema<IInviteReward>(
     freeUnlockCredits: { type: Number, default: 0, min: 0 },
     totalInvited:      { type: Number, default: 0, min: 0 },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
 );

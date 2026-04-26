@@ -3,7 +3,7 @@ export interface ReqCreateRole {
     userId: string;
     nickname: string;
   }
-  
-  export interface ResCreateRole {
+
+export interface ResCreateRole {
     roleId: string;
   }

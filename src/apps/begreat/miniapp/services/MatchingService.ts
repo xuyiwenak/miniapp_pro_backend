@@ -52,8 +52,8 @@ function clampScore(score: number): number {
 }
 
 function readMetric(rule: IExcludeRule, input: MatchInput): number {
-  if (rule.metric === "age") return input.age;
-  if (rule.metric === "N_stability") return -(input.big5Norm["N"] ?? 0);
+  if (rule.metric === 'age') return input.age;
+  if (rule.metric === 'N_stability') return -(input.big5Norm['N'] ?? 0);
   return input.big5Norm[rule.metric] ?? 0;
 }
 
@@ -61,12 +61,12 @@ function isRuleMatched(rule: IExcludeRule, input: MatchInput): boolean {
   const current = readMetric(rule, input);
   const value = rule.value;
   switch (rule.op) {
-    case "<":  return typeof value === "number" && current < value;
-    case "<=": return typeof value === "number" && current <= value;
-    case ">":  return typeof value === "number" && current > value;
-    case ">=": return typeof value === "number" && current >= value;
-    case "==": return typeof value === "number" && current === value;
-    case "in": {
+    case '<':  return typeof value === 'number' && current < value;
+    case '<=': return typeof value === 'number' && current <= value;
+    case '>':  return typeof value === 'number' && current > value;
+    case '>=': return typeof value === 'number' && current >= value;
+    case '==': return typeof value === 'number' && current === value;
+    case 'in': {
       if (Array.isArray(value) && value.length === 2) {
         return current >= value[0] && current <= value[1];
       }
@@ -75,7 +75,7 @@ function isRuleMatched(rule: IExcludeRule, input: MatchInput): boolean {
       }
       return false;
     }
-    case "not_in": {
+    case 'not_in': {
       if (Array.isArray(value) && value.length === 2) {
         return current < value[0] || current > value[1];
       }
@@ -142,13 +142,13 @@ function scoreCareer(
   ageMultiplier: number;
 } {
   // 核心维度
-  const openness = input.big5Norm["O"] ?? 0;
-  const conscientiousness = input.big5Norm["C"] ?? 0;
-  const emotionalStability = -(input.big5Norm["N"] ?? 0);
+  const openness = input.big5Norm['O'] ?? 0;
+  const conscientiousness = input.big5Norm['C'] ?? 0;
+  const emotionalStability = -(input.big5Norm['N'] ?? 0);
 
   // 可选维度
-  const extraversion = input.big5Norm["E"] ?? 0;
-  const agreeableness = input.big5Norm["A"] ?? 0;
+  const extraversion = input.big5Norm['E'] ?? 0;
+  const agreeableness = input.big5Norm['A'] ?? 0;
 
   // 计算差异 - 使用方向性匹配
   // 对于"越高越好"的维度（O, C, N），超出上限时减少惩罚
@@ -234,10 +234,10 @@ export function matchCareersWithDiagnostics(
   occupations: IOccupationNorm[],
   limit = 10
 ): MatchDiagnostics {
-  const emotionalStability = -(big5Norm["N"] ?? 0);
-  const extraversion = big5Norm["E"] ?? 0;
-  const agreeableness = big5Norm["A"] ?? 0;
-  const conscientiousness = big5Norm["C"] ?? 0;
+  const emotionalStability = -(big5Norm['N'] ?? 0);
+  const extraversion = big5Norm['E'] ?? 0;
+  const agreeableness = big5Norm['A'] ?? 0;
+  const conscientiousness = big5Norm['C'] ?? 0;
   const input = { big5Norm, age };
 
   const activeJobs = occupations.filter((job) => job.isActive);
@@ -266,19 +266,19 @@ export function matchCareersWithDiagnostics(
 
       if (req.emotionalStability !== undefined && emotionalStability < req.emotionalStability) {
         failedReasons.push(`情绪稳定性不足（该职业要求 ≥ ${req.emotionalStability.toFixed(2)}，当前 ${emotionalStability.toFixed(2)}）`);
-        failedIds.push("min_req_emotional_stability");
+        failedIds.push('min_req_emotional_stability');
       }
       if (req.conscientiousness !== undefined && conscientiousness < req.conscientiousness) {
         failedReasons.push(`尽责性不足（该职业要求 ≥ ${req.conscientiousness.toFixed(2)}，当前 ${conscientiousness.toFixed(2)}）`);
-        failedIds.push("min_req_conscientiousness");
+        failedIds.push('min_req_conscientiousness');
       }
       if (req.extraversion !== undefined && extraversion < req.extraversion) {
         failedReasons.push(`外向性不足（该职业要求 ≥ ${req.extraversion.toFixed(2)}，当前 ${extraversion.toFixed(2)}）`);
-        failedIds.push("min_req_extraversion");
+        failedIds.push('min_req_extraversion');
       }
       if (req.agreeableness !== undefined && agreeableness < req.agreeableness) {
         failedReasons.push(`宜人性不足（该职业要求 ≥ ${req.agreeableness.toFixed(2)}，当前 ${agreeableness.toFixed(2)}）`);
-        failedIds.push("min_req_agreeableness");
+        failedIds.push('min_req_agreeableness');
       }
 
       if (failedReasons.length > 0) {
@@ -287,7 +287,7 @@ export function matchCareersWithDiagnostics(
           title: job.title,
           reasons: failedReasons,
           ruleIds: failedIds,
-          advice: job.excludeRules?.advice ?? "建议先提升相关特质，再重新评估该职业的适合度。",
+          advice: job.excludeRules?.advice ?? '建议先提升相关特质，再重新评估该职业的适合度。',
         });
         return false;
       }

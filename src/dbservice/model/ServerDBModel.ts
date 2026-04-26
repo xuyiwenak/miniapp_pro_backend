@@ -6,7 +6,7 @@
  * @LastEditors: lyh
  * @LastEditTime: 2024-12-04 16:08:40
  */
-import { Connection } from "mongoose";
+import { Connection } from 'mongoose';
 // import { IMail, MailSchema } from '../../entity/mail.entity';
 
 // const AutoIncrement = require('mongoose-sequence')(mongoose);
@@ -59,7 +59,7 @@ export function initializeServerModel(connection: Connection) {
 export function getServerModelManager(): ServerModelManager {
   if (!serverModelManager) {
     throw new Error(
-      "GlobalModelManager is not initialized. Please call initializeGlobalModel first."
+      'GlobalModelManager is not initialized. Please call initializeGlobalModel first.'
     );
   }
   return serverModelManager;

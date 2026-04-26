@@ -10,12 +10,12 @@ import {
   ComponentManager,
   EComName,
   IBaseComponent,
-} from "../common/BaseComponent";
-import { DBCfg, RedisCfg, ZoneCfg as ServerCfg } from "../common/CommonType";
-import { ServerGlobals } from "../common/ServerGlobal";
-import { gameLogger as logger } from "../util/logger";
+} from '../common/BaseComponent';
+import { DBCfg, RedisCfg, ZoneCfg as ServerCfg } from '../common/CommonType';
+import { ServerGlobals } from '../common/ServerGlobal';
+import { gameLogger as logger } from '../util/logger';
 // import { schema as DBConfig } from '../json_schemas/db_config';
-import { loadSysConfigJson } from "../util/load_json";
+import { loadSysConfigJson } from '../util/load_json';
 
 export class SysCfgComponent implements IBaseComponent {
   private _db_global!: DBCfg;
@@ -41,7 +41,7 @@ export class SysCfgComponent implements IBaseComponent {
   async stop() {}
 
   setZoneConfig(globalVar: ServerGlobals): void {
-    const [data, error] = loadSysConfigJson("zone_config.json");
+    const [data, error] = loadSysConfigJson('zone_config.json');
     if (!data) {
       logger.error(`load zone_config.json failed: ${error}`);
       return;
@@ -60,7 +60,7 @@ export class SysCfgComponent implements IBaseComponent {
   }
 
   setDbConfig(): void {
-    const [data, error] = loadSysConfigJson("db_config.json");
+    const [data, error] = loadSysConfigJson('db_config.json');
     if (!data) {
       logger.error(`load db_config.json failed: ${error}`);
       return;
@@ -85,11 +85,11 @@ export class SysCfgComponent implements IBaseComponent {
     if (config.redis_global) {
       this._redis_global = config.redis_global as RedisCfg;
     }
-    logger.info("DB config loaded.");
+    logger.info('DB config loaded.');
   }
 
   setServerAuthConfig(): void {
-    const [data, error] = loadSysConfigJson("server_auth_config.json");
+    const [data, error] = loadSysConfigJson('server_auth_config.json');
     if (!data) {
       logger.error(`load server_auth_config.json failed: ${error}`);
       return;

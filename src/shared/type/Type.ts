@@ -21,7 +21,7 @@ export type TGameInfo = {
   stamp?: number;
 };
 
-export type TstatusString = "normal" | "maintenance" | "closing";
+export type TstatusString = 'normal' | 'maintenance' | 'closing';
 
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 export interface IStorage {
@@ -57,9 +57,9 @@ export enum BadCode {
 export function badCodeToMsg(code: BadCode) {
   switch (code) {
     case BadCode.Ok:
-      return "OK";
+      return 'OK';
     case BadCode.ServerErr:
-      return "Server Inner Error";
+      return 'Server Inner Error';
     default:
       return BadCode[code];
   }

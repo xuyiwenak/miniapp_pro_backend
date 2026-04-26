@@ -1,11 +1,11 @@
-import { ApiCall } from "tsrpc";
+import { ApiCall } from 'tsrpc';
 import {
   ReqLogin,
   ResLogin,
-} from "../protocols/PtlLogin";
-import { ServiceType } from "../protocols/serviceProto";
-import { ComponentManager } from "../../../common/BaseComponent";
-import type { PlayerComponent } from "../../../component/PlayerComponent";
+} from '../protocols/PtlLogin';
+import { ServiceType } from '../protocols/serviceProto';
+import { ComponentManager } from '../../../common/BaseComponent';
+import type { PlayerComponent } from '../../../component/PlayerComponent';
 
 export async function ApiLogin(
   call: ApiCall<ReqLogin, ResLogin, ServiceType>,
@@ -14,11 +14,11 @@ export async function ApiLogin(
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>(
-      "PlayerComponent",
+      'PlayerComponent',
     );
 
   if (!playerComp) {
-    await call.error("Login failed: PlayerComponentNotInitialized");
+    await call.error('Login failed: PlayerComponentNotInitialized');
     return;
   }
 

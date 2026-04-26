@@ -1,34 +1,34 @@
-import { Router, Response } from "express";
-import { randomBytes } from "crypto";
-import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
-import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getQuestionModel, getSessionModel, getOccupationModel } from "../../dbservice/BegreatDBModel";
+import { Router, Response } from 'express';
+import { randomBytes } from 'crypto';
+import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
+import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
+import { getQuestionModel, getSessionModel, getOccupationModel } from '../../dbservice/BegreatDBModel';
 import {
   computeAllNormalizedScores,
   buildPersonalityLabel,
   getActiveNormVersion,
   getNormMeta,
-} from "../services/CalculationEngine";
-import { matchCareersWithDiagnostics } from "../services/MatchingService";
-import { buildBegreatReportSnapshot } from "../services/reportTemplate";
-import type { Gender, AssessmentType } from "../../entity/session.entity";
-import { gameLogger as logger } from "../../../../util/logger";
+} from '../services/CalculationEngine';
+import { matchCareersWithDiagnostics } from '../services/MatchingService';
+import { buildBegreatReportSnapshot } from '../services/reportTemplate';
+import type { Gender, AssessmentType } from '../../entity/session.entity';
+import { gameLogger as logger } from '../../../../util/logger';
 import {
   BFI2_INSTRUMENT_VERSION,
   bfi2AdjustedScore,
-} from "../../bfi2/bfi2ItemMeta";
-import type { Big5Dim } from "../../entity/question.entity";
-import { resolveInviteCode, creditInviter } from "./invite";
+} from '../../bfi2/bfi2ItemMeta';
+import type { Big5Dim } from '../../entity/question.entity';
+// resolveInviteCode, creditInviter imported from './invite' when needed for invite flow
 
 const router = Router();
 const BATCH_SIZE = 5;
-const VALID_ASSESSMENT_TYPES = new Set<AssessmentType>(["BFI2", "BFI2_FREE", "MBTI", "DISC"]);
+const VALID_ASSESSMENT_TYPES = new Set<AssessmentType>(['BFI2', 'BFI2_FREE', 'MBTI', 'DISC']);
 
-const BIG5_DIMS: Big5Dim[] = ["O", "C", "E", "A", "N"];
+const BIG5_DIMS: Big5Dim[] = ['O', 'C', 'E', 'A', 'N'];
 /** BFI2_FREE: 每个大五维度取 4 题，3 个 facet 均须覆盖（分配：2+1+1） */
 const BFI2_FREE_ITEMS_PER_DIM = 4;
 /** BFI2_FREE 使用的量表版本标识 */
-const BFI2_FREE_INSTRUMENT_VERSION = "BFI2_FREE_CN_20";
+const BFI2_FREE_INSTRUMENT_VERSION = 'BFI2_FREE_CN_20';
 
 /** 随机打乱数组（Fisher-Yates） */
 function shuffle<T>(arr: T[]): T[] {
@@ -84,17 +84,17 @@ function selectFromFacets(
  * GET /assessment/history
  * 返回当前用户所有已完成（completed / paid）的测评记录，按时间倒序
  */
-router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/history', authMiddleware, async (req: MiniappRequest, res: Response) => {
   try {
     const Sessions = getSessionModel();
-    const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+    const rawLimit = parseInt(String(req.query.limit ?? '20'), 10);
     const pageLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
 
     const sessions = await Sessions.find({
       openId: req.userId,
-      status: { $in: ["completed", "paid"] },
+      status: { $in: ['completed', 'paid'] },
     })
-      .select("sessionId assessmentType status result.personalityLabel result.freeSummary createdAt -_id")
+      .select('sessionId assessmentType status result.personalityLabel result.freeSummary createdAt -_id')
       .sort({ createdAt: -1 })
       .limit(pageLimit)
       .lean()
@@ -102,32 +102,32 @@ router.get("/history", authMiddleware, async (req: MiniappRequest, res: Response
 
     const history = sessions.map((s) => ({
       sessionId:        s.sessionId,
-      assessmentType:   s.assessmentType ?? "BFI2",
+      assessmentType:   s.assessmentType ?? 'BFI2',
       status:           s.status,
-      personalityLabel: s.result?.personalityLabel ?? "",
-      freeSummary:      s.result?.freeSummary ?? "",
+      personalityLabel: s.result?.personalityLabel ?? '',
+      freeSummary:      s.result?.freeSummary ?? '',
       createdAt:        s.createdAt,
     }));
 
     sendSucc(res, { history });
   } catch (err) {
-    logger.error("[assessment/history]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/history]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
-router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/start', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const openId = req.userId!;
   const { gender, age, assessmentType: rawType } = req.body ?? {};
-  const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : "BFI2";
+  const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : 'BFI2';
 
-  if (!gender || !["male", "female"].includes(gender)) {
-    sendErr(res, "Invalid gender", 400);
+  if (!gender || !['male', 'female'].includes(gender)) {
+    sendErr(res, 'Invalid gender', 400);
     return;
   }
   const ageNum = Number(age);
   if (!ageNum || ageNum < 15 || ageNum > 80) {
-    sendErr(res, "Invalid age", 400);
+    sendErr(res, 'Invalid age', 400);
     return;
   }
 
@@ -147,38 +147,38 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
       assessmentType,
       createdAt: { $gte: todayStart },
     });
-    const isDev = (process.env.environment ?? "development") === "development";
+    const isDev = (process.env.environment ?? 'development') === 'development';
     if (!isDev && todayCount >= DAILY_LIMITS[assessmentType]) {
-      const typeLabel = assessmentType === "BFI2_FREE" ? "免费版" : "完整版";
+      const typeLabel = assessmentType === 'BFI2_FREE' ? '免费版' : '完整版';
       sendErr(res, `今日${typeLabel}测评次数已达上限，请明天再来`, 429);
       return;
     }
     // ─────────────────────────────────────────────────────────────────
 
     const Questions = getQuestionModel();
-    const activeNormVersion = await getActiveNormVersion("BIG5");
+    const activeNormVersion = await getActiveNormVersion('BIG5');
     if (!activeNormVersion) {
-      sendErr(res, "No active norm version found. Please import norms first.", 500);
+      sendErr(res, 'No active norm version found. Please import norms first.', 500);
       return;
     }
 
     let selectedIds: string[];
     let instrumentVersion: string;
 
-    if (assessmentType === "BFI2_FREE") {
+    if (assessmentType === 'BFI2_FREE') {
       // ── BFI2_FREE：每维度选 4 题，覆盖全部 3 个 facet ──────────────
       const allWithMeta = await Questions.find({
-          isActive: true,
-          modelType: "BIG5",
-          $or: [{ gender: gender as Gender }, { gender: "both" }],
-          bfiFacet: { $exists: true, $ne: null },
-        })
-        .select("questionId dimension bfiFacet -_id")
+        isActive: true,
+        modelType: 'BIG5',
+        $or: [{ gender: gender as Gender }, { gender: 'both' }],
+        bfiFacet: { $exists: true, $ne: null },
+      })
+        .select('questionId dimension bfiFacet -_id')
         .lean()
         .exec();
 
       if (allWithMeta.length === 0) {
-        sendErr(res, "Question bank is empty", 500);
+        sendErr(res, 'Question bank is empty', 500);
         return;
       }
 
@@ -216,26 +216,26 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
     } else {
       // ── BFI2（完整版）：全量题目打乱 ────────────────────────────────
       const all = await Questions.find({
-          isActive: true,
-          $or: [{ gender: gender as Gender }, { gender: "both" }],
-        })
-        .select("questionId")
+        isActive: true,
+        $or: [{ gender: gender as Gender }, { gender: 'both' }],
+      })
+        .select('questionId')
         .lean()
         .exec();
       if (all.length === 0) {
-        sendErr(res, "Question bank is empty", 500);
+        sendErr(res, 'Question bank is empty', 500);
         return;
       }
       selectedIds = shuffle(all.map((q) => q.questionId));
       instrumentVersion = BFI2_INSTRUMENT_VERSION;
     }
 
-    const sessionId = randomBytes(16).toString("hex");
+    const sessionId = randomBytes(16).toString('hex');
     await Sessions.create({
       sessionId,
       openId,
       assessmentType,
-      status: "in_progress",
+      status: 'in_progress',
       userProfile: { gender: gender as Gender, age: ageNum },
       instrumentVersion,
       normVersion: activeNormVersion,
@@ -246,8 +246,8 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
     const totalBatches = Math.ceil(selectedIds.length / BATCH_SIZE);
     sendSucc(res, { sessionId, totalQuestions: selectedIds.length, totalBatches });
   } catch (err) {
-    logger.error("[assessment/start]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/start]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -255,30 +255,30 @@ router.post("/start", authMiddleware, async (req: MiniappRequest, res: Response)
  * GET /assessment/questions/:sessionId
  * 一次性返回全部题目（仅 index + content，不含 dimension）
  */
-router.get("/questions/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/questions/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
   try {
     const Sessions = getSessionModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
-    if (!session) { sendErr(res, "Session not found", 404); return; }
-    if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
+    if (!session) { sendErr(res, 'Session not found', 404); return; }
+    if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
     const Questions = getQuestionModel();
     const rows = await Questions.find({ questionId: { $in: session.questionIds } })
-      .select("questionId content -_id")
+      .select('questionId content -_id')
       .lean()
       .exec();
 
     const qMap = new Map(rows.map((q) => [q.questionId, q.content as string]));
     const questions = session.questionIds.map((id, i) => ({
       index: i,
-      content: qMap.get(id) ?? "",
+      content: qMap.get(id) ?? '',
     }));
 
     sendSucc(res, { questions, totalQuestions: questions.length });
   } catch (err) {
-    logger.error("[assessment/questions]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/questions]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -286,28 +286,28 @@ router.get("/questions/:sessionId", authMiddleware, async (req: MiniappRequest, 
  * GET /assessment/batch/:sessionId/:batchIndex
  * 返回第 batchIndex 批题目（5题），不含 dimension/modelType（防刷题）
  */
-router.get("/batch/:sessionId/:batchIndex", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/batch/:sessionId/:batchIndex', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId, batchIndex } = req.params;
   const batchIdx = parseInt(batchIndex, 10);
 
   if (isNaN(batchIdx) || batchIdx < 0) {
-    sendErr(res, "Invalid batchIndex", 400);
+    sendErr(res, 'Invalid batchIndex', 400);
     return;
   }
 
   try {
     const Sessions = getSessionModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
-    if (!session) { sendErr(res, "Session not found", 404); return; }
-    if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
+    if (!session) { sendErr(res, 'Session not found', 404); return; }
+    if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
     const start = batchIdx * BATCH_SIZE;
     const batchIds = session.questionIds.slice(start, start + BATCH_SIZE);
-    if (batchIds.length === 0) { sendErr(res, "No more batches", 400); return; }
+    if (batchIds.length === 0) { sendErr(res, 'No more batches', 400); return; }
 
     const Questions = getQuestionModel();
     const questions = await Questions.find({ questionId: { $in: batchIds } })
-      .select("questionId content -_id")
+      .select('questionId content -_id')
       .lean()
       .exec();
 
@@ -332,8 +332,8 @@ router.get("/batch/:sessionId/:batchIndex", authMiddleware, async (req: MiniappR
       isLastBatch: batchIdx === totalBatches - 1,
     });
   } catch (err) {
-    logger.error("[assessment/batch]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/batch]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -342,17 +342,17 @@ router.get("/batch/:sessionId/:batchIndex", authMiddleware, async (req: MiniappR
  * body: { answers: [{ questionId, score }] }
  * 提交当前批次答案
  */
-router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/batch/:sessionId/:batchIndex', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
   const { answers } = req.body ?? {};
 
   if (!Array.isArray(answers) || answers.length === 0) {
-    sendErr(res, "Missing answers", 400);
+    sendErr(res, 'Missing answers', 400);
     return;
   }
   for (const a of answers) {
-    if (typeof a.index !== "number" || typeof a.score !== "number" || a.score < 1 || a.score > 5) {
-      sendErr(res, "Invalid answer format", 400);
+    if (typeof a.index !== 'number' || typeof a.score !== 'number' || a.score < 1 || a.score > 5) {
+      sendErr(res, 'Invalid answer format', 400);
       return;
     }
   }
@@ -360,8 +360,8 @@ router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: Miniapp
   try {
     const Sessions = getSessionModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).exec();
-    if (!session) { sendErr(res, "Session not found", 404); return; }
-    if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
+    if (!session) { sendErr(res, 'Session not found', 404); return; }
+    if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
     // 仅接受合法 index 范围内的答案
     const total = session.questionIds.length;
@@ -371,8 +371,8 @@ router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: Miniapp
 
     sendSucc(res, { savedCount: valid.length, totalAnswered: session.answers.length });
   } catch (err) {
-    logger.error("[assessment/submit-batch]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/submit-batch]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -380,21 +380,21 @@ router.post("/batch/:sessionId/:batchIndex", authMiddleware, async (req: Miniapp
  * POST /assessment/complete/:sessionId
  * 完成测评：计算得分、生成报告、存储结果
  */
-router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/complete/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
 
   try {
     const Sessions = getSessionModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).exec();
-    if (!session) { sendErr(res, "Session not found", 404); return; }
-    if (session.status !== "in_progress") { sendErr(res, "Session already completed", 400); return; }
+    if (!session) { sendErr(res, 'Session not found', 404); return; }
+    if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
     // 优先使用 body 中提交的答案（新流程），否则回退到分批写入的答案（旧流程）
     const bodyAnswers: { index: number; score: number }[] | undefined = req.body?.answers;
     if (bodyAnswers && bodyAnswers.length > 0) {
       const total = session.questionIds.length;
       const valid = bodyAnswers.filter(
-        (a) => typeof a.index === "number" && typeof a.score === "number" &&
+        (a) => typeof a.index === 'number' && typeof a.score === 'number' &&
                a.score >= 1 && a.score <= 5 && a.index >= 0 && a.index < total
       );
       session.answers = valid;
@@ -410,7 +410,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     // 获取所有已答题目的维度信息
     const Questions = getQuestionModel();
     const questionDims = await Questions.find({ questionId: { $in: session.questionIds } })
-      .select("questionId modelType dimension weight bfiItemNo bfiReverse bfiFacet -_id")
+      .select('questionId modelType dimension weight bfiItemNo bfiReverse bfiFacet -_id')
       .lean()
       .exec();
 
@@ -430,7 +430,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       const qid = session.questionIds[ans.index];
       const q = qid ? dimMap.get(qid) : undefined;
       if (!q) continue;
-      if (q.modelType === "BIG5" && typeof q.bfiItemNo === "number") {
+      if (q.modelType === 'BIG5' && typeof q.bfiItemNo === 'number') {
         const adj = bfi2AdjustedScore(ans.score, q.bfiItemNo);
         const dim = q.dimension as Big5Dim;
         domainAdjSum[dim] = (domainAdjSum[dim] ?? 0) + adj;
@@ -442,7 +442,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       }
     }
 
-    const isFreeVersion = session.assessmentType === "BFI2_FREE";
+    const isFreeVersion = session.assessmentType === 'BFI2_FREE';
     // 完整版：每维度固定 12 题；免费版：每维度 BFI2_FREE_ITEMS_PER_DIM 题
     const expectedPerDomain = isFreeVersion ? BFI2_FREE_ITEMS_PER_DIM : 12;
 
@@ -453,7 +453,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       const sum = domainAdjSum[dim] ?? 0;
       if (cnt !== expectedPerDomain) {
         logger.error(`[assessment/complete] ${session.assessmentType} domain ${dim} item count ${cnt}, expected ${expectedPerDomain}`);
-        sendErr(res, "Assessment data inconsistent (BFI-2)", 500);
+        sendErr(res, 'Assessment data inconsistent (BFI-2)', 500);
         return;
       }
       rawBig5Mean[dim] = parseFloat((sum / cnt).toFixed(4));
@@ -465,7 +465,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     for (const [facet, cnt] of Object.entries(facetAdjCount)) {
       if (!isFreeVersion && cnt !== 4) {
         logger.error(`[assessment/complete] BFI-2 facet ${facet} count ${cnt}, expected 4`);
-        sendErr(res, "Assessment data inconsistent (BFI-2 facets)", 500);
+        sendErr(res, 'Assessment data inconsistent (BFI-2 facets)', 500);
         return;
       }
       if (cnt > 0) {
@@ -501,7 +501,7 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
     const normMeta = await getNormMeta(normVersion);
 
     // 免费版在 freeSummary 中注明为快速版
-    const versionNote = isFreeVersion ? "\n\n（基于20题快速版，精度低于60题完整版）" : "";
+    const versionNote = isFreeVersion ? '\n\n（基于20题快速版，精度低于60题完整版）' : '';
     const freeSummary = `${report.coverLine}\n\n${report.summaryLine}${versionNote}`;
 
     if (isFreeVersion) {
@@ -527,13 +527,13 @@ router.post("/complete/:sessionId", authMiddleware, async (req: MiniappRequest, 
       normSource:        normMeta?.source ?? null,
       normSampleSize:    normMeta?.sampleSize ?? null,
     };
-    session.status = "completed";
+    session.status = 'completed';
     await session.save();
 
     sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
   } catch (err) {
-    logger.error("[assessment/complete]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[assessment/complete]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 

@@ -1,7 +1,7 @@
-import { ComponentManager, EComName } from "../../common/BaseComponent";
-import { ServerGlobals } from "../../common/ServerGlobal";
-import { GlobalVarComponent } from "../../component/GlobalVarComponent";
-import { SysCfgComponent } from "../../component/SysCfgComponent";
+import { ComponentManager, EComName } from '../../common/BaseComponent';
+import { ServerGlobals } from '../../common/ServerGlobal';
+import { GlobalVarComponent } from '../../component/GlobalVarComponent';
+import { SysCfgComponent } from '../../component/SysCfgComponent';
 
 type LifecycleLogger = {
   error: (...args: unknown[]) => void;
@@ -28,21 +28,21 @@ export function setupProcessLifecycle(
   logger: LifecycleLogger,
   onShutdown: () => void,
 ): void {
-  process.on("uncaughtException", (err) => {
+  process.on('uncaughtException', (err) => {
     logger.error(`[${appName}] Uncaught exception:`, err.message);
   });
 
-  process.on("unhandledRejection", (reason) => {
+  process.on('unhandledRejection', (reason) => {
     const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
     logger.warn(`[${appName}] Unhandled rejection:`, msg);
   });
 
-  process.on("SIGINT", () => {
+  process.on('SIGINT', () => {
     logger.info(`[${appName}] SIGINT, shutting down`);
     onShutdown();
   });
 
-  process.on("SIGTERM", () => {
+  process.on('SIGTERM', () => {
     logger.info(`[${appName}] SIGTERM, shutting down`);
     onShutdown();
   });

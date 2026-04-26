@@ -1,15 +1,15 @@
-import * as fs from "fs";
-import * as path from "path";
-import type { Gender, ICareerMatch } from "../../entity/session.entity";
-import type { IBig5ReportDimension, IReportSnapshot, IAnnotatedCareerMatch, ICareerSection, ICareerAiImpact } from "../../entity/reportResult.entity";
-import type { OccupationAgeGroup } from "../../entity/occupation.entity";
-import { getAgeGroup } from "./CalculationEngine";
-import type { AgeGroup } from "../../entity/norm.entity";
+import * as fs from 'fs';
+import * as path from 'path';
+import type { Gender, ICareerMatch } from '../../entity/session.entity';
+import type { IBig5ReportDimension, IReportSnapshot, IAnnotatedCareerMatch, ICareerSection, ICareerAiImpact } from '../../entity/reportResult.entity';
+import type { OccupationAgeGroup } from '../../entity/occupation.entity';
+import { getAgeGroup } from './CalculationEngine';
+import type { AgeGroup } from '../../entity/norm.entity';
 
-const BIG5_ORDER = ["O", "C", "E", "A", "N"] as const;
+const BIG5_ORDER = ['O', 'C', 'E', 'A', 'N'] as const;
 export type Big5Code = (typeof BIG5_ORDER)[number];
 
-type LevelKey = "very_low" | "low" | "medium" | "high" | "very_high";
+type LevelKey = 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
 
 export interface CareerAiRiskBand {
   max: number;
@@ -62,13 +62,13 @@ export interface ReportTemplateJson {
     intro_by_age_gender: Record<AgeGroup, Record<Gender, string>>;
     age_career_context: Record<AgeGroup, string>;
     industries: Record<string, { label: string }>;
-    levels: Record<"entry" | "mid" | "senior", { label: string; years: string }>;
-    ai_risk: Record<"low" | "medium" | "high", CareerAiRiskBand>;
+    levels: Record<'entry' | 'mid' | 'senior', { label: string; years: string }>;
+    ai_risk: Record<'low' | 'medium' | 'high', CareerAiRiskBand>;
     ai_impact: {
       section_title: string;
       intro: string;
-      risk_bands: Record<"low" | "medium" | "high", CareerAiImpactBand>;
-      by_industry: Record<string, Record<"low" | "medium" | "high", string>>;
+      risk_bands: Record<'low' | 'medium' | 'high', CareerAiImpactBand>;
+      by_industry: Record<string, Record<'low' | 'medium' | 'high', string>>;
     };
     match_reasons: Record<string, string>;
   };
@@ -79,12 +79,12 @@ export type { IBig5ReportDimension, IReportSnapshot };
 let cachedTemplate: ReportTemplateJson | null = null;
 
 function templatePath(): string {
-  return path.resolve(__dirname, "../../../../../tpl/report_template.json");
+  return path.resolve(__dirname, '../../../../../tpl/report_template.json');
 }
 
 export function loadReportTemplate(): ReportTemplateJson {
   if (cachedTemplate) return cachedTemplate;
-  const raw = fs.readFileSync(templatePath(), "utf8");
+  const raw = fs.readFileSync(templatePath(), 'utf8');
   cachedTemplate = JSON.parse(raw) as ReportTemplateJson;
   return cachedTemplate;
 }
@@ -95,11 +95,11 @@ export function zToT(z: number): number {
 }
 
 function tToLevelKey(t: number): LevelKey {
-  if (t <= 35) return "very_low";
-  if (t <= 45) return "low";
-  if (t <= 55) return "medium";
-  if (t <= 65) return "high";
-  return "very_high";
+  if (t <= 35) return 'very_low';
+  if (t <= 45) return 'low';
+  if (t <= 55) return 'medium';
+  if (t <= 65) return 'high';
+  return 'very_high';
 }
 
 function replacePlaceholders(tpl: string, vars: Record<string, string>): string {
@@ -111,56 +111,56 @@ function replacePlaceholders(tpl: string, vars: Record<string, string>): string 
 }
 
 function careerHint(big5T: Record<string, number>): string {
-  const o = big5T["O"] ?? 50;
-  const c = big5T["C"] ?? 50;
-  const e = big5T["E"] ?? 50;
-  if (o >= 55) return "偏创意探索与跨界创新";
-  if (c >= 55) return "偏精确执行与系统构建";
-  if (e >= 55) return "偏沟通协作与影响力拓展";
-  return "结合自身优势灵活探索方向";
+  const o = big5T['O'] ?? 50;
+  const c = big5T['C'] ?? 50;
+  const e = big5T['E'] ?? 50;
+  if (o >= 55) return '偏创意探索与跨界创新';
+  if (c >= 55) return '偏精确执行与系统构建';
+  if (e >= 55) return '偏沟通协作与影响力拓展';
+  return '结合自身优势灵活探索方向';
 }
 
 function relationshipHint(big5T: Record<string, number>): string {
-  const a = big5T["A"] ?? 50;
-  const e = big5T["E"] ?? 50;
-  if (a >= 55 && e >= 55) return "协作与表达并重，适合团队共创";
-  if (a >= 55) return "重视和谐与共情，适合深度一对一关系";
-  if (e >= 55) return "乐于社交与联结，可主动拓展人脉";
-  return "可适度练习表达与倾听的平衡";
+  const a = big5T['A'] ?? 50;
+  const e = big5T['E'] ?? 50;
+  if (a >= 55 && e >= 55) return '协作与表达并重，适合团队共创';
+  if (a >= 55) return '重视和谐与共情，适合深度一对一关系';
+  if (e >= 55) return '乐于社交与联结，可主动拓展人脉';
+  return '可适度练习表达与倾听的平衡';
 }
 
 function growthHint(big5T: Record<string, number>): string {
-  const o = big5T["O"] ?? 50;
-  const c = big5T["C"] ?? 50;
-  if (o >= 55 && c >= 55) return "结构化学习新知识、持续迭代习惯";
-  if (o >= 55) return "保持好奇心，尝试跨领域输入";
-  if (c >= 55) return "用计划与复盘巩固自我提升";
-  return "小步试错、建立可持续的改进节奏";
+  const o = big5T['O'] ?? 50;
+  const c = big5T['C'] ?? 50;
+  if (o >= 55 && c >= 55) return '结构化学习新知识、持续迭代习惯';
+  if (o >= 55) return '保持好奇心，尝试跨领域输入';
+  if (c >= 55) return '用计划与复盘巩固自我提升';
+  return '小步试错、建立可持续的改进节奏';
 }
 
 function getOccupationAgeGroup(age: number): OccupationAgeGroup {
-  if (age >= 45) return "45+";
-  if (age >= 31) return "31-35";
-  if (age >= 25) return "25-30";
-  if (age >= 22) return "22-24";
-  return "18-21";
+  if (age >= 45) return '45+';
+  if (age >= 31) return '31-35';
+  if (age >= 25) return '25-30';
+  if (age >= 22) return '22-24';
+  return '18-21';
 }
 
 // ── 职业区块构建 ──────────────────────────────────────────────────────────────
 
-type AiBandKey = "low" | "medium" | "high";
+type AiBandKey = 'low' | 'medium' | 'high';
 
-function resolveAiBandKey(aiRisk: number, bands: ReportTemplateJson["careers"]["ai_impact"]["risk_bands"]): AiBandKey {
-  if (aiRisk <= bands.low.max) return "low";
-  if (aiRisk <= bands.medium.max) return "medium";
-  return "high";
+function resolveAiBandKey(aiRisk: number, bands: ReportTemplateJson['careers']['ai_impact']['risk_bands']): AiBandKey {
+  if (aiRisk <= bands.low.max) return 'low';
+  if (aiRisk <= bands.medium.max) return 'medium';
+  return 'high';
 }
 
 function buildAiImpact(
   aiRisk: number | undefined,
   industryPrimary: string | undefined,
   occupationAdvice: string | undefined,
-  impactTpl: ReportTemplateJson["careers"]["ai_impact"]
+  impactTpl: ReportTemplateJson['careers']['ai_impact']
 ): ICareerAiImpact | undefined {
   if (aiRisk === undefined) return undefined;
   const bandKey = resolveAiBandKey(aiRisk, impactTpl.risk_bands);
@@ -181,7 +181,7 @@ function buildAiImpact(
 
 function shortenText(text: string | undefined, maxLen = 120): string | undefined {
   if (!text) return undefined;
-  const normalized = text.replace(/\s+/g, " ").trim();
+  const normalized = text.replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLen) return normalized;
   return `${normalized.slice(0, maxLen)}...`;
 }
@@ -194,30 +194,30 @@ function buildMatchReasonForCareer(
 ): string {
   if (career.scoreBreakdown) {
     const dimLabels: Array<{ label: string; value: number }> = [
-      { label: "开放性", value: career.scoreBreakdown.openness },
-      { label: "尽责性", value: career.scoreBreakdown.conscientiousness },
-      { label: "情绪稳定性", value: career.scoreBreakdown.emotionalStability },
+      { label: '开放性', value: career.scoreBreakdown.openness },
+      { label: '尽责性', value: career.scoreBreakdown.conscientiousness },
+      { label: '情绪稳定性', value: career.scoreBreakdown.emotionalStability },
     ]
       .sort((a, b) => b.value - a.value)
       .slice(0, 2);
 
     const dimPart = dimLabels
-      .map((d) => `${d.label}贴合度${d.value >= 0 ? "较高" : "较弱"}`)
-      .join("，");
+      .map((d) => `${d.label}贴合度${d.value >= 0 ? '较高' : '较弱'}`)
+      .join('，');
     const agePart = career.scoreBreakdown.ageMultiplier >= 1
-      ? "年龄阶段对该职业有加成"
-      : "年龄阶段对该职业有一定折减";
+      ? '年龄阶段对该职业有加成'
+      : '年龄阶段对该职业有一定折减';
 
     return `${dimPart}，${agePart}`;
   }
 
   // 计算用户各维度对该职业需求的"超额贡献"，取最显著的两个
   const dims: Array<{ key: string; score: number }> = [
-    { key: "high_O", score: big5Z["O"] ?? 0 },
-    { key: "high_C", score: big5Z["C"] ?? 0 },
-    { key: "high_E", score: big5Z["E"] ?? 0 },
-    { key: "high_A", score: big5Z["A"] ?? 0 },
-    { key: "stable_N", score: -(big5Z["N"] ?? 0) },
+    { key: 'high_O', score: big5Z['O'] ?? 0 },
+    { key: 'high_C', score: big5Z['C'] ?? 0 },
+    { key: 'high_E', score: big5Z['E'] ?? 0 },
+    { key: 'high_A', score: big5Z['A'] ?? 0 },
+    { key: 'stable_N', score: -(big5Z['N'] ?? 0) },
   ];
 
   // 只取有效超过阈值的维度，按分值降序排，取该职业最相关的前两条
@@ -228,10 +228,10 @@ function buildMatchReasonForCareer(
     .filter((d) => d.score > thresholds[d.key])
     .sort((a, b) => b.score - a.score)
     .slice(0, 2)
-    .map((d) => reasonTpl[d.key] ?? "")
+    .map((d) => reasonTpl[d.key] ?? '')
     .filter(Boolean);
 
-  return hits.length > 0 ? hits.join("，") : "你的综合人格特质与该职业方向高度契合";
+  return hits.length > 0 ? hits.join('，') : '你的综合人格特质与该职业方向高度契合';
 }
 
 function buildCareerSection(
@@ -243,8 +243,8 @@ function buildCareerSection(
   tpl: ReportTemplateJson
 ): ICareerSection {
   const ct = tpl.careers;
-  const intro = ct.intro_by_age_gender[ageGroup]?.[gender] ?? "";
-  const ageCareerContext = ct.age_career_context[ageGroup] ?? "";
+  const intro = ct.intro_by_age_gender[ageGroup]?.[gender] ?? '';
+  const ageCareerContext = ct.age_career_context[ageGroup] ?? '';
 
   const occupationAgeGroup = getOccupationAgeGroup(age);
 
@@ -257,7 +257,7 @@ function buildCareerSection(
 
     const salaryText =
       c.salary !== undefined
-        ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === "month" ? "月" : "年"}`
+        ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === 'month' ? '月' : '年'}`
         : undefined;
 
     const ageContextText = shortenText(c.ageHints?.[occupationAgeGroup], 120);
@@ -333,8 +333,8 @@ export function buildBegreatReportSnapshot(input: {
   const midDim = sortedByT[2]!;
   const lowDim = sortedByT[4]!;
 
-  const advNames = sortedByT.slice(0, 2).map((d) => d.name).join("、");
-  const impNames = sortedByT.slice(3, 5).map((d) => d.name).join("、");
+  const advNames = sortedByT.slice(0, 2).map((d) => d.name).join('、');
+  const impNames = sortedByT.slice(3, 5).map((d) => d.name).join('、');
 
   const summaryLine = replacePlaceholders(tpl.summary.template, {
     high_dim1: highDim.name,

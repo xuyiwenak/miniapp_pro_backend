@@ -1,4 +1,4 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
 /** 情绪维度得分，key 由后端 SCORE_DIMENSIONS 配置驱动，支持任意扩展 */
 export type IHealingScores = Record<string, number>;
@@ -13,7 +13,7 @@ export interface IHealingData {
   scores: IHealingScores;
   summary: string;
   colorAnalysis: string;
-  status: "pending" | "success" | "failed";
+  status: 'pending' | 'success' | 'failed';
   isPublic: boolean;
   submittedAt?: Date;
   analyzedAt?: Date;
@@ -31,7 +31,7 @@ export interface IWork {
   images: { url: string; name: string; type: string }[];
   tags: string[];
   location?: string;
-  status: "draft" | "published";
+  status: 'draft' | 'published';
   featured?: boolean;
   healing?: IHealingData | null;
   createdAt: Date;
@@ -54,8 +54,8 @@ const HealingDataSubSchema = new Schema<IHealingData>(
     colorAnalysis: { type: String, required: true },
     status: {
       type: String,
-      enum: ["pending", "success", "failed"],
-      default: "success",
+      enum: ['pending', 'success', 'failed'],
+      default: 'success',
     },
     isPublic: { type: Boolean, default: true },
     submittedAt: { type: Date },
@@ -85,7 +85,7 @@ export const WorkSchema = new Schema<IWork>(
     location: { type: String },
     status: {
       type: String,
-      enum: ["draft", "published"],
+      enum: ['draft', 'published'],
       required: true,
       index: true,
     },

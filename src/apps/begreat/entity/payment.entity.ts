@@ -1,6 +1,6 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
-export type PaymentStatus = "pending" | "success" | "failed";
+export type PaymentStatus = 'pending' | 'success' | 'failed';
 
 export interface IPaymentRecord {
   /** 微信支付单号（唯一索引） */
@@ -26,10 +26,10 @@ export const PaymentSchema = new Schema<IPaymentRecord>(
     sessionId:        { type: String, required: true, index: true },
     openId:           { type: String, required: true, index: true },
     amount:           { type: Number, required: true },
-    status:           { type: String, enum: ["pending", "success", "failed"], default: "pending", index: true },
+    status:           { type: String, enum: ['pending', 'success', 'failed'], default: 'pending', index: true },
     paidAt:           { type: Date },
     imageGenerated:   { type: Boolean, default: false, index: true },
     imageGeneratedAt: { type: Date },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: false } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: false } }
 );

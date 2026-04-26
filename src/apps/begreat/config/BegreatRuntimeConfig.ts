@@ -7,8 +7,8 @@
  * 配置文件：sysconfig/{env}/runtime_config.json
  * Docker 挂载路径同 SYSCONFIG_ROOT，修改文件后调接口即生效。
  */
-import { loadSysConfigJson } from "../../../util/load_json";
-import { gameLogger as logger } from "../../../util/logger";
+import { loadSysConfigJson } from '../../../util/load_json';
+import { gameLogger as logger } from '../../../util/logger';
 
 export interface RuntimeConfig {
   price_fen: number;
@@ -24,14 +24,14 @@ const DEFAULTS: RuntimeConfig = {
 let _current: RuntimeConfig = { ...DEFAULTS };
 
 function load(): RuntimeConfig {
-  const [data, msg] = loadSysConfigJson("runtime_config.json");
+  const [data, msg] = loadSysConfigJson('runtime_config.json');
   if (!data) {
     logger.warn(`[BegreatRuntimeConfig] 加载失败 (${msg})，使用默认值`);
     return { ...DEFAULTS };
   }
   return {
-    price_fen:       typeof data.price_fen       === "number" ? data.price_fen       : DEFAULTS.price_fen,
-    payment_enabled: typeof data.payment_enabled === "boolean" ? data.payment_enabled : DEFAULTS.payment_enabled,
+    price_fen:       typeof data.price_fen       === 'number' ? data.price_fen       : DEFAULTS.price_fen,
+    payment_enabled: typeof data.payment_enabled === 'boolean' ? data.payment_enabled : DEFAULTS.payment_enabled,
   };
 }
 

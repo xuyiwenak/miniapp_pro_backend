@@ -4,7 +4,7 @@
 export function envFirst(...keys: string[]): string | undefined {
   for (const k of keys) {
     const v = process.env[k];
-    if (v !== undefined && v !== "") return v;
+    if (v !== undefined && v !== '') return v;
   }
   return undefined;
 }
@@ -22,7 +22,7 @@ export function envNumber(...keys: string[]): number | undefined {
  */
 export function syncEnvForSysConfig(): void {
   process.env.environment =
-    envFirst("environment", "ENV") ?? "development";
+    envFirst('environment', 'ENV') ?? 'development';
   process.env.serverProvide =
-    envFirst("serverProvide", "SERVER_PROVIDE") ?? "";
+    envFirst('serverProvide', 'SERVER_PROVIDE') ?? '';
 }

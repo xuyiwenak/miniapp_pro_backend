@@ -1,4 +1,4 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
 export interface IInviteCode {
   code:      string;   // 6 位大写字母+数字（排除易混淆字符）
@@ -11,5 +11,5 @@ export const InviteCodeSchema = new Schema<IInviteCode>(
     code:   { type: String, required: true, unique: true, index: true, uppercase: true },
     openId: { type: String, required: true, unique: true, index: true },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: false } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: false } }
 );

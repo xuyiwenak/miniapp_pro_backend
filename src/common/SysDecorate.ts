@@ -7,12 +7,12 @@
  * @LastEditTime: 2025-01-03 11:39:09
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Subject, from } from "rxjs";
-import { concatMap } from "rxjs/operators";
-import { TsrpcError } from "tsrpc";
+import { Subject, from } from 'rxjs';
+import { concatMap } from 'rxjs/operators';
+import { TsrpcError } from 'tsrpc';
 
-import { BadCode } from "../shared/type/Type";
-import { ComponentManager, EComName } from "./BaseComponent";
+import { BadCode } from '../shared/type/Type';
+import { ComponentManager, EComName } from './BaseComponent';
 
 const userQueues: Map<
   string,
@@ -21,12 +21,12 @@ const userQueues: Map<
 const MAX_QUEUE_SIZE = 20;
 
 function userIdGetterDefault(args: any[]): string {
-  if (typeof args[0].uid === "string") {
+  if (typeof args[0].uid === 'string') {
     return args[0].uid;
-  } else if (typeof args[0] === "string") {
+  } else if (typeof args[0] === 'string') {
     return args[0];
   }
-  return "sys";
+  return 'sys';
 }
 /**
  * 被修饰的函数处理同一个key的请求使用队列来处理
@@ -96,7 +96,7 @@ export function ValidateServerStatus() {
       const globalVarComp = ComponentManager.instance.getComponent(
         EComName.GlobalVarComponent
       );
-      if (globalVarComp.status === "closing") {
+      if (globalVarComp.status === 'closing') {
         return;
       }
       // 调用原方法，传递参数

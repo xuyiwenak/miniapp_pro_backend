@@ -6,21 +6,21 @@
  * @LastEditors: lyh
  * @LastEditTime: 2025-01-03 11:56:32
  */
-import { Connection, Model } from "mongoose";
+import { Connection, Model } from 'mongoose';
 // import { Counter } from "../../entity/count.entity";
 // import { IMail } from "../../entity/mail.entity";
-import { IPlayer, PlayerSchema} from "../../entity/player.entity";
+import { IPlayer, PlayerSchema} from '../../entity/player.entity';
 // import { IFriend } from "../../entity/player.friend.entity";
 // import { IPlayerGameInfoBase } from "../../entity/player.gameinfo.entity";
 // import { IHeroBag } from "../../entity/player.hero.bag.entity";
 // import { IMailStatus } from "../../entity/player.mail.status.entity";
 // import { IPropBag } from "../../entity/player.props.entity";
-import { gameLogger } from "../../util/logger";
+import { gameLogger } from '../../util/logger';
 
 export class ZoneModelManager {
   private connection: Connection;
   // private propBagModel!: Model<IPropBag>;
-   private playerModel!: Model<IPlayer>;
+  private playerModel!: Model<IPlayer>;
   // private mailModel!: Model<IMail>;
   // private mailStatusModel!: Model<IMailStatus>;
   // private friendModel!: Model<IFriend>;
@@ -40,8 +40,8 @@ export class ZoneModelManager {
     // this.counterModel = this.connection.model<Counter>('Counter', CounterSchema);
     // this.counterModel.createIndexes();
     // this.propBagModel = this.connection.model<IPropBag>('PropBags', PropBagSchema);
-     this.playerModel = this.connection.model<IPlayer>('Player', PlayerSchema);
-     this.playerModel.createIndexes().catch(() => {});
+    this.playerModel = this.connection.model<IPlayer>('Player', PlayerSchema);
+    this.playerModel.createIndexes().catch(() => {});
     // // MailSchema.plugin(AutoIncrement, { inc_field: 'mailId', start_seq: 10000000000 });
     // this.mailModel = this.connection.model<IMail>('Mail', MailSchema);
     // this.mailModel.createIndexes();
@@ -63,7 +63,7 @@ export class ZoneModelManager {
   //   return this.propBagModel;
   // }
   public getPlayerModel(): Model<IPlayer> {
-     return this.playerModel;
+    return this.playerModel;
   }
   // public getMailModel(): Model<IMail> {
   //   return this.mailModel;
@@ -103,7 +103,7 @@ export function getZoneModelManager(zone: string): ZoneModelManager {
   const zoneModelManager = zoneModelManagerMap.get(zone);
   if (!zoneModelManager) {
     throw new Error(
-      "getZoneModelManager is not initialized. Please call initializeGlobalModel first."
+      'getZoneModelManager is not initialized. Please call initializeGlobalModel first.'
     );
   }
   return zoneModelManager;
@@ -123,11 +123,11 @@ export function getPlayerModel(zone: string): Model<IPlayer> {
 export async function getNicknameMap(userIds: string[]): Promise<Record<string, string>> {
   if (userIds.length === 0) return {};
   const result: Record<string, string> = {};
-  for (const [zone, manager] of zoneModelManagerMap.entries()) {
+  for (const manager of zoneModelManagerMap.values()) {
     try {
       const players = await manager.getPlayerModel()
         .find({ userId: { $in: userIds } })
-        .select("userId nickname")
+        .select('userId nickname')
         .lean()
         .exec() as { userId: string; nickname?: string }[];
       for (const p of players) {

@@ -6,21 +6,21 @@
  * @LastEditors: lyh
  * @LastEditTime: 2025-01-15 15:40:02
  */
-import chalk from "chalk";
-import path from "path";
-import { Logger, TsrpcError, WsConnection, WsServer } from "tsrpc";
+import chalk from 'chalk';
+import path from 'path';
+/* eslint-disable camelcase -- TSRPC generated types use snake_case */
+import { Logger, WsConnection, WsServer } from 'tsrpc';
 import {
   serviceProto as serviceProto_Public,
   ServiceType as ServiceType_Public,
-} from "../apps/drawing/protocols/serviceProto";
-import { NetworkUtil } from "./NetworkUtil";
-import { ServerState } from "./ServerDef";
-import { ServerGlobals } from "./ServerGlobal";
+} from '../apps/drawing/protocols/serviceProto';
+import { NetworkUtil } from './NetworkUtil';
+import { ServerState } from './ServerDef';
+import { ServerGlobals } from './ServerGlobal';
 
-import { BadCode, eUserNotice, UserInfo } from "../shared/type/Type";
-import { gameLogger } from "../util/logger";
-import { getUniqueID } from "../util/tool";
-import { ComponentManager, EComName } from "./BaseComponent";
+import { eUserNotice, UserInfo } from '../shared/type/Type';
+import { gameLogger } from '../util/logger';
+import { getUniqueID } from '../util/tool';
 
 export class WebsocketGameServer {
   public server!: WsServer<ServiceType_Public>;
@@ -30,7 +30,7 @@ export class WebsocketGameServer {
   disabled: boolean = false;
   userNum: number = 0;
   userId2Conn: { [key: string]: GameClientConn } = {};
-  internalUrl: string = "";
+  internalUrl: string = '';
   serverState: ServerState | undefined;
 
   // constructor() {
@@ -103,14 +103,14 @@ export class WebsocketGameServer {
       userNum: 0,
     };
 
-    this.server.listenMsg("Ping", (call) => {
+    this.server.listenMsg('Ping', (call) => {
       (call.conn as GameClientConn).lastTickTime = Date.now();
     });
 
     this.reportServerState();
 
     await this.server.autoImplementApi(
-      path.resolve(__dirname, "../apps/drawing/api"),
+      path.resolve(__dirname, '../apps/drawing/api'),
     );
   }
 
@@ -135,7 +135,7 @@ export class WebsocketGameServer {
       const conn = this.userId2Conn[key];
       const tickTimeout = this.options.connectionTickTimeout || 30000;
       if (Date.now() - conn.lastTickTime > tickTimeout) {
-        this.kickUser(key, "tick_timeout");
+        this.kickUser(key, 'tick_timeout');
       }
     }
   }
@@ -148,7 +148,7 @@ export class WebsocketGameServer {
 
 export type GameClientConn = WsConnection<ServiceType_Public> & {
   user: UserInfo;
-  state: "" | "login" | "ready";
+  state: '' | 'login' | 'ready';
   lastTickTime: number;
 };
 
@@ -161,7 +161,7 @@ export function sendUsersNotice(
   users.forEach((user) => {
     const deleteUserConn: GameClientConn =
       websocketGameServer.userId2Conn[getUniqueID(user)];
-    if (deleteUserConn) deleteUserConn.sendMsg("UserNotice", { noticeType });
+    if (deleteUserConn) deleteUserConn.sendMsg('UserNotice', { noticeType });
   });
 }
 
@@ -172,5 +172,5 @@ export function sendOnlineUsersNotice(zone: string[], noticeType: eUserNotice) {
       return false;
     },
   );
-  usersConn.forEach((conn) => conn.sendMsg("UserNotice", { noticeType }));
+  usersConn.forEach((conn) => conn.sendMsg('UserNotice', { noticeType }));
 }

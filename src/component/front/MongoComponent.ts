@@ -10,22 +10,22 @@ import {
   ComponentManager,
   EComName,
   IBaseComponent,
-} from "../../common/BaseComponent";
+} from '../../common/BaseComponent';
 import {
   getGlobalModelManager,
   initializeGlobalModel,
-} from "../../dbservice/model/GlobalInfoDBModel";
+} from '../../dbservice/model/GlobalInfoDBModel';
 
-import assert from "assert";
+import assert from 'assert';
 import {
   getServerModelManager,
   initializeServerModel,
-} from "../../dbservice/model/ServerDBModel";
+} from '../../dbservice/model/ServerDBModel';
 import {
   initializeZoneModel,
   stopAllZoneConnection,
-} from "../../dbservice/model/ZoneDBModel";
-import { BaseMongoComponent } from "../mongo/BaseMongoComponent";
+} from '../../dbservice/model/ZoneDBModel';
+import { BaseMongoComponent } from '../mongo/BaseMongoComponent';
 
 export class MongoComponent extends BaseMongoComponent implements IBaseComponent {
 
@@ -41,10 +41,10 @@ export class MongoComponent extends BaseMongoComponent implements IBaseComponent
     if (sysCfgComp.db_global) {
       await this.connectWithRetry(() =>
         this.connectDb(sysCfgComp.db_global!, {
-          connectedLog: "MongoDB connected",
-          errorLog: "MongoDB connection error:",
-          disconnectedLog: "MongoDB disconnected, mongoose will auto-reconnect",
-          reconnectedLog: "MongoDB reconnected",
+          connectedLog: 'MongoDB connected',
+          errorLog: 'MongoDB connection error:',
+          disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
+          reconnectedLog: 'MongoDB reconnected',
           onConnected: initializeGlobalModel,
         }),
       );
@@ -58,10 +58,10 @@ export class MongoComponent extends BaseMongoComponent implements IBaseComponent
     );
     await this.connectWithRetry(() =>
       this.connectDb(serverCfg, {
-        connectedLog: "MongoDB connected",
-        errorLog: "MongoDB connection error:",
-        disconnectedLog: "MongoDB disconnected, mongoose will auto-reconnect",
-        reconnectedLog: "MongoDB reconnected",
+        connectedLog: 'MongoDB connected',
+        errorLog: 'MongoDB connection error:',
+        disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
+        reconnectedLog: 'MongoDB reconnected',
         onConnected: initializeServerModel,
       }),
     );

@@ -1,9 +1,9 @@
-import { Schema } from "mongoose";
-import type { IReportSnapshot } from "./reportResult.entity";
+import { Schema } from 'mongoose';
+import type { IReportSnapshot } from './reportResult.entity';
 
-export type SessionStatus = "in_progress" | "completed" | "invite_unlocked" | "paid";
-export type Gender = "male" | "female";
-export type AssessmentType = "BFI2" | "BFI2_FREE" | "MBTI" | "DISC";
+export type SessionStatus = 'in_progress' | 'completed' | 'invite_unlocked' | 'paid';
+export type Gender = 'male' | 'female';
+export type AssessmentType = 'BFI2' | 'BFI2_FREE' | 'MBTI' | 'DISC';
 
 export interface ICareerMatch {
   code: string;
@@ -14,9 +14,9 @@ export interface ICareerMatch {
   /** 行业分类 */
   industry?: { primary: string; secondary: string };
   /** 职业阶段 */
-  level?: "entry" | "mid" | "senior";
+  level?: 'entry' | 'mid' | 'senior';
   /** 薪资区间 */
-  salary?: { min: number; max: number; unit: "month" | "year" };
+  salary?: { min: number; max: number; unit: 'month' | 'year' };
   /** 所需技能 */
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险 0–1 */
@@ -121,9 +121,9 @@ const CareerMatchSchema = new Schema<ICareerMatch>(
     title:       { type: String, required: true },
     matchScore:  { type: Number, required: true },
     salaryIndex: { type: Number, required: true },
-    description: { type: String, default: "" },
+    description: { type: String, default: '' },
     industry:    { type: Schema.Types.Mixed },
-    level:       { type: String, enum: ["entry", "mid", "senior"] },
+    level:       { type: String, enum: ['entry', 'mid', 'senior'] },
     salary:      { type: Schema.Types.Mixed },
     skills:      { type: Schema.Types.Mixed },
     aiRisk:         { type: Number },
@@ -144,8 +144,8 @@ const ResultSchema = new Schema<IAssessmentResult>(
     excludedCareers:  { type: [Schema.Types.Mixed], default: [] },
     hardExcluded:     { type: [Schema.Types.Mixed], default: [] },
     softAdjusted:     { type: [Schema.Types.Mixed], default: [] },
-    freeSummary:      { type: String, default: "" },
-    personalityLabel: { type: String, default: "" },
+    freeSummary:      { type: String, default: '' },
+    personalityLabel: { type: String, default: '' },
     instrumentVersion: { type: String, required: false },
     normVersion:      { type: String, required: false },
     normSource:       { type: String, required: false, default: null },
@@ -159,10 +159,10 @@ export const SessionSchema = new Schema<IAssessmentSession>(
   {
     sessionId:      { type: String, required: true, unique: true, index: true },
     openId:         { type: String, required: true, index: true },
-    assessmentType: { type: String, enum: ["BFI2", "BFI2_FREE", "MBTI", "DISC"], default: "BFI2", index: true },
-    status:         { type: String, enum: ["in_progress", "completed", "invite_unlocked", "paid"], default: "in_progress", index: true },
+    assessmentType: { type: String, enum: ['BFI2', 'BFI2_FREE', 'MBTI', 'DISC'], default: 'BFI2', index: true },
+    status:         { type: String, enum: ['in_progress', 'completed', 'invite_unlocked', 'paid'], default: 'in_progress', index: true },
     userProfile: {
-      gender: { type: String, enum: ["male", "female"], required: true },
+      gender: { type: String, enum: ['male', 'female'], required: true },
       age:    { type: Number, required: true },
     },
     instrumentVersion: { type: String },
@@ -183,5 +183,5 @@ export const SessionSchema = new Schema<IAssessmentSession>(
     grantedByAdmin:    { type: Boolean, default: false, index: true },
     grantReason:       { type: String },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
 );

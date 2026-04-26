@@ -1,11 +1,11 @@
-import { ApiCall } from "tsrpc";
+import { ApiCall } from 'tsrpc';
 import {
   ReqEnterZone,
   ResEnterZone,
-} from "../protocols/PtlEnterZone";
-import { ServiceType } from "../protocols/serviceProto";
-import { ComponentManager } from "../../../common/BaseComponent";
-import type { PlayerComponent } from "../../../component/PlayerComponent";
+} from '../protocols/PtlEnterZone';
+import { ServiceType } from '../protocols/serviceProto';
+import { ComponentManager } from '../../../common/BaseComponent';
+import type { PlayerComponent } from '../../../component/PlayerComponent';
 
 export async function ApiEnterZone(
   call: ApiCall<ReqEnterZone, ResEnterZone, ServiceType>,
@@ -14,11 +14,11 @@ export async function ApiEnterZone(
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>(
-      "PlayerComponent",
+      'PlayerComponent',
     );
 
   if (!playerComp) {
-    await call.error("EnterZone failed: PlayerComponentNotInitialized");
+    await call.error('EnterZone failed: PlayerComponentNotInitialized');
     return;
   }
 

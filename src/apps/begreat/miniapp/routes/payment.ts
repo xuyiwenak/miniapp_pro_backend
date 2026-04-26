@@ -1,13 +1,13 @@
-import { Router, Request, Response } from "express";
-import https from "https";
-import crypto from "crypto";
-import fs from "fs";
-import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
-import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getSessionModel, getPaymentModel } from "../../dbservice/BegreatDBModel";
-import { paymentLogger as logger } from "../../../../util/logger";
-import { getRuntimeConfig } from "../../config/BegreatRuntimeConfig";
-import { loadSysConfigJson } from "../../../../util/load_json";
+import { Router, Request, Response } from 'express';
+import https from 'https';
+import crypto from 'crypto';
+import fs from 'fs';
+import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
+import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
+import { getSessionModel, getPaymentModel } from '../../dbservice/BegreatDBModel';
+import { paymentLogger as logger } from '../../../../util/logger';
+import { getRuntimeConfig } from '../../config/BegreatRuntimeConfig';
+import { loadSysConfigJson } from '../../../../util/load_json';
 
 const router = Router();
 
@@ -52,11 +52,12 @@ async function handlePendingPayment(sessionId: string, userId: string): Promise<
 /**
  * 解密微信支付回调数据
  */
+// eslint-disable-next-line camelcase -- WeChat Pay API field names
 function decryptWxPayCallback(
   resource: { algorithm: string; associated_data: string; nonce: string; ciphertext: string },
   apiV3Key: string,
 ): { trade_state?: string; out_trade_no?: string; payer?: { openid?: string } } {
-  const { algorithm, associated_data, nonce, ciphertext } = resource;
+  const { algorithm, associated_data: aad, nonce, ciphertext } = resource;
 
   if (algorithm !== 'AEAD_AES_256_GCM') {
     throw new Error('Unsupported algorithm');
@@ -70,7 +71,7 @@ function decryptWxPayCallback(
 
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
-  decipher.setAAD(Buffer.from(associated_data, 'utf-8'));
+  decipher.setAAD(Buffer.from(aad, 'utf-8'));
 
   const plaintext = Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf-8');
   return JSON.parse(plaintext);
@@ -262,10 +263,10 @@ interface WxPayConfig {
  * development 环境走 devMode，直接返回空配置。
  */
 function getPayConfig(): WxPayConfig {
-  const env = process.env.ENV ?? process.env.environment ?? "development";
-  if (env === "development") return {};
+  const env = process.env.ENV ?? process.env.environment ?? 'development';
+  if (env === 'development') return {};
 
-  const [data, msg] = loadSysConfigJson("wx_pay_config.local.json");
+  const [data, msg] = loadSysConfigJson('wx_pay_config.local.json');
   if (!data) {
     logger.warn(`[payment] Failed to load wx_pay_config.local.json: ${msg}`);
     return {};
@@ -274,7 +275,7 @@ function getPayConfig(): WxPayConfig {
 }
 
 function loadPrivateKey(keyPath: string): string {
-  return fs.readFileSync(keyPath, "utf-8");
+  return fs.readFileSync(keyPath, 'utf-8');
 }
 
 function buildV3Authorization(
@@ -286,9 +287,9 @@ function buildV3Authorization(
   privateKey: string,
 ): string {
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = crypto.randomBytes(16).toString("hex");
+  const nonce = crypto.randomBytes(16).toString('hex');
   const message = `${method}\n${url}\n${timestamp}\n${nonce}\n${body}\n`;
-  const sign = crypto.createSign("RSA-SHA256").update(message).sign(privateKey, "base64");
+  const sign = crypto.createSign('RSA-SHA256').update(message).sign(privateKey, 'base64');
   return `WECHATPAY2-SHA256-RSA2048 mchid="${mchId}",nonce_str="${nonce}",timestamp="${timestamp}",serial_no="${serialNo}",signature="${sign}"`;
 }
 
@@ -296,9 +297,9 @@ function buildV3Authorization(
  * GET /payment/config
  * 下发支付配置给前端（当前价格）
  */
-router.get("/config", (_req, res: Response) => {
+router.get('/config', (_req, res: Response) => {
   const { price_fen: fen } = getRuntimeConfig();
-  const yuan = (fen / 100).toFixed(2).replace(/\.00$/, "");
+  const yuan = (fen / 100).toFixed(2).replace(/\.00$/, '');
   sendSucc(res, { priceFen: fen, priceText: `¥${yuan}` });
 });
 
@@ -413,46 +414,46 @@ async function queryWxPaymentStatus(outTradeNo: string): Promise<{
 }> {
   const payCfg = getPayConfig().wx_pay;
   if (!payCfg?.mchId) {
-    logger.error("[payment/query] wx_pay config missing");
-    return { success: false, errorMsg: "Payment not configured" };
+    logger.error('[payment/query] wx_pay config missing');
+    return { success: false, errorMsg: 'Payment not configured' };
   }
 
   try {
     const privateKey = loadPrivateKey(payCfg.privateKeyPath);
     const urlPath = `/v3/pay/transactions/out-trade-no/${outTradeNo}?mchid=${payCfg.mchId}`;
-    const auth = buildV3Authorization("GET", urlPath, "", payCfg.mchId, payCfg.serialNo, privateKey);
+    const auth = buildV3Authorization('GET', urlPath, '', payCfg.mchId, payCfg.serialNo, privateKey);
 
     logger.info(`[payment/query] Querying WeChat order: ${outTradeNo}`);
 
     const wxRes = await new Promise<any>((resolve, reject) => {
       const options = {
-        hostname: "api.mch.weixin.qq.com",
+        hostname: 'api.mch.weixin.qq.com',
         path: urlPath,
-        method: "GET",
+        method: 'GET',
         headers: {
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0",
-          "Authorization": auth,
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0',
+          'Authorization': auth,
         },
       };
       const httpReq = https.request(options, (r) => {
-        let data = "";
-        r.on("data", (c) => (data += c));
-        r.on("end", () => {
+        let data = '';
+        r.on('data', (c) => (data += c));
+        r.on('end', () => {
           try {
             resolve(JSON.parse(data));
           } catch {
-            reject(new Error("Invalid wx response"));
+            reject(new Error('Invalid wx response'));
           }
         });
       });
-      httpReq.on("error", reject);
+      httpReq.on('error', reject);
       httpReq.end();
     });
 
     if (wxRes.code) {
       logger.warn(`[payment/query] WeChat query failed: ${outTradeNo}`, wxRes);
-      return { success: false, errorMsg: wxRes.message || "Unknown error" };
+      return { success: false, errorMsg: wxRes.message || 'Unknown error' };
     }
 
     const tradeState = wxRes.trade_state;
@@ -460,7 +461,7 @@ async function queryWxPaymentStatus(outTradeNo: string): Promise<{
     return { success: true, tradeState };
   } catch (err) {
     logger.error(`[payment/query] Exception querying ${outTradeNo}:`, err);
-    return { success: false, errorMsg: "Query failed" };
+    return { success: false, errorMsg: 'Query failed' };
   }
 }
 
@@ -514,7 +515,7 @@ router.get('/status/:sessionId', authMiddleware, async (req: MiniappRequest, res
  * 手动触发查询微信订单状态并更新数据库
  * 用于测试或手动补偿回调失败的订单
  */
-router.post("/query/:outTradeNo", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/query/:outTradeNo', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { outTradeNo } = req.params;
 
   try {
@@ -524,13 +525,13 @@ router.post("/query/:outTradeNo", authMiddleware, async (req: MiniappRequest, re
     // 查找订单
     const payment = await Payments.findOne({ outTradeNo }).lean().exec();
     if (!payment) {
-      sendErr(res, "Order not found", 404);
+      sendErr(res, 'Order not found', 404);
       return;
     }
 
     // 验证订单所属用户
     if (payment.openId !== req.userId) {
-      sendErr(res, "Unauthorized", 403);
+      sendErr(res, 'Unauthorized', 403);
       return;
     }
 
@@ -547,29 +548,29 @@ router.post("/query/:outTradeNo", authMiddleware, async (req: MiniappRequest, re
 
     const tradeState = queryResult.tradeState;
 
-    if (tradeState === "SUCCESS") {
+    if (tradeState === 'SUCCESS') {
       // 支付成功，更新数据库
       const paidAt = new Date();
       logger.info(`[payment/query] Payment confirmed SUCCESS: ${outTradeNo}, updating DB...`);
 
       await Payments.updateOne(
         { outTradeNo },
-        { $set: { status: "success", paidAt } }
+        { $set: { status: 'success', paidAt } }
       );
       await Sessions.updateOne(
         { sessionId: payment.sessionId },
-        { $set: { status: "paid", paidAt } }
+        { $set: { status: 'paid', paidAt } }
       );
 
       logger.info(`[payment/query] DB updated successfully for order: ${outTradeNo}`);
-      sendSucc(res, { tradeState, updated: true, message: "Payment confirmed and DB updated" });
+      sendSucc(res, { tradeState, updated: true, message: 'Payment confirmed and DB updated' });
     } else {
       logger.info(`[payment/query] Order ${outTradeNo} current state: ${tradeState}`);
       sendSucc(res, { tradeState, updated: false, message: `Order state: ${tradeState}` });
     }
   } catch (err) {
-    logger.error("[payment/query] Exception:", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[payment/query] Exception:', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 
@@ -577,10 +578,10 @@ router.post("/query/:outTradeNo", authMiddleware, async (req: MiniappRequest, re
  * GET /payment/records
  * 管理端：分页查询付费记录（需 admin auth，此处用 authMiddleware 代替，生产环境应加 admin 鉴权）
  */
-router.get("/records", authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const page  = Math.max(1, parseInt(String(req.query["page"]  ?? "1")));
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "20"))));
-  const status = req.query["status"] as string | undefined;
+router.get('/records', authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const page  = Math.max(1, parseInt(String(req.query['page']  ?? '1')));
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '20'))));
+  const status = req.query['status'] as string | undefined;
 
   try {
     const Payments = getPaymentModel();
@@ -596,8 +597,8 @@ router.get("/records", authMiddleware, async (req: MiniappRequest, res: Response
     ]);
     sendSucc(res, { records, total, page, limit });
   } catch (err) {
-    logger.error("[payment/records]", err);
-    sendErr(res, "Internal error", 500);
+    logger.error('[payment/records]', err);
+    sendErr(res, 'Internal error', 500);
   }
 });
 

@@ -1,20 +1,20 @@
-import { envFirst } from "./env";
-import { gameLogger } from "./logger";
-import { readSysconfigJsonFileUtf8 } from "./sysconfig_path";
+import { envFirst } from './env';
+import { gameLogger } from './logger';
+import { readSysconfigJsonFileUtf8 } from './sysconfig_path';
 
 export function loadSysConfigJson(filename: string): [any, string] {
-  const environment = envFirst("environment", "ENV") ?? "development";
-  const serverProvide = envFirst("serverProvide", "SERVER_PROVIDE") ?? "";
+  const environment = envFirst('environment', 'ENV') ?? 'development';
+  const serverProvide = envFirst('serverProvide', 'SERVER_PROVIDE') ?? '';
   try {
-    const { utf8, path: configFilePath } = readSysconfigJsonFileUtf8(
+    const { utf8 } = readSysconfigJsonFileUtf8(
       environment,
       serverProvide,
       filename
     );
     const data = JSON.parse(utf8);
-    return [data, "load succuss"];
+    return [data, 'load succuss'];
   } catch (error) {
     gameLogger.error(error);
-    return [undefined, "error"];
+    return [undefined, 'error'];
   }
 }

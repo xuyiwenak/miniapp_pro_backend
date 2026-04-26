@@ -7,12 +7,12 @@
  * @LastEditTime: 2025-01-09 13:11:41
  */
 
-import { GlobalVarComponent } from "../component/GlobalVarComponent";
-import { SysCfgComponent } from "../component/SysCfgComponent";
+import { GlobalVarComponent } from '../component/GlobalVarComponent';
+import { SysCfgComponent } from '../component/SysCfgComponent';
 
 export enum EComName {
-  GlobalVarComponent = "GlobalVarComponent",
-  SysCfgComponent = "SysCfgComponent",
+  GlobalVarComponent = 'GlobalVarComponent',
+  SysCfgComponent = 'SysCfgComponent',
 }
 
 export const EComNameType = {

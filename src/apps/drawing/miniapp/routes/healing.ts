@@ -1,18 +1,18 @@
-import { Router, type Request, type Response } from "express";
-import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
-import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getWorkModel } from "../../../../dbservice/model/GlobalInfoDBModel";
-import { logRequest, logRequestError } from "../../../../util/requestLogger";
-import { notifyHealingUpdate } from "../ws/chatServer";
-import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from "../../../../util/cozeWorkflow";
-import { resolveImageUrl } from "../../../../util/imageUploader";
-import { gameLogger as logger, cozeDebugLogger } from "../../../../util/logger";
-import type { IWork, IHealingScores } from "../../../../entity/work.entity";
-import { ComponentManager } from "../../../../common/BaseComponent";
-import type { PlayerComponent } from "../../../../component/PlayerComponent";
-import { getPlayerModel } from "../../../../dbservice/model/ZoneDBModel";
-import { AccountLevel } from "../../../../shared/enum/AccountLevel";
-import { getHealDailyLimit, getHealDailyUsage, incrementHealDailyUsage } from "../../../../auth/RedisTokenStore";
+import { Router, type Request, type Response } from 'express';
+import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
+import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
+import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
+import { logRequest, logRequestError } from '../../../../util/requestLogger';
+import { notifyHealingUpdate } from '../ws/chatServer';
+import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from '../../../../util/cozeWorkflow';
+import { resolveImageUrl } from '../../../../util/imageUploader';
+import { gameLogger as logger, cozeDebugLogger } from '../../../../util/logger';
+import type { IWork, IHealingScores } from '../../../../entity/work.entity';
+import { ComponentManager } from '../../../../common/BaseComponent';
+import type { PlayerComponent } from '../../../../component/PlayerComponent';
+import { getPlayerModel } from '../../../../dbservice/model/ZoneDBModel';
+import { AccountLevel } from '../../../../shared/enum/AccountLevel';
+import { getHealDailyLimit, getHealDailyUsage, incrementHealDailyUsage } from '../../../../auth/RedisTokenStore';
 
 const router = Router();
 
@@ -26,27 +26,11 @@ const OSS_PREFIX = 'oss://';
  */
 const HEALING_ESTIMATED_SECONDS = 600;
 
-// ========== 分数计算常量 ==========
-/** 哈希函数中的质数乘数 */
-const HASH_PRIME_MULTIPLIER = 31;
-
-/** 分数归一化：最小值偏移量 */
-const SCORE_MIN_OFFSET = 20;
-
-/** 分数归一化：缩放系数 */
-const SCORE_SCALE_FACTOR = 75;
-
 /** 分数归一化：最小值阈值 */
 const SCORE_MIN_THRESHOLD = 5;
 
 /** 分数归一化：最大值阈值 */
 const SCORE_MAX_THRESHOLD = 98;
-
-/** 文本情绪分析的权重增益 */
-const TEXT_EMOTION_BOOST = 0.25;
-
-/** 随机数生成的缩放系数 */
-const RNG_SCALE_FACTOR = 0.8;
 
 /** Coze输出解包的最大递归深度 */
 const MAX_UNWRAP_DEPTH = 5;
@@ -87,90 +71,21 @@ const EMOTION_COEFFICIENT_VITALITY = 0.95;
  * emoji: 前端图标
  */
 const SCORE_DIMENSIONS = [
-  { key: "joy",             label: "快乐",   emoji: "✨" },
-  { key: "calm",            label: "平静",   emoji: "🌿" },
-  { key: "anxiety",         label: "焦虑",   emoji: "😰" },
-  { key: "fear",            label: "恐惧",   emoji: "😨" },
-  { key: "solitude",        label: "孤僻",   emoji: "🌑" },
-  { key: "passion",         label: "热情",   emoji: "🔥" },
-  { key: "social_aversion", label: "社交抵触", emoji: "🚧" },
-  { key: "vitality",        label: "活力",   emoji: "⚡" },
+  { key: 'joy',             label: '快乐',   emoji: '✨' },
+  { key: 'calm',            label: '平静',   emoji: '🌿' },
+  { key: 'anxiety',         label: '焦虑',   emoji: '😰' },
+  { key: 'fear',            label: '恐惧',   emoji: '😨' },
+  { key: 'solitude',        label: '孤僻',   emoji: '🌑' },
+  { key: 'passion',         label: '热情',   emoji: '🔥' },
+  { key: 'social_aversion', label: '社交抵触', emoji: '🚧' },
+  { key: 'vitality',        label: '活力',   emoji: '⚡' },
 ] as const satisfies { key: string; label: string; emoji: string }[];
-
-type EmotionKey = typeof SCORE_DIMENSIONS[number]["key"];
-
-function hashStringToSeed(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * HASH_PRIME_MULTIPLIER + input.charCodeAt(i)) >>> 0;
-  }
-  return hash || 1;
-}
-
-function createRng(seed: number): () => number {
-  let x = seed || 1;
-  return () => {
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    return ((x >>> 0) % 10000) / 10000;
-  };
-}
-
-function normalizeScores(raw: Record<string, number>): Record<string, number> {
-  const result: Record<string, number> = {};
-  SCORE_DIMENSIONS.forEach(({ key }) => {
-    const v = raw[key] ?? 0;
-    const scaled = SCORE_MIN_OFFSET + v * SCORE_SCALE_FACTOR;
-    result[key] = Math.round(Math.max(SCORE_MIN_THRESHOLD, Math.min(SCORE_MAX_THRESHOLD, scaled)));
-  });
-  return result;
-}
-
-function analyzeTextTendencies(text: string): Record<string, number> {
-  const lower = text.toLowerCase();
-  const containsAny = (words: string[]) => words.some((w) => lower.includes(w.toLowerCase()));
-  const boosts: Record<string, number> = {};
-
-  if (containsAny(['阳光', '温暖', '愉悦', '开心', '喜悦', '快乐']))       boosts['joy']             = TEXT_EMOTION_BOOST;
-  if (containsAny(['宁静', '平静', '治愈', '放松', '冥想', '安静']))        boosts['calm']            = TEXT_EMOTION_BOOST;
-  if (containsAny(['焦虑', '压力', '紧张', 'deadline', '加班', '疲惫']))   boosts['anxiety']         = TEXT_EMOTION_BOOST;
-  if (containsAny(['恐惧', '害怕', '恐慌', '不安', '惊恐']))               boosts['fear']            = TEXT_EMOTION_BOOST;
-  if (containsAny(['孤独', '独处', '疏离', '隔绝', '沉默']))               boosts['solitude']        = TEXT_EMOTION_BOOST;
-  if (containsAny(['热情', '激情', '澎湃', '燃烧', '雀跃']))               boosts['passion']         = TEXT_EMOTION_BOOST;
-  if (containsAny(['不想社交', '回避', '冷漠', '抵触', '排斥']))           boosts['social_aversion'] = TEXT_EMOTION_BOOST;
-  if (containsAny(['活力', '精力', '元气', '充沛', '奔放']))               boosts['vitality']        = TEXT_EMOTION_BOOST;
-
-  return boosts;
-}
-
-function buildMockSummary(): string {
-  return "你的画作中流露出宁静而温柔的力量，色彩与线条像一面柔软的镜子，安静地陪你看见此刻的心情，这是一份值得被好好珍藏的疗愈创作。";
-}
-
-function buildColorAnalysis(): string {
-  return "整体色彩可被理解为柔和的莫兰迪疗愈系配色，在低饱和度的冷暖过渡中，帮助情绪慢慢舒缓下来，营造出安全、可停靠的内在空间。";
-}
-
-function generateMockScoresForWork(work: IWork): Record<string, number> {
-  const seedSource = `${work.workId}|${work.authorId ?? ''}|${work.desc ?? ''}|${(work.tags ?? []).join(',')}`;
-  const seed = hashStringToSeed(seedSource);
-  const rng = createRng(seed);
-  const boosts = analyzeTextTendencies(`${work.desc ?? ''} ${(work.tags ?? []).join(' ')}`);
-
-  const raw: Record<string, number> = {};
-  SCORE_DIMENSIONS.forEach(({ key }) => {
-    raw[key] = Math.min(1, Math.max(0, rng() * RNG_SCALE_FACTOR + (boosts[key] ?? 0)));
-  });
-
-  return normalizeScores(raw);
-}
 
 function pickDominantEmotion(scores: IHealingScores): { key: string; label: string; value: number } {
   const entries = SCORE_DIMENSIONS
     .map(({ key, label }) => ({ key, label, value: scores[key] ?? 0 }))
     .sort((a, b) => b.value - a.value);
-  const top = entries[0] ?? { key: "calm", label: "平静", value: 0 };
+  const top = entries[0] ?? { key: 'calm', label: '平静', value: 0 };
   return { key: top.key, label: top.label, value: top.value };
 }
 
@@ -262,7 +177,7 @@ async function handleWebhookStatus(
   }
 
   // 成功状态
-  if (upper === 'SUCCESS' || upper === 'SUCCEEDED' || output != null) {
+  if (upper === 'SUCCESS' || upper === 'SUCCEEDED' || output !== null) {
     const out = output ?? '{}';
     await applyHealingSuccessFromRunId(runId, out);
     res.status(200).json({ code: 200, success: true });
@@ -428,7 +343,7 @@ function unwrapCozeOutput(raw: string): Record<string, unknown> {
     // ── [DEBUG] 每层解包结果 ───────────────────────────────────────
     logger.info(`[coze-debug] unwrap depth=${depth} keys:`, Object.keys(o));
     const next = o.Output ?? o.output;
-    if (next == null) {
+    if (next === null || next === undefined) {
       cozeDebugLogger.info('[coze-debug] unwrap final object:', JSON.stringify(o).slice(0, COZE_OUTPUT_TRUNCATE_LENGTH));
       return o as Record<string, unknown>;
     }
@@ -492,7 +407,10 @@ function parseSummary(output: Record<string, unknown>): string {
 /**
  * 解析情绪分数
  */
-function parseScores(output: Record<string, unknown>, lineAnalysisObj: CozeLineAnalysis | undefined): Record<string, number> {
+function parseScores(
+  output: Record<string, unknown>,
+  lineAnalysisObj: CozeLineAnalysis | undefined,
+): Record<string, number> {
   const rawScores = output.scores as Record<string, number> | undefined;
   const hasDimScore = SCORE_DIMENSIONS.some(
     ({ key }) => typeof output[key] === 'number' || typeof rawScores?.[key] === 'number',
@@ -523,7 +441,7 @@ function parseLineAnalysis(lineAnalysisObj: CozeLineAnalysis | undefined): CozeL
   if (!lineAnalysisObj) return undefined;
 
   const hasContent =
-    lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score != null;
+    lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score !== null;
 
   if (!hasContent) return undefined;
 
@@ -577,14 +495,14 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
 function firstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
   for (const k of keys) {
     const v = obj[k];
-    if (typeof v === "string" && v.length) return v;
+    if (typeof v === 'string' && v.length) return v;
   }
   return undefined;
 }
 
 function normalizeCozeOutputField(v: unknown): string | undefined {
-  if (v == null) return undefined;
-  if (typeof v === "string") return v;
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === 'string') return v;
   try {
     return JSON.stringify(v);
   } catch {
@@ -599,30 +517,30 @@ function parseCozeWebhookPayload(body: unknown): {
   output?: string;
   errorMessage?: string;
 } {
-  if (!body || typeof body !== "object") return {};
+  if (!body || typeof body !== 'object') return {};
   const b = body as Record<string, unknown>;
-  let runId = firstString(b, ["run_id", "execute_id", "executeId", "id"]);
+  let runId = firstString(b, ['run_id', 'execute_id', 'executeId', 'id']);
   let output = normalizeCozeOutputField(b.output ?? b.Output);
-  let executeStatus = firstString(b, ["execute_status", "executeStatus", "status"]);
-  let errorMessage = firstString(b, ["error_message", "errorMessage", "error"]);
+  let executeStatus = firstString(b, ['execute_status', 'executeStatus', 'status']);
+  let errorMessage = firstString(b, ['error_message', 'errorMessage', 'error']);
 
   const data = b.data;
-  if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+  if (Array.isArray(data) && data[0] && typeof data[0] === 'object') {
     const d = data[0] as Record<string, unknown>;
-    runId = runId ?? firstString(d, ["execute_id", "run_id", "id"]);
+    runId = runId ?? firstString(d, ['execute_id', 'run_id', 'id']);
     output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
-    executeStatus = executeStatus ?? firstString(d, ["execute_status", "executeStatus"]);
-    errorMessage = errorMessage ?? firstString(d, ["error_message", "errorMessage"]);
-  } else if (data && typeof data === "object" && !Array.isArray(data)) {
+    executeStatus = executeStatus ?? firstString(d, ['execute_status', 'executeStatus']);
+    errorMessage = errorMessage ?? firstString(d, ['error_message', 'errorMessage']);
+  } else if (data && typeof data === 'object' && !Array.isArray(data)) {
     const d = data as Record<string, unknown>;
-    runId = runId ?? firstString(d, ["execute_id", "run_id", "id"]);
+    runId = runId ?? firstString(d, ['execute_id', 'run_id', 'id']);
     output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
-    executeStatus = executeStatus ?? firstString(d, ["execute_status", "executeStatus"]);
-    errorMessage = errorMessage ?? firstString(d, ["error_message", "errorMessage"]);
+    executeStatus = executeStatus ?? firstString(d, ['execute_status', 'executeStatus']);
+    errorMessage = errorMessage ?? firstString(d, ['error_message', 'errorMessage']);
   }
 
-  if (typeof b.code === "number" && b.code !== 0 && !errorMessage) {
-    errorMessage = String(b.msg ?? "Coze error");
+  if (typeof b.code === 'number' && b.code !== 0 && !errorMessage) {
+    errorMessage = String(b.msg ?? 'Coze error');
   }
 
   return { runId, executeStatus, output, errorMessage };
@@ -630,22 +548,22 @@ function parseCozeWebhookPayload(body: unknown): {
 
 async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
   // ── [DEBUG] 进入解析前记录完整原始字符串 ──────────────────────────
-  cozeDebugLogger.info("[coze-debug] outputRaw (full):", outputRaw);
+  cozeDebugLogger.info('[coze-debug] outputRaw (full):', outputRaw);
 
   const Work = getWorkModel();
-  const work = (await Work.findOne({ "healing.cozeRunId": runId }).lean().exec()) as IWork | null;
+  const work = (await Work.findOne({ 'healing.cozeRunId': runId }).lean().exec()) as IWork | null;
   if (!work) {
-    logger.warn("Coze webhook: no work for cozeRunId=", runId);
+    logger.warn('Coze webhook: no work for cozeRunId=', runId);
     return;
   }
-  if (work.healing?.status === "success") {
-    logger.info("Coze webhook idempotent skip, workId=", work.workId);
+  if (work.healing?.status === 'success') {
+    logger.info('Coze webhook idempotent skip, workId=', work.workId);
     return;
   }
   const parsed = parseCozeOutput(outputRaw);
 
   // ── [DEBUG] 解析结果 ────────────────────────────────────────────
-  cozeDebugLogger.info("[coze-debug] parseCozeOutput result:", {
+  cozeDebugLogger.info('[coze-debug] parseCozeOutput result:', {
     scores: parsed.scores,
     summary: parsed.summary?.slice(0, 100),
     colorAnalysis: parsed.colorAnalysis?.slice(0, 100),
@@ -656,36 +574,36 @@ async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): P
   });
   const { workId } = work;
   const updatePayload: Record<string, unknown> = {
-    "healing.scores": parsed.scores,
-    "healing.summary": parsed.summary,
-    "healing.colorAnalysis": parsed.colorAnalysis,
-    "healing.status": "success",
-    "healing.analyzedAt": new Date(),
+    'healing.scores': parsed.scores,
+    'healing.summary': parsed.summary,
+    'healing.colorAnalysis': parsed.colorAnalysis,
+    'healing.status': 'success',
+    'healing.analyzedAt': new Date(),
   };
-  if (parsed.compositionReport != null) updatePayload["healing.compositionReport"] = parsed.compositionReport;
-  if (parsed.lineAnalysis != null) updatePayload["healing.lineAnalysis"] = parsed.lineAnalysis;
-  if (parsed.suggestion != null) updatePayload["healing.suggestion"] = parsed.suggestion;
-  if (parsed.keyColors != null && parsed.keyColors.length) updatePayload["healing.keyColors"] = parsed.keyColors;
+  if (parsed.compositionReport !== null) updatePayload['healing.compositionReport'] = parsed.compositionReport;
+  if (parsed.lineAnalysis !== null) updatePayload['healing.lineAnalysis'] = parsed.lineAnalysis;
+  if (parsed.suggestion !== null) updatePayload['healing.suggestion'] = parsed.suggestion;
+  if (parsed.keyColors !== undefined && parsed.keyColors.length) updatePayload['healing.keyColors'] = parsed.keyColors;
   await Work.updateOne({ workId }, { $set: updatePayload }).exec();
-  logger.info("Coze webhook success for workId=", workId);
+  logger.info('Coze webhook success for workId=', workId);
   if (work.authorId) {
-    notifyHealingUpdate(String(work.authorId), { workId, status: "success" });
+    notifyHealingUpdate(String(work.authorId), { workId, status: 'success' });
   }
 }
 
 async function markHealingFailedByRunId(runId: string): Promise<void> {
   const Work = getWorkModel();
-  const work = (await Work.findOne({ "healing.cozeRunId": runId }).lean().exec()) as IWork | null;
+  const work = (await Work.findOne({ 'healing.cozeRunId': runId }).lean().exec()) as IWork | null;
   const r = await Work.updateOne(
-    { "healing.cozeRunId": runId },
-    { $set: { "healing.status": "failed" } },
+    { 'healing.cozeRunId': runId },
+    { $set: { 'healing.status': 'failed' } },
   ).exec();
   if (r.matchedCount === 0) {
-    logger.warn("Coze webhook fail: no work for cozeRunId=", runId);
+    logger.warn('Coze webhook fail: no work for cozeRunId=', runId);
     return;
   }
   if (work?.authorId) {
-    notifyHealingUpdate(String(work.authorId), { workId: work.workId, status: "failed" });
+    notifyHealingUpdate(String(work.authorId), { workId: work.workId, status: 'failed' });
   }
 }
 
@@ -776,16 +694,16 @@ router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Respons
   }
 });
 
-router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/status', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const workId = (req.query?.workId as string | undefined)?.trim();
   const userId = req.userId;
 
   if (!workId) {
-    sendErr(res, "Missing workId", 400);
+    sendErr(res, 'Missing workId', 400);
     return;
   }
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
 
@@ -793,34 +711,34 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
     const Work = getWorkModel();
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
     if (!work) {
-      sendErr(res, "Work not found", 404);
+      sendErr(res, 'Work not found', 404);
       return;
     }
     if (work.authorId !== userId) {
-      sendErr(res, "Forbidden", 403);
+      sendErr(res, 'Forbidden', 403);
       return;
     }
 
     const healing = work.healing;
     if (!healing) {
-      sendSucc(res, { workId, status: "none" });
+      sendSucc(res, { workId, status: 'none' });
       return;
     }
 
-    if (healing.status === "pending") {
-      sendSucc(res, { workId, status: "pending", submittedAt: healing.submittedAt, estimatedSeconds: HEALING_ESTIMATED_SECONDS });
+    if (healing.status === 'pending') {
+      sendSucc(res, { workId, status: 'pending', submittedAt: healing.submittedAt, estimatedSeconds: HEALING_ESTIMATED_SECONDS });
       return;
     }
 
-    if (healing.status === "failed") {
-      sendSucc(res, { workId, status: "failed" });
+    if (healing.status === 'failed') {
+      sendSucc(res, { workId, status: 'failed' });
       return;
     }
 
     const dominant = pickDominantEmotion(healing.scores);
     sendSucc(res, {
       workId,
-      status: "success",
+      status: 'success',
       scores: healing.scores,
       scoreDimensions: SCORE_DIMENSIONS,
       summary: healing.summary,
@@ -835,7 +753,7 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
       keyColors: healing.keyColors,
     });
   } catch (err) {
-    logRequestError("healing.ts:status:error", "healing status error", {
+    logRequestError('healing.ts:status:error', 'healing status error', {
       req,
       requestBody: { workId },
       statusCode: 500,
@@ -844,20 +762,20 @@ router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response)
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Get status failed", 500);
+    sendErr(res, 'Get status failed', 500);
   }
 });
 
-router.get("/report", async (req: MiniappRequest, res: Response) => {
+router.get('/report', async (req: MiniappRequest, res: Response) => {
   const workId = (req.query?.workId as string | undefined)?.trim();
 
-  logRequest("healing.ts:report:entry", "healing report request", {
+  logRequest('healing.ts:report:entry', 'healing report request', {
     req,
     requestBody: { workId },
   });
 
   if (!workId) {
-    sendErr(res, "Missing workId", 400);
+    sendErr(res, 'Missing workId', 400);
     return;
   }
 
@@ -866,7 +784,7 @@ router.get("/report", async (req: MiniappRequest, res: Response) => {
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
 
     if (!work) {
-      sendErr(res, "Work not found", 404);
+      sendErr(res, 'Work not found', 404);
       return;
     }
 
@@ -874,7 +792,7 @@ router.get("/report", async (req: MiniappRequest, res: Response) => {
     const healingResp = buildHealingResponse(work, viewerId);
     sendSucc(res, healingResp);
   } catch (err) {
-    logRequestError("healing.ts:report:error", "healing report error", {
+    logRequestError('healing.ts:report:error', 'healing report error', {
       req,
       requestBody: { workId },
       statusCode: 500,
@@ -883,26 +801,26 @@ router.get("/report", async (req: MiniappRequest, res: Response) => {
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Get report failed", 500);
+    sendErr(res, 'Get report failed', 500);
   }
 });
 
-router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.get('/list', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
 
-  logRequest("healing.ts:list:entry", "healing list request", {
+  logRequest('healing.ts:list:entry', 'healing list request', {
     req,
     requestBody: { userId },
   });
 
   try {
     const Work = getWorkModel();
-    const works = (await Work.find({ authorId: userId, "healing.status": "success" })
-      .sort({ "healing.analyzedAt": -1, updatedAt: -1 })
+    const works = (await Work.find({ authorId: userId, 'healing.status': 'success' })
+      .sort({ 'healing.analyzedAt': -1, updatedAt: -1 })
       .lean()
       .exec()) as IWork[];
 
@@ -910,7 +828,7 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
       const healing = w.healing!;
       const cover = w.images?.[0];
       const dominant = pickDominantEmotion(healing.scores);
-      const rawCoverUrl = cover?.url ?? "/static/home/card0.png";
+      const rawCoverUrl = cover?.url ?? '/static/home/card0.png';
       const coverUrl =
         rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX)
           ? resolveImageUrl(rawCoverUrl)
@@ -925,7 +843,7 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
         dominantEmotionLabel: dominant.label,
         dominantEmotionScore: dominant.value,
         coverUrl,
-        desc: w.desc ?? "",
+        desc: w.desc ?? '',
         tags: w.tags ?? [],
         createdAt: healing.analyzedAt ?? w.updatedAt,
       };
@@ -933,7 +851,7 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
 
     sendSucc(res, list);
   } catch (err) {
-    logRequestError("healing.ts:list:error", "healing list error", {
+    logRequestError('healing.ts:list:error', 'healing list error', {
       req,
       statusCode: 500,
       extra: {
@@ -941,28 +859,28 @@ router.get("/list", authMiddleware, async (req: MiniappRequest, res: Response) =
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Get list failed", 500);
+    sendErr(res, 'Get list failed', 500);
   }
 });
 
-router.post("/privacy", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/privacy', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string; isPublic?: boolean };
   const workId = body?.workId?.trim();
   const isPublic = body?.isPublic;
 
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
 
-  logRequest("healing.ts:privacy:entry", "healing privacy request", {
+  logRequest('healing.ts:privacy:entry', 'healing privacy request', {
     req,
     requestBody: body,
   });
 
-  if (!workId || typeof isPublic !== "boolean") {
-    sendErr(res, "Invalid params", 400);
+  if (!workId || typeof isPublic !== 'boolean') {
+    sendErr(res, 'Invalid params', 400);
     return;
   }
 
@@ -971,23 +889,23 @@ router.post("/privacy", authMiddleware, async (req: MiniappRequest, res: Respons
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
 
     if (!work) {
-      sendErr(res, "Work not found", 404);
+      sendErr(res, 'Work not found', 404);
       return;
     }
     if (work.authorId !== userId) {
-      sendErr(res, "Forbidden", 403);
+      sendErr(res, 'Forbidden', 403);
       return;
     }
     if (!work.healing) {
-      sendErr(res, "Report not found", 404);
+      sendErr(res, 'Report not found', 404);
       return;
     }
 
-    await Work.updateOne({ workId }, { $set: { "healing.isPublic": isPublic } }).exec();
+    await Work.updateOne({ workId }, { $set: { 'healing.isPublic': isPublic } }).exec();
 
     sendSucc(res, { workId, isPublic });
   } catch (err) {
-    logRequestError("healing.ts:privacy:error", "healing privacy error", {
+    logRequestError('healing.ts:privacy:error', 'healing privacy error', {
       req,
       requestBody: body,
       statusCode: 500,
@@ -996,22 +914,22 @@ router.post("/privacy", authMiddleware, async (req: MiniappRequest, res: Respons
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Update privacy failed", 500);
+    sendErr(res, 'Update privacy failed', 500);
   }
 });
 
-router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response) => {
+router.post('/delete', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
 
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
 
   if (!workId) {
-    sendErr(res, "Missing workId", 400);
+    sendErr(res, 'Missing workId', 400);
     return;
   }
 
@@ -1020,22 +938,22 @@ router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
 
     if (!work) {
-      sendErr(res, "Work not found", 404);
+      sendErr(res, 'Work not found', 404);
       return;
     }
     if (work.authorId !== userId) {
-      sendErr(res, "Forbidden", 403);
+      sendErr(res, 'Forbidden', 403);
       return;
     }
     if (!work.healing) {
-      sendErr(res, "Report not found", 404);
+      sendErr(res, 'Report not found', 404);
       return;
     }
 
     await Work.updateOne({ workId }, { $set: { healing: null } }).exec();
     sendSucc(res, { workId });
   } catch (err) {
-    logRequestError("healing.ts:delete:error", "healing delete error", {
+    logRequestError('healing.ts:delete:error', 'healing delete error', {
       req,
       requestBody: body,
       statusCode: 500,
@@ -1044,7 +962,7 @@ router.post("/delete", authMiddleware, async (req: MiniappRequest, res: Response
         errorMessage: (err as Error).message,
       },
     });
-    sendErr(res, "Delete report failed", 500);
+    sendErr(res, 'Delete report failed', 500);
   }
 });
 

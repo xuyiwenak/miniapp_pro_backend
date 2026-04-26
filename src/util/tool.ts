@@ -1,11 +1,11 @@
-import { ComponentManager } from "../common/BaseComponent";
-import { JobStop } from "../common/CronManager";
-import { websocketGameServer } from "../common/WebsocketGameServer";
-import { UserInfo } from "../shared/type/Type";
-import { gameLogger } from "./logger";
+import { ComponentManager } from '../common/BaseComponent';
+import { JobStop } from '../common/CronManager';
+import { websocketGameServer } from '../common/WebsocketGameServer';
+import { UserInfo } from '../shared/type/Type';
+import { gameLogger } from './logger';
 
 export async function stopFrontServer() {
-  gameLogger.log("Stopping front server...");
+  gameLogger.log('Stopping front server...');
   JobStop();
   websocketGameServer.server.gracefulStop(100).then(async () => {
     await ComponentManager.instance.stopAll();
@@ -20,4 +20,4 @@ export function getUniqueID(user: UserInfo): string {
 }
 
 /** @deprecated 请优先使用 `./sysconfig_path` 中的 `getBaseConfigPath` */
-export { getBaseConfigPath } from "./sysconfig_path";
+export { getBaseConfigPath } from './sysconfig_path';

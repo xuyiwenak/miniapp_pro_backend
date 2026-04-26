@@ -1,15 +1,15 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
-export type OccupationLevel = "entry" | "mid" | "senior";
+export type OccupationLevel = 'entry' | 'mid' | 'senior';
 
 /** 职业匹配使用的年龄分组（与常模 AgeGroup 不同） */
-export type OccupationAgeGroup = "18-21" | "22-24" | "25-30" | "31-35" | "36-44" | "45+";
+export type OccupationAgeGroup = '18-21' | '22-24' | '25-30' | '31-35' | '36-44' | '45+';
 
 /** 职业排除规则（硬规则/软规则共用结构） */
 export interface IExcludeRule {
   id: string;
   metric: string;
-  op: "<" | "<=" | ">" | ">=" | "==" | "in" | "not_in";
+  op: '<' | '<=' | '>' | '>=' | '==' | 'in' | 'not_in';
   value: number | number[];
   penalty?: number;
   reason: string;
@@ -59,7 +59,7 @@ export interface IOccupationNorm {
   /** 职业阶段（入门/中级/资深） */
   level?: OccupationLevel;
   /** 薪资区间（千元/月 或 千元/年，如 min:18 表示 18K/月） */
-  salary?: { min: number; max: number; unit: "month" | "year" };
+  salary?: { min: number; max: number; unit: 'month' | 'year' };
   /** 所需技能 */
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险（0–1，值越高风险越大） */
@@ -92,25 +92,25 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
     salaryIndex:         { type: Number, default: 0.5 },
     ageBonusMultiplier:  {
       type: Schema.Types.Mixed,
-      default: { "18-21": 1.0, "22-24": 1.0, "25-30": 1.0, "31-35": 1.0, "45+": 1.0 },
+      default: { '18-21': 1.0, '22-24': 1.0, '25-30': 1.0, '31-35': 1.0, '45+': 1.0 },
     },
     excludeRules:        { type: Schema.Types.Mixed, default: undefined },
     ageRange: {
       min: { type: Number, default: 18 },
       max: { type: Number, default: 60 },
     },
-    description: { type: String, default: "" },
+    description: { type: String, default: '' },
     isActive:    { type: Boolean, default: true, index: true },
 
     industry: {
       primary:   { type: String },
       secondary: { type: String },
     },
-    level:   { type: String, enum: ["entry", "mid", "senior"] },
+    level:   { type: String, enum: ['entry', 'mid', 'senior'] },
     salary: {
       min:  { type: Number },
       max:  { type: Number },
-      unit: { type: String, enum: ["month", "year"], default: "month" },
+      unit: { type: String, enum: ['month', 'year'], default: 'month' },
     },
     skills: {
       required: { type: [String], default: [] },

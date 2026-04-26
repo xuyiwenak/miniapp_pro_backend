@@ -28,7 +28,7 @@ const MOCK_CAREERS: ICareerMatch[] = [
     salary:      { min: 18, max: 45, unit: "month" },
     skills:      { required: ["用户调研", "数据分析"], tools: ["Figma"] },
     aiRisk:      0.38,
-    ageHints:    { "25-34": "3–5年可晋升高级PM，薪资跳跃空间大。" },
+    ageHints: { '25-30': '3–5年可晋升高级PM，薪资跳跃空间大。' },
   },
   {
     code:        "DS",

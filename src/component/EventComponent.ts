@@ -6,10 +6,10 @@
  * @LastEditors: lyh
  * @LastEditTime: 2024-11-11 16:49:29
  */
-import { Subject } from "rxjs";
-import { IBaseComponent } from "../common/BaseComponent";
-import { TTaskDelta } from "../common/CommonType";
-import { gameLogger } from "../util/logger";
+import { Subject } from 'rxjs';
+import { IBaseComponent } from '../common/BaseComponent';
+import { TTaskDelta } from '../common/CommonType';
+import { gameLogger } from '../util/logger';
 
 export class EventComponent implements IBaseComponent {
   private _taskEvent!: Subject<TTaskDelta>;
@@ -33,5 +33,5 @@ export class EventComponent implements IBaseComponent {
 }
 
 function taskHandler(v: TTaskDelta) {
-  gameLogger.debug("API Not Implemented", v);
+  gameLogger.debug('API Not Implemented', v);
 }
