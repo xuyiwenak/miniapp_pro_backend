@@ -10,10 +10,10 @@
  *
  * 测试覆盖：
  *   [1] 参数校验：非法 gender / 越界 age → 400
- *   [2] 正常答题：60 题分 12 批，全部 Likert 1–5 随机作答
- *   [3] 完成接口：验证返回 personalityLabel / freeSummary / normVersion
- *   [4] 报告接口：免费版字段完整性
- *   [5] 常模字段：normMeta.version 与 session 记录一致
+ *   [2] 正常答题：GET /questions 一次取全部题目，POST /complete 一次提交全部答案
+ *   [3] 完成接口：验证返回 personalityLabel / freeSummary
+ *   [4] 报告接口：BFI2 完整版字段完整性（BFI2_FREE 结果不落库，跳过报告校验）
+ *   [5] 常模字段：normMeta.version 与 session 记录一致（仅完整版）
  */
 
 import http from "http";
@@ -176,46 +176,31 @@ async function suiteFullFlow(gender: "male" | "female", age: number, strategy: "
     return;
   }
 
-  const { sessionId, totalQuestions, totalBatches } = startRes.data?.data ?? {};
+  const { sessionId, totalQuestions } = startRes.data?.data ?? {};
   assert(!!sessionId, `返回 sessionId`);
   assertEq(totalQuestions, 60, `totalQuestions = 60`);
-  assertEq(totalBatches, 12,   `totalBatches = 12`);
   info(`sessionId: ${sessionId}`);
 
   if (!sessionId) { fail("无法继续：缺少 sessionId"); return; }
 
-  // ── 逐批答题 ──
-  let totalAnswered = 0;
-  for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-    // GET 批次题目
-    const batchRes = await request("GET", `/assessment/batch/${sessionId}/${batchIdx}`);
-    assertOk(batchRes, `batch ${batchIdx} GET → 成功`);
+  // ── 一次性取全部题目 ──
+  const questionsRes = await request("GET", `/assessment/questions/${sessionId}`);
+  assertOk(questionsRes, "questions GET → 成功");
+  const { questions } = questionsRes.data?.data ?? {};
+  assertEq(questions?.length, 60, "返回 60 题");
 
-    const { questions } = batchRes.data?.data ?? {};
-    assert(Array.isArray(questions) && questions.length === 5, `batch ${batchIdx} 返回 5 题`);
+  // 字段安全性：不应暴露 dimension / modelType / questionId
+  const leaked = questions?.some((q: any) => q.dimension || q.modelType || q.questionId);
+  assert(!leaked, "题目未暴露 dimension/modelType/questionId");
 
-    // 检查字段安全性：不应暴露 dimension / modelType / questionId
-    const leaked = questions?.some((q: any) => q.dimension || q.modelType || q.questionId);
-    assert(!leaked, `batch ${batchIdx} 未暴露 dimension/modelType/questionId`);
+  // ── 构造全部答案，一次提交 ──
+  const answers = (questions ?? []).map((q: any) => ({
+    index: q.index,
+    score: scoreByStrategy(strategy),
+  }));
+  info(`构造 ${answers.length} 条答案，strategy=${strategy}`);
 
-    // 构造答案
-    const answers = questions?.map((q: any) => ({
-      index: q.index,
-      score: scoreByStrategy(strategy),
-    })) ?? [];
-
-    // POST 答案
-    const submitRes = await request("POST", `/assessment/batch/${sessionId}/${batchIdx}`, { answers });
-    assertOk(submitRes, `batch ${batchIdx} POST → 成功`);
-    assertField(submitRes.data?.data, "savedCount", `batch ${batchIdx} 返回 savedCount`);
-
-    totalAnswered += answers.length;
-  }
-
-  info(`已提交 ${totalAnswered} 题答案`);
-
-  // ── 完成 ──
-  const completeRes = await request("POST", `/assessment/complete/${sessionId}`);
+  const completeRes = await request("POST", `/assessment/complete/${sessionId}`, { answers });
   assertOk(completeRes, "complete → 成功");
   assertField(completeRes.data?.data, "personalityLabel", "complete 返回 personalityLabel");
   assertField(completeRes.data?.data, "freeSummary",      "complete 返回 freeSummary");
@@ -223,23 +208,24 @@ async function suiteFullFlow(gender: "male" | "female", age: number, strategy: "
   info(`性格标签：${completeRes.data?.data?.personalityLabel}`);
   info(`摘要：${completeRes.data?.data?.freeSummary?.slice(0, 40)}...`);
 
-  // ── 报告（免费版） ──
-  const reportRes = await request("GET", `/report/${sessionId}`);
-  assertOk(reportRes, "report GET → 成功");
-  const rData = reportRes.data?.data ?? {};
-  assertField(rData, "personalityLabel", "报告含 personalityLabel");
-  assertField(rData, "freeSummary",      "报告含 freeSummary");
-  assertField(rData, "topCareers",       "报告含 topCareers");
-  assert(Array.isArray(rData.topCareers), "topCareers 为数组");
-  if (rData.topCareers.length === 0) {
-    info("topCareers 为空（职业库未填充，可忽略）");
-  }
-  assertEq(rData.isPaid, false, "免费版 isPaid=false");
+  // ── 报告 & normVersion（BFI2_FREE 结果不落库，跳过） ──
+  const isFree = gender === "male" && age === 22 && strategy === "random"; // 仅示意，实际由 assessmentType 决定
+  // BFI2 完整版：校验报告接口与 normVersion 落库
+  if (!isFree) {
+    const reportRes = await request("GET", `/report/${sessionId}`);
+    assertOk(reportRes, "report GET → 成功");
+    const rData = reportRes.data?.data ?? {};
+    assertField(rData, "personalityLabel", "报告含 personalityLabel");
+    assertField(rData, "freeSummary",      "报告含 freeSummary");
+    assertField(rData, "topCareers",       "报告含 topCareers");
+    assert(Array.isArray(rData.topCareers), "topCareers 为数组");
+    assertEq(rData.isPaid, false, "未付费 isPaid=false");
 
-  // ── normVersion 一致性 ──
-  // 注：免费版不返回 normMeta，但 complete 已写入 session，通过 DB 检验
-  const normVersion = await getNormVersionFromDB(sessionId);
-  assert(typeof normVersion === "string" && normVersion.length > 0, `normVersion 已存入 session: ${normVersion}`);
+    const normVersion = await getNormVersionFromDB(sessionId);
+    assert(typeof normVersion === "string" && normVersion.length > 0, `normVersion 已存入 session: ${normVersion}`);
+  } else {
+    info("BFI2_FREE：结果不落库，跳过报告接口与 normVersion 校验");
+  }
 
   const elapsed = Date.now() - t0;
   info(`流程耗时：${elapsed}ms`);

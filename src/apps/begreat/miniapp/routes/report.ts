@@ -103,8 +103,10 @@ router.get("/:sessionId", authMiddleware, async (req: MiniappRequest, res: Respo
       sendSucc(res, {
         isPaid:        false,
         isFreeVersion: false,
-        personalityLabel: result.personalityLabel,
-        freeSummary:      result.freeSummary,
+        personalityLabel:   result.personalityLabel,
+        freeSummary:        result.freeSummary,
+        big5Normalized:     result.big5Normalized,
+        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
         topCareers: result.topCareers.slice(0, 3).map((c) => {
           const aiRisk = buildFreeAiRisk(c.aiRisk, bands);
           return { code: c.code, title: c.title, matchScore: c.matchScore, aiRisk };

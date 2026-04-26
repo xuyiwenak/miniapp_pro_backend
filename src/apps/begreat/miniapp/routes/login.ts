@@ -59,6 +59,7 @@ router.post("/wx", async (req: Request, res: Response) => {
     }
 
     const token = await issueToken(result.openid);
+    logger.info(`[begreat/login] openId: ${result.openid}`);
     sendSucc(res, { token, openId: result.openid });
   } catch (err) {
     logger.error("[begreat/login] exception:", err);
