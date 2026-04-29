@@ -1,0 +1,26 @@
+{
+  "db_global": {
+    "host": "mongo",
+    "port": 27017,
+    "db": "mandis_global_db",
+    "user": "root",
+    "password": "password",
+    "authSource": "admin"
+  },
+  "db_server": {
+    "front_1": {
+      "host": "mongo",
+      "port": 27017,
+      "db": "mandis_server_1",
+      "user": "root",
+      "password": "password",
+      "authSource": "admin"
+    }
+  },
+  "db_zones": {},
+  "redis_global": {
+    "host": "redis",
+    "port": 6379,
+    "db": 2
+  }
+}

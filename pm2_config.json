@@ -36,6 +36,25 @@
         "id": "begreat_1",
         "SYSCONFIG_ROOT": "src/apps/begreat/sysconfig"
       }
+    },
+    {
+      "name": "mandis",
+      "cwd": ".",
+      "script": "npm",
+      "args": "run dev:mandis",
+      "interpreter": "none",
+      "watch": false,
+      "env": {
+        "NODE_ENV": "development",
+        "ENV": "development",
+        "environment": "development",
+        "WS_PORT": "42000",
+        "HTTP_PORT": "42001",
+        "MINIAPP_PORT": "42002",
+        "SERVER_ID": "front_1",
+        "id": "front_1",
+        "SYSCONFIG_ROOT": "src/apps/mandis/sysconfig"
+      }
     }
   ]
 }

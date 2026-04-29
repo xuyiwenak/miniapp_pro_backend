@@ -1,0 +1,77 @@
+{
+  "appenders": {
+    "server": {
+      "filename": "logs/server.log",
+      "type": "dateFile",
+      "numBackups": 7,
+      "encoding": "utf8",
+      "layout": {
+        "type": "pattern",
+        "pattern": "[%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] [%f:%l] -- %m"
+      },
+      "pattern": "yyyy-MM-dd",
+      "keepFileExt": true,
+      "alwaysIncludePattern": true
+    },
+    "game": {
+      "filename": "logs/game.log",
+      "type": "dateFile",
+      "numBackups": 7,
+      "encoding": "utf8",
+      "layout": {
+        "type": "pattern",
+        "pattern": "[%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] [%f:%l] -- %m"
+      },
+      "pattern": "yyyy-MM-dd",
+      "keepFileExt": true,
+      "alwaysIncludePattern": true
+    },
+    "console": {
+      "type": "console",
+      "layout": {
+        "type": "pattern",
+        "pattern": "%[ [%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] %] -- %m"
+      }
+    },
+    "coze_debug": {
+      "filename": "logs/coze_debug.log",
+      "type": "dateFile",
+      "numBackups": 7,
+      "encoding": "utf8",
+      "layout": {
+        "type": "pattern",
+        "pattern": "[%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] -- %m"
+      },
+      "pattern": "yyyy-MM-dd",
+      "keepFileExt": true,
+      "alwaysIncludePattern": true
+    },
+    "console_warn": {
+      "type": "logLevelFilter",
+      "appender": "console",
+      "level": "warn"
+    }
+  },
+  "categories": {
+    "default": {
+      "appenders": ["game", "console_warn"],
+      "enableCallStack": false,
+      "level": "info"
+    },
+    "server": {
+      "appenders": ["server", "console_warn"],
+      "enableCallStack": false,
+      "level": "info"
+    },
+    "game": {
+      "appenders": ["game", "console_warn"],
+      "enableCallStack": false,
+      "level": "info"
+    },
+    "coze_debug": {
+      "appenders": ["coze_debug"],
+      "enableCallStack": false,
+      "level": "info"
+    }
+  }
+}
