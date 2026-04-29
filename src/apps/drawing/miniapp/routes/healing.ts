@@ -1,10 +1,12 @@
 import { Router, type Request, type Response } from "express";
+import { randomUUID } from "crypto";
 import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
 import { authMiddleware, type MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
 import { getWorkModel } from "../../../../dbservice/model/GlobalInfoDBModel";
 import { logRequest, logRequestError } from "../../../../util/requestLogger";
 import { notifyHealingUpdate } from "../ws/chatServer";
-import { getCozeConfig, queryWorkflowOutputOnce, submitWorkflow } from "../../../../util/cozeWorkflow";
+import { getCozeConfig } from "../../../../util/cozeWorkflow";
+import { analyzeArtwork } from "../../../../util/qwenVlAnalyzer";
 import { resolveImageUrl } from "../../../../util/imageUploader";
 import { gameLogger as logger, cozeDebugLogger } from "../../../../util/logger";
 import type { IWork, IHealingScores } from "../../../../entity/work.entity";
@@ -472,128 +474,107 @@ router.post("/coze/callback", async (req: Request, res: Response) => {
   }
 });
 
+async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
+	const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
+	const desc = work.desc ?? '';
+	const tags = (work.tags ?? []).join(',');
+	const output = await analyzeArtwork(imageUrl, desc, tags);
+	await applyHealingSuccessFromRunId(jobId, output);
+}
+
 router.post("/analyze", authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const body = (req.body?.data ?? req.body) as { workId?: string };
-  const workId = body?.workId?.trim();
+	const body = (req.body?.data ?? req.body) as { workId?: string };
+	const workId = body?.workId?.trim();
 
-  logRequest("healing.ts:analyze:entry", "healing analyze request", {
-    req,
-    requestBody: body,
-  });
+	logRequest("healing.ts:analyze:entry", "healing analyze request", {
+		req,
+		requestBody: body,
+	});
 
-  if (!workId) {
-    sendErr(res, "Missing workId", 400);
-    return;
-  }
+	if (!workId) {
+		sendErr(res, "Missing workId", 400);
+		return;
+	}
 
-  const userId = req.userId;
-  if (!userId) {
-    sendErr(res, "Unauthorized", 401);
-    return;
-  }
+	const userId = req.userId;
+	if (!userId) {
+		sendErr(res, "Unauthorized", 401);
+		return;
+	}
 
-  // ── 每日配额检查 ──
-  try {
-    const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
-    const zoneId = playerComp?.getDefaultZoneId();
-    if (zoneId) {
-      const Player = getPlayerModel(zoneId);
-      const player = await Player.findOne({ userId }).select("level").lean().exec();
-      const isSuperAdmin = player?.level === AccountLevel.SuperAdmin;
-      if (!isSuperAdmin) {
-        const [limit, used] = await Promise.all([getHealDailyLimit(), getHealDailyUsage(userId)]);
-        if (used >= limit) {
-          sendErr(res, `今日分析次数已用完（每日限${limit}次），请明天再试`, 429);
-          return;
-        }
-      }
-    }
-  } catch (quotaErr) {
-    logger.error("heal quota check error", (quotaErr as Error).message);
-    // 配额检查失败时放行，不影响主功能
-  }
+	// ── 每日配额检查 ──
+	try {
+		const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>("PlayerComponent");
+		const zoneId = playerComp?.getDefaultZoneId();
+		if (zoneId) {
+			const Player = getPlayerModel(zoneId);
+			const player = await Player.findOne({ userId }).select("level").lean().exec();
+			const isSuperAdmin = player?.level === AccountLevel.SuperAdmin;
+			if (!isSuperAdmin) {
+				const [limit, used] = await Promise.all([getHealDailyLimit(), getHealDailyUsage(userId)]);
+				if (used >= limit) {
+					sendErr(res, `今日分析次数已用完（每日限${limit}次），请明天再试`, 429);
+					return;
+				}
+			}
+		}
+	} catch (quotaErr) {
+		logger.error("heal quota check error", (quotaErr as Error).message);
+		// 配额检查失败时放行，不影响主功能
+	}
 
-  try {
-    const Work = getWorkModel();
-    const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
-    if (!work) {
-      sendErr(res, "Work not found", 404);
-      return;
-    }
+	try {
+		const Work = getWorkModel();
+		const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+		if (!work) {
+			sendErr(res, "Work not found", 404);
+			return;
+		}
 
-    if (work.authorId && work.authorId !== userId) {
-      sendErr(res, "Forbidden", 403);
-      return;
-    }
+		if (work.authorId && work.authorId !== userId) {
+			sendErr(res, "Forbidden", 403);
+			return;
+		}
 
-    // 构造传给 Coze 工作流的参数（OSS 图片自动签名为临时 URL）
-    // 注意：parameters 的 key 必须与 Coze 工作流「开始节点」里配置的变量名完全一致
-    const rawImageUrl = work.images?.[0]?.url ?? "";
-    const imageUrl = resolveImageUrl(rawImageUrl);
-    const workflowParams: Record<string, string> = {
-      workId: work.workId,
-      desc: work.desc ?? "",
-      tags: (work.tags ?? []).join(","),
-      imageUrl,
-      image_url: imageUrl, // 兼容工作流里使用 snake_case 变量名
-    };
+		const jobId = randomUUID();
 
-    const runId = await submitWorkflow(workflowParams);
+		await Work.updateOne(
+			{ workId },
+			{
+				$set: {
+					healing: {
+						scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 0])),
+						summary: "",
+						colorAnalysis: "",
+						status: "pending",
+						isPublic: false,
+						cozeRunId: jobId,
+						submittedAt: new Date(),
+					},
+				},
+			},
+		).exec();
 
-    // 提交成功后计入当日用量（失败时不计）
-    void incrementHealDailyUsage(userId).catch(() => {});
+		void incrementHealDailyUsage(userId).catch(() => {});
 
-    // 立即标记为 pending 状态并记录 runId
-    await Work.updateOne(
-      { workId },
-      {
-        $set: {
-          healing: {
-            scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 0])),
-            summary: "",
-            colorAnalysis: "",
-            status: "pending",
-            isPublic: false,
-            cozeRunId: runId,
-            submittedAt: new Date(),
-          },
-        },
-      },
-    ).exec();
+		sendSucc(res, { workId, status: "pending", runId: jobId });
 
-    // 立即返回前端 pending 状态（完成由 Coze POST /healing/coze/callback 写库）
-    sendSucc(res, { workId, status: "pending", runId });
-
-    const cozeCfg = getCozeConfig();
-    const fallbackMs = cozeCfg.fallbackPollAfterMs ?? 0;
-    if (fallbackMs > 0) {
-      setTimeout(() => {
-        void (async () => {
-          try {
-            const pending = (await Work.findOne({ workId, "healing.status": "pending" }).lean().exec()) as IWork | null;
-            if (!pending) return;
-            const out = await queryWorkflowOutputOnce(runId);
-            if (out === null) return;
-            await applyHealingSuccessFromRunId(runId, out);
-          } catch (err) {
-            logger.error("Coze fallback poll failed workId=", workId, (err as Error).message);
-            await Work.updateOne({ workId }, { $set: { "healing.status": "failed" } }).exec();
-          }
-        })();
-      }, fallbackMs);
-    }
-  } catch (err) {
-    logRequestError("healing.ts:analyze:error", "healing analyze error", {
-      req,
-      requestBody: { workId },
-      statusCode: 500,
-      extra: {
-        errorName: (err as Error).name,
-        errorMessage: (err as Error).message,
-      },
-    });
-    sendErr(res, "Analyze failed", 500);
-  }
+		void runQwenVlAnalysis(work, jobId).catch(async (err) => {
+			logger.error("QwenVL analysis failed workId=", workId, (err as Error).message);
+			await Work.updateOne({ workId }, { $set: { "healing.status": "failed" } }).exec();
+		});
+	} catch (err) {
+		logRequestError("healing.ts:analyze:error", "healing analyze error", {
+			req,
+			requestBody: { workId },
+			statusCode: 500,
+			extra: {
+				errorName: (err as Error).name,
+				errorMessage: (err as Error).message,
+			},
+		});
+		sendErr(res, "Analyze failed", 500);
+	}
 });
 
 router.get("/status", authMiddleware, async (req: MiniappRequest, res: Response) => {

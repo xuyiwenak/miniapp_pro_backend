@@ -1,0 +1,36 @@
+{
+  "db_global": {
+    "host": "127.0.0.1",
+    "port": 27017,
+    "db": "global_db"
+  },
+  "db_server": {
+    "front_1": {
+      "host": "127.0.0.1",
+      "port": 27017,
+      "db": "server_1"
+    },
+    "front_2": {
+      "host": "127.0.0.1",
+      "port": 27017,
+      "db": "server_2"
+    }
+  },
+  "db_zones": {
+    "zone1": {
+      "host": "127.0.0.1",
+      "port": 27017,
+      "db": "zone_1"
+    },
+    "zone2": {
+      "host": "127.0.0.1",
+      "port": 27017,
+      "db": "zone_2"
+    }
+  },
+  "redis_global": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 0
+  }
+}
