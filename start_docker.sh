@@ -1,28 +1,63 @@
 #!/bin/bash
 set -e
-# 与 docker-compose.yml 同目录（art_backend 项目根）
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "--- 停止并移除旧 app 容器（避免残留）---"
-docker compose stop drawing_app begreat_app 2>/dev/null || true
-docker compose rm -f drawing_app begreat_app 2>/dev/null || true
+# 所有 app 容器（共用同一镜像，build 任意一个即可刷新）
+ALL_APPS=(drawing_app begreat_app mandis_app)
 
-echo "--- 构建新镜像（--no-cache 确保 TS 完整重新编译）---"
-# 只需 build drawing_app，begreat_app 复用同一镜像
-docker compose build --no-cache drawing_app
+# 解析参数：./start_docker.sh [容器名]
+TARGET="${1:-}"
 
-echo "--- 启动两个 app 容器 ---"
-# --no-deps：不启动/重建依赖服务；mongo/redis 需已在运行
-docker compose up -d --no-deps drawing_app begreat_app
+if [[ -n "$TARGET" ]]; then
+  # ── 单容器模式 ──────────────────────────────────────────────
+  VALID=false
+  for svc in "${ALL_APPS[@]}"; do
+    [[ "$svc" == "$TARGET" ]] && VALID=true && break
+  done
+  if [[ "$VALID" == false ]]; then
+    echo "错误：未知容器 '$TARGET'，可选：${ALL_APPS[*]}"
+    exit 1
+  fi
 
-echo "--- 重载 nginx（刷新 DNS 缓存，避免 502）---"
-docker compose exec -T nginx nginx -s reload || true
+  echo "--- 更新单个容器：$TARGET ---"
+  docker compose stop "$TARGET"
+  docker compose rm -f "$TARGET"
+  docker compose build --no-cache "$TARGET"
+  docker compose up -d --no-deps "$TARGET"
 
-echo "--- 清理悬空镜像 ---"
-docker image prune -f
+  echo "--- 重载 nginx ---"
+  docker compose exec -T nginx nginx -s reload || true
 
-echo "--- 容器状态 ---"
-docker ps
+  echo "--- 清理悬空镜像 ---"
+  docker image prune -f
 
-echo "--- 跟踪两个 app 日志 (Ctrl+C 退出) ---"
-docker compose logs -f drawing_app begreat_app
+  echo "--- 容器状态 ---"
+  docker ps
+
+  echo "--- 跟踪 $TARGET 日志 (Ctrl+C 退出) ---"
+  docker compose logs -f "$TARGET"
+
+else
+  # ── 全量模式（默认）────────────────────────────────────────
+  echo "--- 停止并移除旧 app 容器 ---"
+  docker compose stop "${ALL_APPS[@]}" 2>/dev/null || true
+  docker compose rm -f "${ALL_APPS[@]}" 2>/dev/null || true
+
+  echo "--- 构建新镜像（--no-cache 确保 TS 完整重新编译）---"
+  docker compose build --no-cache drawing_app
+
+  echo "--- 启动所有 app 容器 ---"
+  docker compose up -d --no-deps "${ALL_APPS[@]}"
+
+  echo "--- 重载 nginx ---"
+  docker compose exec -T nginx nginx -s reload || true
+
+  echo "--- 清理悬空镜像 ---"
+  docker image prune -f
+
+  echo "--- 容器状态 ---"
+  docker ps
+
+  echo "--- 跟踪所有 app 日志 (Ctrl+C 退出) ---"
+  docker compose logs -f "${ALL_APPS[@]}"
+fi
