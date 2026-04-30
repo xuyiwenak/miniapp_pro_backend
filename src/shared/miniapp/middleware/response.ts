@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Response } from 'express';
 
 export function sendSucc(res: Response, data?: unknown): void {
   res.status(200).json({

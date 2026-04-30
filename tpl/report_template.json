@@ -166,7 +166,7 @@
     }
   },
   "summary": {
-    "template": "你的人格画像为：高{high_dim1}、中{mid_dim1}、低{low_dim1}类型。整体表现为{summary_text}。",
+    "template": "你的人格画像为：高{high_dim1}、中{mid_dim1}、低{low_dim1}类型。整体表现为{summary_text}",
     "cover_line": "受访者：{gender_label}，{age_label}（{life_stage}）。{age_norm_line} {gender_norm_line}",
     "advantage": "你的核心优势：{adv_text}",
     "improve": "可以适度提升的方向：{imp_text}",

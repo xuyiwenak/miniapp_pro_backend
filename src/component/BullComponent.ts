@@ -1,10 +1,10 @@
-import Bull from "bull";
-import { Logger } from "log4js";
+import Bull from 'bull';
+import { Logger } from 'log4js';
 import {
   ComponentManager,
   EComName,
   IBaseComponent,
-} from "../common/BaseComponent";
+} from '../common/BaseComponent';
 
 export class BullComponent implements IBaseComponent {
   // Bull queue instance for managing jobs
@@ -29,7 +29,7 @@ export class BullComponent implements IBaseComponent {
   async sendMessage<TMessage, TResult>(
     message: TMessage
   ): Promise<Bull.Job<TResult>> {
-    let job = await this.queue.add(message);
+    const job = await this.queue.add(message);
     return job as Bull.Job<TResult>;
   }
 
@@ -82,15 +82,15 @@ export class BullComponent implements IBaseComponent {
         db: redisOptions.db,
       },
     });
-    this.gameLogger.log("Bull queue connected to Redis server");
+    this.gameLogger.log('Bull queue connected to Redis server');
     // Logic to execute after the component starts
   }
 
   // Stop the component and release resources
   async stop() {
-    this.gameLogger.log("Waiting for all message callbacks to complete...");
+    this.gameLogger.log('Waiting for all message callbacks to complete...');
     await this.queue.close();
-    this.gameLogger.log("Bull queue resources released.");
+    this.gameLogger.log('Bull queue resources released.');
   }
 
   // Set a mock queue for testing purposes

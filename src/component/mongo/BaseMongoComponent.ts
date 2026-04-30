@@ -1,8 +1,8 @@
-import * as net from "net";
-import * as mongoose from "mongoose";
-import { DBCfg } from "../../common/CommonType";
-import { gameLogger as logger } from "../../util/logger";
-import { buildMongoUrl } from "../../util/mongo_url";
+import * as net from 'net';
+import * as mongoose from 'mongoose';
+import { DBCfg } from '../../common/CommonType';
+import { gameLogger as logger } from '../../util/logger';
+import { buildMongoUrl } from '../../util/mongo_url';
 
 type ConnectionHooks<T> = {
   connectedLog: string;
@@ -39,13 +39,13 @@ export abstract class BaseMongoComponent {
             socket.destroy();
             resolve();
           });
-          socket.on("error", (err) => {
+          socket.on('error', (err) => {
             socket.destroy();
             reject(err);
           });
-          socket.on("timeout", () => {
+          socket.on('timeout', () => {
             socket.destroy();
-            reject(new Error("timeout"));
+            reject(new Error('timeout'));
           });
         });
         logger.info(`MongoDB TCP reachable: ${host}:${port}`);
@@ -84,7 +84,7 @@ export abstract class BaseMongoComponent {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     void (connection as any).$initialConnection?.catch(() => {});
-    connection.on("error", () => {});
+    connection.on('error', () => {});
 
     try {
       await connection.asPromise();
@@ -92,15 +92,17 @@ export abstract class BaseMongoComponent {
       connection.removeAllListeners();
       try {
         await connection.close(true);
-      } catch {}
+      } catch {
+        // Connection close may fail if already disconnected; safe to ignore
+      }
       throw err;
     }
 
     logger.info(hooks.connectedLog, dbConfig.db);
-    connection.removeAllListeners("error");
-    connection.on("error", (error: Error) => logger.error(hooks.errorLog, error.message));
-    connection.on("disconnected", () => logger.warn(hooks.disconnectedLog, dbConfig.db));
-    connection.on("reconnected", () => logger.info(hooks.reconnectedLog, dbConfig.db));
+    connection.removeAllListeners('error');
+    connection.on('error', (error: Error) => logger.error(hooks.errorLog, error.message));
+    connection.on('disconnected', () => logger.warn(hooks.disconnectedLog, dbConfig.db));
+    connection.on('reconnected', () => logger.info(hooks.reconnectedLog, dbConfig.db));
 
     return hooks.onConnected(connection);
   }

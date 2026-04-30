@@ -1,6 +1,6 @@
-import https from "https";
-import { ComponentManager, EComName } from "../common/BaseComponent";
-import { gameLogger as logger } from "./logger";
+import https from 'https';
+import { ComponentManager, EComName } from '../common/BaseComponent';
+import { gameLogger as logger } from './logger';
 
 let cachedToken: string | null = null;
 let expireAt = 0;
@@ -14,8 +14,8 @@ function getWxConfig(): { appId: string; appSecret: string } | null {
     if (
       !cfg?.appId ||
       !cfg?.appSecret ||
-      cfg.appId === "YOUR_WECHAT_APPID" ||
-      cfg.appSecret === "YOUR_WECHAT_APPSECRET"
+      cfg.appId === 'YOUR_WECHAT_APPID' ||
+      cfg.appSecret === 'YOUR_WECHAT_APPSECRET'
     ) {
       return null;
     }
@@ -27,17 +27,17 @@ function getWxConfig(): { appId: string; appSecret: string } | null {
 
 function fetchAccessToken(appId: string, appSecret: string): Promise<{ access_token: string; expires_in: number }> {
   const url =
-    `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential` +
+    'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential' +
     `&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}`;
 
   return new Promise((resolve, reject) => {
     https
       .get(url, (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", (d) => chunks.push(d));
-        res.on("end", () => {
+        res.on('data', (d) => chunks.push(d));
+        res.on('end', () => {
           try {
-            const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            const json = JSON.parse(Buffer.concat(chunks).toString('utf8'));
             if (json.access_token && json.expires_in) {
               resolve({ access_token: json.access_token, expires_in: json.expires_in });
             } else {
@@ -48,7 +48,7 @@ function fetchAccessToken(appId: string, appSecret: string): Promise<{ access_to
           }
         });
       })
-      .on("error", (err) => reject(err));
+      .on('error', (err) => reject(err));
   });
 }
 
@@ -59,12 +59,12 @@ export async function getAccessToken(): Promise<string> {
 
   const cfg = getWxConfig();
   if (!cfg) {
-    throw new Error("WeChat appId/appSecret not configured");
+    throw new Error('WeChat appId/appSecret not configured');
   }
 
   const result = await fetchAccessToken(cfg.appId, cfg.appSecret);
   cachedToken = result.access_token;
   expireAt = Date.now() + (result.expires_in - 300) * 1000;
-  logger.info("wx access_token refreshed, expires_in=", result.expires_in);
+  logger.info('wx access_token refreshed, expires_in=', result.expires_in);
   return cachedToken;
 }

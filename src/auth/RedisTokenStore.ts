@@ -1,5 +1,5 @@
-import Redis from "ioredis";
-import { ComponentManager, EComName } from "../common/BaseComponent";
+import Redis from 'ioredis';
+import { ComponentManager, EComName } from '../common/BaseComponent';
 
 let redisClient: Redis | null = null;
 
@@ -13,7 +13,7 @@ function getRedis(): Redis {
   );
   const cfg = sysCfg.redis_global;
   if (!cfg) {
-    throw new Error("redis_global config is missing");
+    throw new Error('redis_global config is missing');
   }
 
   redisClient = new Redis({
@@ -37,7 +37,7 @@ export async function saveTokenUserId(
 ): Promise<void> {
   const client = getRedis();
   const key = `auth:token:${token}`;
-  await client.set(key, userId, "EX", ttlSec);
+  await client.set(key, userId, 'EX', ttlSec);
 }
 
 export async function loadUserIdByToken(
@@ -56,7 +56,7 @@ export async function revokeToken(token: string): Promise<void> {
 
 // ── 每日分析配额 ──────────────────────────────────────────────────────────────
 
-const HEAL_LIMIT_KEY = "sys:heal_daily_limit";
+const HEAL_LIMIT_KEY = 'sys:heal_daily_limit';
 const DEFAULT_HEAL_DAILY_LIMIT = 3;
 
 export async function getHealDailyLimit(): Promise<number> {
@@ -71,7 +71,7 @@ export async function setHealDailyLimit(limit: number): Promise<void> {
 }
 
 function todayDateStr(): string {
-  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD (UTC)
+  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD (UTC)
 }
 
 function secondsUntilUtcMidnight(): number {
@@ -120,6 +120,6 @@ export async function setHealDailyUsage(userId: string, count: number): Promise<
   if (count <= 0) {
     await client.del(key);
   } else {
-    await client.set(key, String(count), "EX", secondsUntilUtcMidnight());
+    await client.set(key, String(count), 'EX', secondsUntilUtcMidnight());
   }
 }

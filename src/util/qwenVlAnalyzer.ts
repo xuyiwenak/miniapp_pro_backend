@@ -1,4 +1,5 @@
 import https from 'https';
+import http from 'http';
 import { ComponentManager, EComName } from '../common/BaseComponent';
 import { gameLogger as logger } from './logger';
 
@@ -11,6 +12,7 @@ export interface QwenVlConfig {
 const DEFAULT_MODEL = 'qwen-vl-plus';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
+const MAX_OUTPUT_TOKENS = 2048;
 
 const SYSTEM_PROMPT =
   '你是一位专业的艺术疗愈分析师，擅长通过绘画作品分析创作者的心理状态与情绪能量。' +
@@ -61,6 +63,7 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
 
   const postData = Buffer.from(JSON.stringify({
     model,
+    max_tokens: MAX_OUTPUT_TOKENS,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
@@ -74,12 +77,26 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
   }));
 
   const fullUrl = new URL(`${baseUrl}/chat/completions`);
+  const isHttps = fullUrl.protocol === 'https:';
+  const mod = isHttps ? https : (http as unknown as typeof https);
 
   const rawBody = await new Promise<string>((resolve, reject) => {
-    const req = https.request(
+    let settled = false;
+    const tryResolve = (val: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(val);
+    };
+    const tryReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    const req = mod.request(
       {
         hostname: fullUrl.hostname,
-        port: fullUrl.port || 443,
+        port: fullUrl.port || (isHttps ? 443 : 80),
         path: fullUrl.pathname,
         method: 'POST',
         headers: {
@@ -87,24 +104,32 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
           'Content-Type': 'application/json',
           'Content-Length': postData.byteLength,
         },
-        timeout: REQUEST_TIMEOUT_MS,
       },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (d: Buffer) => chunks.push(d));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        res.on('end', () => tryResolve(Buffer.concat(chunks).toString('utf8')));
+        res.on('error', (e: Error) => tryReject(e));
       },
     );
-    req.on('error', reject);
+    req.on('error', (e: Error) => tryReject(e));
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error(`QwenVL request timeout after ${REQUEST_TIMEOUT_MS}ms`));
+      tryReject(new Error(`QwenVL request timeout after ${REQUEST_TIMEOUT_MS}ms`));
     });
+    req.setTimeout(REQUEST_TIMEOUT_MS);
     req.write(postData);
     req.end();
   });
 
-  const resp = JSON.parse(rawBody) as DashScopeResponse;
+  let resp: DashScopeResponse;
+  try {
+    resp = JSON.parse(rawBody) as DashScopeResponse;
+  } catch (e) {
+    logger.error('QwenVL response JSON parse failed, raw length=', rawBody.length, 'preview=', rawBody.slice(0, 300));
+    throw e;
+  }
+
   if (resp.error) {
     throw new Error(`QwenVL API error: ${resp.error.code ?? ''} ${resp.error.message ?? ''}`);
   }

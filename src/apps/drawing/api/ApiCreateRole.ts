@@ -1,11 +1,11 @@
-import { ApiCall } from "tsrpc";
+import { ApiCall } from 'tsrpc';
 import {
   ReqCreateRole,
   ResCreateRole,
-} from "../protocols/PtlCreateRole";
-import { ServiceType } from "../protocols/serviceProto";
-import { ComponentManager } from "../../../common/BaseComponent";
-import type { PlayerComponent } from "../../../component/PlayerComponent";
+} from '../protocols/PtlCreateRole';
+import { ServiceType } from '../protocols/serviceProto';
+import { ComponentManager } from '../../../common/BaseComponent';
+import type { PlayerComponent } from '../../../component/PlayerComponent';
 
 export async function ApiCreateRole(
   call: ApiCall<ReqCreateRole, ResCreateRole, ServiceType>,
@@ -14,11 +14,11 @@ export async function ApiCreateRole(
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>(
-      "PlayerComponent",
+      'PlayerComponent',
     );
 
   if (!playerComp) {
-    await call.error("CreateRole failed: PlayerComponentNotInitialized");
+    await call.error('CreateRole failed: PlayerComponentNotInitialized');
     return;
   }
 

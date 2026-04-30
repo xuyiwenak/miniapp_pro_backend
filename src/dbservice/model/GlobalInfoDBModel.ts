@@ -6,10 +6,10 @@
  * @LastEditors: lyh
  * @LastEditTime: 2024-11-28 10:35:50
  */
-import { Connection, Model } from "mongoose";
-import { IPersonalInfo, PersonalInfoSchema } from "../../entity/personalInfo.entity";
-import { IWork, WorkSchema } from "../../entity/work.entity";
-import { FeedbackSchema, type IFeedback } from "../../entity/feedback.entity";
+import { Connection, Model } from 'mongoose';
+import { IPersonalInfo, PersonalInfoSchema } from '../../entity/personalInfo.entity';
+import { IWork, WorkSchema } from '../../entity/work.entity';
+import { FeedbackSchema, type IFeedback } from '../../entity/feedback.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -23,13 +23,13 @@ class GlobalModelManager {
   }
 
   private registerModels() {
-    this.workModel = this.connection.model<IWork>("Work", WorkSchema);
+    this.workModel = this.connection.model<IWork>('Work', WorkSchema);
     this.workModel.createIndexes().catch(() => {});
 
-    this.personalInfoModel = this.connection.model<IPersonalInfo>("PersonalInfo", PersonalInfoSchema);
+    this.personalInfoModel = this.connection.model<IPersonalInfo>('PersonalInfo', PersonalInfoSchema);
     this.personalInfoModel.createIndexes().catch(() => {});
 
-    this.feedbackModel = this.connection.model<IFeedback>("Feedback", FeedbackSchema);
+    this.feedbackModel = this.connection.model<IFeedback>('Feedback', FeedbackSchema);
     this.feedbackModel.createIndexes().catch(() => {});
   }
 
@@ -62,7 +62,7 @@ export function initializeGlobalModel(connection: Connection) {
 export function getGlobalModelManager(): GlobalModelManager {
   if (!globalModelManager) {
     throw new Error(
-      "GlobalModelManager is not initialized. Please call initializeGlobalModel first.",
+      'GlobalModelManager is not initialized. Please call initializeGlobalModel first.',
     );
   }
   return globalModelManager;

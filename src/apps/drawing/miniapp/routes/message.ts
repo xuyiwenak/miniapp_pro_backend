@@ -1,14 +1,14 @@
-import { Router, Response } from "express";
-import { sendSucc, sendErr } from "../../../../shared/miniapp/middleware/response";
-import type { MiniappRequest } from "../../../../shared/miniapp/middleware/auth";
-import { getMessageStore } from "../messageStore";
+import { Router, Response } from 'express';
+import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
+import type { MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
+import { getMessageStore } from '../messageStore';
 
 const router = Router();
 
-router.get("/unreadNum", (req: MiniappRequest, res: Response) => {
+router.get('/unreadNum', (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
   const store = getMessageStore();
@@ -16,10 +16,10 @@ router.get("/unreadNum", (req: MiniappRequest, res: Response) => {
   sendSucc(res, n);
 });
 
-router.get("/list", (req: MiniappRequest, res: Response) => {
+router.get('/list', (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
   const store = getMessageStore();
@@ -27,15 +27,15 @@ router.get("/list", (req: MiniappRequest, res: Response) => {
   sendSucc(res, list);
 });
 
-router.post("/read", (req: MiniappRequest, res: Response) => {
+router.post('/read', (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
-    sendErr(res, "Unauthorized", 401);
+    sendErr(res, 'Unauthorized', 401);
     return;
   }
   const targetUserId = (req.body?.userId ?? req.body?.data?.userId) as string | undefined;
   if (!targetUserId) {
-    sendErr(res, "Missing userId", 400);
+    sendErr(res, 'Missing userId', 400);
     return;
   }
   const store = getMessageStore();

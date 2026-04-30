@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from 'fs';
+import path from 'path';
 
 /**
  * 相对 `dist/util` 的 sysconfig 子路径（未设置 SYSCONFIG_ROOT 时使用）。
@@ -10,7 +10,7 @@ export function getBaseConfigPath(
   environment: string,
   serverProvide: string
 ): string {
-  const gameType = process.env.GAME_TYPE ?? process.env.gameType ?? "drawing";
+  const gameType = process.env.GAME_TYPE ?? process.env.gameType ?? 'drawing';
   const base = `../apps/${gameType}/sysconfig/${environment}/`;
   if (serverProvide) {
     return `../apps/${gameType}/sysconfig/${environment}/${serverProvide}/`;
@@ -92,14 +92,14 @@ export function readSysconfigJsonFileUtf8(
     filename
   );
   if (fs.existsSync(primary)) {
-    return { utf8: fs.readFileSync(primary, "utf-8"), path: primary };
+    return { utf8: fs.readFileSync(primary, 'utf-8'), path: primary };
   }
   if (fs.existsSync(fallback)) {
-    return { utf8: fs.readFileSync(fallback, "utf-8"), path: fallback };
+    return { utf8: fs.readFileSync(fallback, 'utf-8'), path: fallback };
   }
   throw new Error(
     `Missing sysconfig file ${filename}. Tried:\n  ${primary}\n  ${fallback}\n` +
       `On ECS: ensure src/sysconfig/${environment}/${filename} exists (volume → SYSCONFIG_ROOT), ` +
-      `or rebuild the image so dist/sysconfig includes JSON (npm run copy-config / Dockerfile).`
+      'or rebuild the image so dist/sysconfig includes JSON (npm run copy-config / Dockerfile).'
   );
 }

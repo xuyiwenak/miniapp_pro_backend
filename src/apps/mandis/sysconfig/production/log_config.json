@@ -50,19 +50,6 @@
       "type": "logLevelFilter",
       "appender": "console",
       "level": "warn"
-    },
-    "prop_history_csv": {
-      "filename": "logs/prop_history.csv",
-      "type": "src/util/LoggerCsvDateRollingAppender",
-      "numBackups": 7,
-      "encoding": "utf8",
-      "layout": {
-        "type": "messagePassThrough"
-      },
-      "header": ["date", "changeData", "nowData", "beforeData", "source"],
-      "pattern": "yyyy-MM-dd",
-      "keepFileExt": true,
-      "alwaysIncludePattern": true
     }
   },
   "categories": {
@@ -78,11 +65,6 @@
     },
     "game": {
       "appenders": ["game", "console_warn"],
-      "enableCallStack": false,
-      "level": "info"
-    },
-    "prop_history_csv": {
-      "appenders": ["prop_history_csv"],
       "enableCallStack": false,
       "level": "info"
     },

@@ -1,9 +1,9 @@
-import { Schema } from "mongoose";
-import type { IReportSnapshot } from "./reportResult.entity";
+import { Schema } from 'mongoose';
+import type { IReportSnapshot } from './reportResult.entity';
 
-export type SessionStatus = "in_progress" | "completed" | "invite_unlocked" | "paid";
-export type Gender = "male" | "female";
-export type AssessmentType = "BFI2" | "BFI2_FREE" | "MBTI" | "DISC";
+export type SessionStatus = 'in_progress' | 'completed' | 'invite_unlocked' | 'paid';
+export type Gender = 'male' | 'female';
+export type AssessmentType = 'BFI2' | 'BFI2_FREE' | 'MBTI' | 'DISC';
 
 export interface ICareerMatch {
   code: string;
@@ -14,9 +14,9 @@ export interface ICareerMatch {
   /** 行业分类 */
   industry?: { primary: string; secondary: string };
   /** 职业阶段 */
-  level?: "entry" | "mid" | "senior";
+  level?: 'entry' | 'mid' | 'senior';
   /** 薪资区间 */
-  salary?: { min: number; max: number; unit: "month" | "year" };
+  salary?: { min: number; max: number; unit: 'month' | 'year' };
   /** 所需技能 */
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险 0–1 */
@@ -25,6 +25,38 @@ export interface ICareerMatch {
   aiImpactAdvice?: string;
   /** 各年龄段原始说明（来自 occupation，供报告模板渲染使用） */
   ageHints?: Partial<Record<string, string>>;
+  /** 各维度贡献拆解（单位：分） */
+  scoreBreakdown?: {
+    openness: number;
+    conscientiousness: number;
+    emotionalStability: number;
+    ageMultiplier: number;
+    softPenaltyMultiplier?: number;
+  };
+  /** 命中的不推荐规则信息（仅用于解释） */
+  ruleAdjustments?: {
+    softHitIds?: string[];
+    softHitReasons?: string[];
+    advice?: string;
+  };
+}
+
+export interface IExcludedCareer {
+  code: string;
+  title: string;
+  reasons: string[];
+  ruleIds: string[];
+  advice?: string;
+}
+
+export interface ISoftAdjustedCareer {
+  code: string;
+  title: string;
+  matchScore: number;
+  softPenaltyMultiplier: number;
+  reasons: string[];
+  ruleIds: string[];
+  advice?: string;
 }
 
 export interface IAssessmentResult {
@@ -36,6 +68,9 @@ export interface IAssessmentResult {
   bfi2FacetMeans?: Record<string, number>;
   big5Normalized:  Record<string, number>;
   topCareers:       ICareerMatch[];          // 匹配职业，已排序
+  excludedCareers?: IExcludedCareer[];       // 兼容字段：被 hard 规则过滤的职业（含原因）
+  hardExcluded?:    IExcludedCareer[];       // 新字段：hard 规则命中列表
+  softAdjusted?:    ISoftAdjustedCareer[];   // 新字段：soft 规则命中列表（已降权）
   freeSummary:      string;                  // 免费展示标签
   personalityLabel: string;                  // 性格类型，如"艺术型领导者"
   instrumentVersion?: string;
@@ -72,6 +107,10 @@ export interface IAssessmentSession {
   /** 邀请解锁时间 */
   inviteUnlockedAt?: Date;
   paidAt?: Date;
+  /** 管理员赠送解锁标记（用于内测、合作伙伴等场景） */
+  grantedByAdmin?: boolean;
+  /** 赠送原因/备注 */
+  grantReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,14 +121,15 @@ const CareerMatchSchema = new Schema<ICareerMatch>(
     title:       { type: String, required: true },
     matchScore:  { type: Number, required: true },
     salaryIndex: { type: Number, required: true },
-    description: { type: String, default: "" },
+    description: { type: String, default: '' },
     industry:    { type: Schema.Types.Mixed },
-    level:       { type: String, enum: ["entry", "mid", "senior"] },
+    level:       { type: String, enum: ['entry', 'mid', 'senior'] },
     salary:      { type: Schema.Types.Mixed },
     skills:      { type: Schema.Types.Mixed },
     aiRisk:         { type: Number },
     aiImpactAdvice: { type: String },
     ageHints:       { type: Schema.Types.Mixed },
+    scoreBreakdown: { type: Schema.Types.Mixed },
   },
   { _id: false }
 );
@@ -101,8 +141,11 @@ const ResultSchema = new Schema<IAssessmentResult>(
     bfi2FacetMeans:{ type: Schema.Types.Mixed, default: undefined },
     big5Normalized:{ type: Schema.Types.Mixed, default: {} },
     topCareers:       { type: [CareerMatchSchema], default: [] },
-    freeSummary:      { type: String, default: "" },
-    personalityLabel: { type: String, default: "" },
+    excludedCareers:  { type: [Schema.Types.Mixed], default: [] },
+    hardExcluded:     { type: [Schema.Types.Mixed], default: [] },
+    softAdjusted:     { type: [Schema.Types.Mixed], default: [] },
+    freeSummary:      { type: String, default: '' },
+    personalityLabel: { type: String, default: '' },
     instrumentVersion: { type: String, required: false },
     normVersion:      { type: String, required: false },
     normSource:       { type: String, required: false, default: null },
@@ -116,10 +159,10 @@ export const SessionSchema = new Schema<IAssessmentSession>(
   {
     sessionId:      { type: String, required: true, unique: true, index: true },
     openId:         { type: String, required: true, index: true },
-    assessmentType: { type: String, enum: ["BFI2", "BFI2_FREE", "MBTI", "DISC"], default: "BFI2", index: true },
-    status:         { type: String, enum: ["in_progress", "completed", "invite_unlocked", "paid"], default: "in_progress", index: true },
+    assessmentType: { type: String, enum: ['BFI2', 'BFI2_FREE', 'MBTI', 'DISC'], default: 'BFI2', index: true },
+    status:         { type: String, enum: ['in_progress', 'completed', 'invite_unlocked', 'paid'], default: 'in_progress', index: true },
     userProfile: {
-      gender: { type: String, enum: ["male", "female"], required: true },
+      gender: { type: String, enum: ['male', 'female'], required: true },
       age:    { type: Number, required: true },
     },
     instrumentVersion: { type: String },
@@ -137,6 +180,8 @@ export const SessionSchema = new Schema<IAssessmentSession>(
     referrerCredited:  { type: Boolean, default: false },
     inviteUnlockedAt:  { type: Date },
     paidAt:            { type: Date },
+    grantedByAdmin:    { type: Boolean, default: false, index: true },
+    grantReason:       { type: String },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
 );

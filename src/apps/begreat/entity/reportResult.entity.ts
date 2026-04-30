@@ -1,4 +1,4 @@
-import type { ICareerMatch } from "./session.entity";
+import type { ICareerMatch } from './session.entity';
 
 /**
  * BFI-2 报告快照（由 tpl/report_template.json + 计分结果渲染）

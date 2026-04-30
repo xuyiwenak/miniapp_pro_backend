@@ -1,5 +1,9 @@
 # 小程序后端服务
 
+[![Code Review](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml/badge.svg)](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![ESLint](https://img.shields.io/badge/code%20style-ESLint-4B32C3?logo=eslint&logoColor=white)](https://eslint.org)
+
 本目录为小程序的 **后端服务**，基于 Node.js + TypeScript + TSRPC，  
 同时提供：
 

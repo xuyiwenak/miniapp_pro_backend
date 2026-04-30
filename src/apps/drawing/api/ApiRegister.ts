@@ -1,11 +1,11 @@
-import { ApiCall } from "tsrpc";
+import { ApiCall } from 'tsrpc';
 import {
   ReqRegister,
   ResRegister,
-} from "../protocols/PtlRegister";
-import { ServiceType } from "../protocols/serviceProto";
-import { ComponentManager } from "../../../common/BaseComponent";
-import type { PlayerComponent } from "../../../component/PlayerComponent";
+} from '../protocols/PtlRegister';
+import { ServiceType } from '../protocols/serviceProto';
+import { ComponentManager } from '../../../common/BaseComponent';
+import type { PlayerComponent } from '../../../component/PlayerComponent';
 
 export async function ApiRegister(
   call: ApiCall<ReqRegister, ResRegister, ServiceType>
@@ -14,11 +14,11 @@ export async function ApiRegister(
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>(
-      "PlayerComponent",
+      'PlayerComponent',
     );
 
   if (!playerComp) {
-    await call.error("Register failed: PlayerComponentNotInitialized");
+    await call.error('Register failed: PlayerComponentNotInitialized');
     return;
   }
 

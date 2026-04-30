@@ -1,5 +1,5 @@
-import type { Request, Response } from "express";
-import { gameLogger } from "./logger";
+import type { Request, Response } from 'express';
+import { gameLogger } from './logger';
 
 export interface LogRequestOptions {
   req: Request;

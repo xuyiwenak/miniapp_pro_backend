@@ -1,22 +1,22 @@
-import { Router, Response } from "express";
-import type { AdminRequest } from "../../middleware/adminAuth";
-import { sendSucc, sendErr } from "../../../../../shared/miniapp/middleware/response";
-import { getWorkModel } from "../../../../../dbservice/model/GlobalInfoDBModel";
-import { resolveImageUrl, deleteFromStorage } from "../../../../../util/imageUploader";
-import { gameLogger as logger } from "../../../../../util/logger";
+import { Router, Response } from 'express';
+import type { AdminRequest } from '../../middleware/adminAuth';
+import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
+import { getWorkModel } from '../../../../../dbservice/model/GlobalInfoDBModel';
+import { resolveImageUrl, deleteFromStorage } from '../../../../../util/imageUploader';
+import { gameLogger as logger } from '../../../../../util/logger';
 
 const router = Router();
-const OSS_PREFIX = "oss://";
+const OSS_PREFIX = 'oss://';
 
 /** GET /admin/works — 分页查询所有作品，支持状态/作者过滤 */
-router.get("/", async (req: AdminRequest, res: Response) => {
+router.get('/', async (req: AdminRequest, res: Response) => {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
   const status = req.query.status as string | undefined;
   const authorId = req.query.authorId as string | undefined;
 
   const query: Record<string, unknown> = {};
-  if (status && ["draft", "published"].includes(status)) query.status = status;
+  if (status && ['draft', 'published'].includes(status)) query.status = status;
   if (authorId) query.authorId = authorId;
 
   try {
@@ -33,24 +33,24 @@ router.get("/", async (req: AdminRequest, res: Response) => {
 
     const list = works.map((w) => {
       const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
-      const rawUrl = (cover as { url?: string } | null)?.url ?? "";
+      const rawUrl = (cover as { url?: string } | null)?.url ?? '';
       const coverUrl = rawUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawUrl) : rawUrl;
-      const healingAnalyzed = !!(w as any).healing?.status && (w as any).healing.status !== "none";
+      const healingAnalyzed = !!(w as any).healing?.status && (w as any).healing.status !== 'none';
       return { ...w, coverUrl, healingAnalyzed };
     });
 
     sendSucc(res, { total, page, limit, list });
   } catch {
-    sendErr(res, "Failed to list works", 500);
+    sendErr(res, 'Failed to list works', 500);
   }
 });
 
 /** PATCH /admin/works/:workId/status — 修改作品状态（发布/转草稿） */
-router.patch("/:workId/status", async (req: AdminRequest, res: Response) => {
+router.patch('/:workId/status', async (req: AdminRequest, res: Response) => {
   const { workId } = req.params;
   const { status } = req.body ?? {};
 
-  if (!["draft", "published"].includes(status)) {
+  if (!['draft', 'published'].includes(status)) {
     sendErr(res, "Invalid status, must be 'draft' or 'published'", 400);
     return;
   }
@@ -58,41 +58,41 @@ router.patch("/:workId/status", async (req: AdminRequest, res: Response) => {
   try {
     const Work = getWorkModel();
     const result = await Work.updateOne({ workId }, { $set: { status } }).exec();
-    if (result.matchedCount === 0) { sendErr(res, "Work not found", 404); return; }
+    if (result.matchedCount === 0) { sendErr(res, 'Work not found', 404); return; }
     sendSucc(res, { workId, status });
   } catch {
-    sendErr(res, "Failed to update work status", 500);
+    sendErr(res, 'Failed to update work status', 500);
   }
 });
 
 /** PATCH /admin/works/:workId/featured — 切换首页展示 */
-router.patch("/:workId/featured", async (req: AdminRequest, res: Response) => {
+router.patch('/:workId/featured', async (req: AdminRequest, res: Response) => {
   const { workId } = req.params;
   const { featured } = req.body ?? {};
 
-  if (typeof featured !== "boolean") {
-    sendErr(res, "featured must be a boolean", 400);
+  if (typeof featured !== 'boolean') {
+    sendErr(res, 'featured must be a boolean', 400);
     return;
   }
 
   try {
     const Work = getWorkModel();
     const result = await Work.updateOne({ workId }, { $set: { featured } }).exec();
-    if (result.matchedCount === 0) { sendErr(res, "Work not found", 404); return; }
+    if (result.matchedCount === 0) { sendErr(res, 'Work not found', 404); return; }
     sendSucc(res, { workId, featured });
   } catch {
-    sendErr(res, "Failed to update featured", 500);
+    sendErr(res, 'Failed to update featured', 500);
   }
 });
 
 /** DELETE /admin/works/:workId — 删除作品（含异步清理 OSS 文件） */
-router.delete("/:workId", async (req: AdminRequest, res: Response) => {
+router.delete('/:workId', async (req: AdminRequest, res: Response) => {
   const { workId } = req.params;
 
   try {
     const Work = getWorkModel();
     const work = await Work.findOne({ workId }).lean().exec();
-    if (!work) { sendErr(res, "Work not found", 404); return; }
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
 
     await Work.deleteOne({ workId }).exec();
     sendSucc(res, { workId });
@@ -104,14 +104,14 @@ router.delete("/:workId", async (req: AdminRequest, res: Response) => {
     if (imageUrls?.length) {
       void Promise.allSettled(imageUrls.map((url) => deleteFromStorage(url))).then((results) => {
         results.forEach((r, i) => {
-          if (r.status === "rejected") {
+          if (r.status === 'rejected') {
             logger.error(`[admin] deleteFromStorage failed workId=${workId} url=${imageUrls[i]}`, r.reason);
           }
         });
       });
     }
   } catch {
-    sendErr(res, "Failed to delete work", 500);
+    sendErr(res, 'Failed to delete work', 500);
   }
 });
 

@@ -1,13 +1,13 @@
-import { Schema } from "mongoose";
+import { Schema } from 'mongoose';
 
-export type ModelType = "RIASEC" | "BIG5";
+export type ModelType = 'RIASEC' | 'BIG5';
 
 /** RIASEC 维度 */
-export type RiasecDim = "R" | "I" | "A" | "S" | "E" | "C";
+export type RiasecDim = 'R' | 'I' | 'A' | 'S' | 'E' | 'C';
 /** Big Five 维度 */
-export type Big5Dim = "O" | "C" | "E" | "A" | "N";
+export type Big5Dim = 'O' | 'C' | 'E' | 'A' | 'N';
 
-export type QuestionGender = "male" | "female" | "both";
+export type QuestionGender = 'male' | 'female' | 'both';
 
 export interface IQuestion {
   questionId: string;
@@ -35,11 +35,11 @@ export interface IQuestion {
 export const QuestionSchema = new Schema<IQuestion>(
   {
     questionId: { type: String, required: true, unique: true, index: true },
-    modelType:  { type: String, required: true, enum: ["RIASEC", "BIG5"] },
+    modelType:  { type: String, required: true, enum: ['RIASEC', 'BIG5'] },
     dimension:  { type: String, required: true },
     content:    { type: String, required: true },
     weight:     { type: Number, default: 1.0 },
-    gender:     { type: String, enum: ["male", "female", "both"], required: true, index: true },
+    gender:     { type: String, enum: ['male', 'female', 'both'], required: true, index: true },
     ageMin:     { type: Number, default: 0 },
     ageMax:     { type: Number, default: 999 },
     isActive:   { type: Boolean, default: true, index: true },
@@ -47,5 +47,5 @@ export const QuestionSchema = new Schema<IQuestion>(
     bfiReverse: { type: Boolean, required: false },
     bfiFacet:   { type: String, required: false },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: false } }
+  { timestamps: { createdAt: 'createdAt', updatedAt: false } }
 );

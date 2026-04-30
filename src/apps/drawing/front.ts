@@ -7,57 +7,57 @@
  * @LastEditTime: 2025-01-08 10:06:01
  */
 
-import { ComponentManager, EComName } from "../../common/BaseComponent";
+import { ComponentManager, EComName } from '../../common/BaseComponent';
 
-import { ServerGlobals } from "../../common/ServerGlobal";
-import { websocketGameServer } from "../../common/WebsocketGameServer";
+import { ServerGlobals } from '../../common/ServerGlobal';
+import { websocketGameServer } from '../../common/WebsocketGameServer';
 
-import { MongoComponent } from "../../component/front/MongoComponent";
-import { PlayerComponent } from "../../component/PlayerComponent";
+import { MongoComponent } from '../../component/front/MongoComponent';
+import { PlayerComponent } from '../../component/PlayerComponent';
 import {
   registerCoreComponents,
   setupProcessLifecycle,
   startRegisteredComponents,
-} from "../shared/bootstrap";
+} from '../shared/bootstrap';
 
-import { envFirst, envNumber, syncEnvForSysConfig } from "../../util/env";
-import { gameLogger, gameLogger as logger } from "../../util/logger";
-import { stopFrontServer } from "../../util/tool";
-import { getMiniappPort, initHttpServer, startHttpServer } from "./httpServer";
-import { startMiniappServer } from "./miniapp/server";
+import { envFirst, envNumber, syncEnvForSysConfig } from '../../util/env';
+import { gameLogger, gameLogger as logger } from '../../util/logger';
+import { stopFrontServer } from '../../util/tool';
+import { getMiniappPort, initHttpServer, startHttpServer } from './httpServer';
+import { startMiniappServer } from './miniapp/server';
 
 // Entry function
 async function main() {
   syncEnvForSysConfig();
 
-  const httpPort = envNumber("httpPort", "HTTP_PORT") ?? 40001;
+  const httpPort = envNumber('httpPort', 'HTTP_PORT') ?? 40001;
   const args: ServerGlobals = {
-    id: envFirst("id", "SERVER_ID") ?? "front_1",
-    internalIP: envFirst("internalIP", "INTERNAL_IP"),
-    publicIP: envFirst("publicIP", "PUBLIC_IP"),
-    gameType: envFirst("gameType", "GAME_TYPE") ?? "front",
-    group: envNumber("group", "GROUP"),
-    environment: envFirst("environment", "ENV") ?? "development",
+    id: envFirst('id', 'SERVER_ID') ?? 'front_1',
+    internalIP: envFirst('internalIP', 'INTERNAL_IP'),
+    publicIP: envFirst('publicIP', 'PUBLIC_IP'),
+    gameType: envFirst('gameType', 'GAME_TYPE') ?? 'front',
+    group: envNumber('group', 'GROUP'),
+    environment: envFirst('environment', 'ENV') ?? 'development',
     connectionTickTimeout:
-      envNumber("connectionTickTimeout", "CONNECTION_TICK_TIMEOUT") ?? 30000,
-    port: envNumber("port", "WS_PORT") ?? 40000,
+      envNumber('connectionTickTimeout', 'CONNECTION_TICK_TIMEOUT') ?? 30000,
+    port: envNumber('port', 'WS_PORT') ?? 40000,
     httpPort,
-    miniappApiPort: envNumber("miniappApiPort", "MINIAPP_PORT"),
-    serverProvide: envFirst("serverProvide", "SERVER_PROVIDE") ?? "",
+    miniappApiPort: envNumber('miniappApiPort', 'MINIAPP_PORT'),
+    serverProvide: envFirst('serverProvide', 'SERVER_PROVIDE') ?? '',
   };
   args.miniappApiPort = getMiniappPort(args);
-  logger.debug("ServerGlobals----->", args);
+  logger.debug('ServerGlobals----->', args);
   registerCoreComponents(args);
 
   /*-----------------------------com begin--------------------------------------*/
 
   // 数据库相关组件：负责初始化 Mongo 连接和各区模型
   const mongoComp: MongoComponent = new MongoComponent();
-  ComponentManager.instance.register("MongoComponent", mongoComp);
+  ComponentManager.instance.register('MongoComponent', mongoComp);
 
   // 玩家组件：依赖 SysCfgComponent 和按区初始化后的 Player Model
   const playerComp: PlayerComponent = new PlayerComponent();
-  ComponentManager.instance.register("PlayerComponent", playerComp);
+  ComponentManager.instance.register('PlayerComponent', playerComp);
 
   /*-----------------------------com end--------------------------------------*/
 
@@ -76,13 +76,13 @@ async function main() {
 }
 
 main();
-setupProcessLifecycle("front", logger, stopFrontServer);
+setupProcessLifecycle('front', logger, stopFrontServer);
 
-if (process.platform === "win32") {
-  process.on("message", (msg) => {
-    if (msg === "shutdown") {
+if (process.platform === 'win32') {
+  process.on('message', (msg) => {
+    if (msg === 'shutdown') {
       // PM2 发来的“关机”消息
-      gameLogger.log("[pm2] 开始优雅关闭...");
+      gameLogger.log('[pm2] 开始优雅关闭...');
       // 关库、停队列、flush 日志等
       stopFrontServer();
     }
@@ -93,18 +93,18 @@ function swaggui() {
   const globalVarComp = ComponentManager.instance.getComponent(
     EComName.GlobalVarComponent
   );
-  if (globalVarComp.globalVar.environment === "development") {
+  if (globalVarComp.globalVar.environment === 'development') {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const swaggerUi = require("swagger-ui-express");
+    const swaggerUi = require('swagger-ui-express');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const express = require("express");
+    const express = require('express');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const swaggerFile = require("../../../docs/public/front/openapi.json");
+    const swaggerFile = require('../../../docs/public/front/openapi.json');
 
     const app = express();
-    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
     app.listen(39999, () => {
-      console.log("Swagger UI is running on http://localhost:39999/api-docs");
+      console.log('Swagger UI is running on http://localhost:39999/api-docs');
     });
   }
 }

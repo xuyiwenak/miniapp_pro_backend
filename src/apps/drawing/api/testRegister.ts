@@ -16,10 +16,14 @@ async function main() {
     return;
   }
 
+  // 测试账号配置
+  const TEST_ACCOUNT = process.env.TEST_ACCOUNT || 'test_account_1';
+  const TEST_PASSWORD = process.env.TEST_PASSWORD || 'test123456';
+
   // 调用 Register 协议
   const ret = await client.callApi('Register', {
-    account: 'test_account_1',
-    password: '123456',
+    account: TEST_ACCOUNT,
+    password: TEST_PASSWORD,
   });
 
   if (ret.isSucc) {

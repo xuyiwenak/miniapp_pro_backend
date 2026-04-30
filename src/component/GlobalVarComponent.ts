@@ -7,14 +7,14 @@
  * @LastEditTime: 2025-01-06 18:28:57
  */
 
-import { IBaseComponent } from "../common/BaseComponent";
-import { ServerGlobals } from "../common/ServerGlobal";
-import { TstatusString } from "../shared/type/Type";
+import { IBaseComponent } from '../common/BaseComponent';
+import { ServerGlobals } from '../common/ServerGlobal';
+import { TstatusString } from '../shared/type/Type';
 
-import { stopFrontServer } from "../util/tool";
+import { stopFrontServer } from '../util/tool';
 
 export class GlobalVarComponent implements IBaseComponent {
-  private _status: TstatusString = "normal";
+  private _status: TstatusString = 'normal';
   init(globalVar: ServerGlobals) {
     this._globalVar = globalVar;
   }
@@ -24,9 +24,9 @@ export class GlobalVarComponent implements IBaseComponent {
   async stop() {}
 
   set status(v: TstatusString) {
-    if (this._status !== v && v === "closing") {
+    if (this._status !== v && v === 'closing') {
       switch (this._globalVar.gameType) {
-        case "front":
+        case 'front':
           stopFrontServer();
           break;
         default:

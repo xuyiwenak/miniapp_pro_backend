@@ -1,14 +1,14 @@
-import fs from "fs";
-import path from "path";
-import { ComponentManager, EComName } from "../common/BaseComponent";
-import { SysCfgComponent } from "../component/SysCfgComponent";
-import { gameLogger as logger } from "./logger";
-import { getCosConfigOrNull, uploadToCos } from "./cosUploader";
-import { getOssConfigOrNull, uploadToOss, signOssUrl, deleteFromOss } from "./ossUploader";
+import fs from 'fs';
+import path from 'path';
+import { ComponentManager, EComName } from '../common/BaseComponent';
+import { SysCfgComponent } from '../component/SysCfgComponent';
+import { gameLogger as logger } from './logger';
+import { getCosConfigOrNull, uploadToCos } from './cosUploader';
+import { getOssConfigOrNull, uploadToOss, signOssUrl, deleteFromOss } from './ossUploader';
 
-const UPLOADS_DIR = path.join(process.cwd(), "static", "uploads");
+const UPLOADS_DIR = path.join(process.cwd(), 'static', 'uploads');
 
-const OSS_PREFIX = "oss://";
+const OSS_PREFIX = 'oss://';
 
 function ensureUploadsDirForKey(key: string): void {
   const dir = path.join(UPLOADS_DIR, path.dirname(key));
@@ -26,10 +26,10 @@ function getPublicBaseUrl(): string {
       EComName.SysCfgComponent,
     ) as SysCfgComponent;
     const raw = sysCfg.server_auth_config as { publicBaseUrl?: string; miniappPublicUrl?: string };
-    const base = (raw?.publicBaseUrl ?? raw?.miniappPublicUrl ?? "").trim();
-    return base.replace(/\/+$/, "");
+    const base = (raw?.publicBaseUrl ?? raw?.miniappPublicUrl ?? '').trim();
+    return base.replace(/\/+$/, '');
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -39,9 +39,9 @@ function getImageStorage(): string {
       EComName.SysCfgComponent,
     ) as SysCfgComponent;
     const raw = sysCfg.server_auth_config as { imageStorage?: string };
-    return raw?.imageStorage ?? "local";
+    return raw?.imageStorage ?? 'local';
   } catch {
-    return "local";
+    return 'local';
   }
 }
 
@@ -58,13 +58,13 @@ export async function uploadToStorage(
 ): Promise<string> {
   const storage = getImageStorage();
 
-  if (storage === "oss" && getOssConfigOrNull() !== null) {
+  if (storage === 'oss' && getOssConfigOrNull() !== null) {
     try {
       const objectKey = await uploadToOss(buffer, key, contentType);
       return `${OSS_PREFIX}${objectKey}`;
     } catch (err) {
       // OSS 403/权限或网络失败时回退到本地，避免上传完全不可用
-      logger.warn("OSS upload failed, fallback to local storage", {
+      logger.warn('OSS upload failed, fallback to local storage', {
         key,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -77,7 +77,7 @@ export async function uploadToStorage(
     }
   }
 
-  if (storage !== "local" && getCosConfigOrNull() !== null) {
+  if (storage !== 'local' && getCosConfigOrNull() !== null) {
     return uploadToCos(buffer, key, contentType);
   }
 
@@ -106,12 +106,12 @@ export async function deleteFromStorage(storedUrl: string): Promise<void> {
   }
 
   // 本地文件（相对路径如 /static/uploads/xxx）
-  if (!storedUrl.startsWith("http://") && !storedUrl.startsWith("https://")) {
-    const relativePath = storedUrl.startsWith("/") ? storedUrl : `/${storedUrl}`;
+  if (!storedUrl.startsWith('http://') && !storedUrl.startsWith('https://')) {
+    const relativePath = storedUrl.startsWith('/') ? storedUrl : `/${storedUrl}`;
     const filePath = path.join(process.cwd(), relativePath);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      logger.info("Local file deleted:", filePath);
+      logger.info('Local file deleted:', filePath);
     }
   }
 }
@@ -123,14 +123,14 @@ export async function deleteFromStorage(storedUrl: string): Promise<void> {
  * - 其他 -> 拼上 publicBaseUrl
  */
 export function resolveImageUrl(storedUrl: string, expireSeconds = 7200): string {
-  if (!storedUrl) return "";
+  if (!storedUrl) return '';
 
   if (storedUrl.startsWith(OSS_PREFIX)) {
     const objectKey = storedUrl.slice(OSS_PREFIX.length);
     return signOssUrl(objectKey, expireSeconds);
   }
 
-  if (storedUrl.startsWith("http://") || storedUrl.startsWith("https://")) {
+  if (storedUrl.startsWith('http://') || storedUrl.startsWith('https://')) {
     return storedUrl;
   }
 

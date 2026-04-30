@@ -1,11 +1,11 @@
-import { Connection, Model } from "mongoose";
-import { IQuestion, QuestionSchema } from "../entity/question.entity";
-import { IOccupationNorm, OccupationSchema } from "../entity/occupation.entity";
-import { IAssessmentSession, SessionSchema } from "../entity/session.entity";
-import { INormEntry, NormSchema } from "../entity/norm.entity";
-import { IPaymentRecord, PaymentSchema } from "../entity/payment.entity";
-import { IInviteCode, InviteCodeSchema } from "../entity/inviteCode.entity";
-import { IInviteReward, InviteRewardSchema } from "../entity/inviteReward.entity";
+import { Connection, Model } from 'mongoose';
+import { IQuestion, QuestionSchema } from '../entity/question.entity';
+import { IOccupationNorm, OccupationSchema } from '../entity/occupation.entity';
+import { IAssessmentSession, SessionSchema } from '../entity/session.entity';
+import { INormEntry, NormSchema } from '../entity/norm.entity';
+import { IPaymentRecord, PaymentSchema } from '../entity/payment.entity';
+import { IInviteCode, InviteCodeSchema } from '../entity/inviteCode.entity';
+import { IInviteReward, InviteRewardSchema } from '../entity/inviteReward.entity';
 
 class BegreatModelManager {
   private questionModel!:     Model<IQuestion>;
@@ -17,13 +17,13 @@ class BegreatModelManager {
   private inviteRewardModel!: Model<IInviteReward>;
 
   constructor(connection: Connection) {
-    this.questionModel     = connection.model<IQuestion>("Question", QuestionSchema);
-    this.occupationModel   = connection.model<IOccupationNorm>("OccupationNorm", OccupationSchema);
-    this.sessionModel      = connection.model<IAssessmentSession>("AssessmentSession", SessionSchema);
-    this.normModel         = connection.model<INormEntry>("Norm", NormSchema);
-    this.paymentModel      = connection.model<IPaymentRecord>("PaymentRecord", PaymentSchema, "paymentrecords");
-    this.inviteCodeModel   = connection.model<IInviteCode>("InviteCode", InviteCodeSchema);
-    this.inviteRewardModel = connection.model<IInviteReward>("InviteReward", InviteRewardSchema);
+    this.questionModel     = connection.model<IQuestion>('Question', QuestionSchema);
+    this.occupationModel   = connection.model<IOccupationNorm>('OccupationNorm', OccupationSchema);
+    this.sessionModel      = connection.model<IAssessmentSession>('AssessmentSession', SessionSchema);
+    this.normModel         = connection.model<INormEntry>('Norm', NormSchema);
+    this.paymentModel      = connection.model<IPaymentRecord>('PaymentRecord', PaymentSchema, 'paymentrecords');
+    this.inviteCodeModel   = connection.model<IInviteCode>('InviteCode', InviteCodeSchema);
+    this.inviteRewardModel = connection.model<IInviteReward>('InviteReward', InviteRewardSchema);
 
     this.questionModel.createIndexes().catch(() => {});
     this.occupationModel.createIndexes().catch(() => {});
@@ -59,7 +59,7 @@ export function initializeBegreatModels(connection: Connection) {
 }
 
 export function getBegreatModelManager(): BegreatModelManager {
-  if (!manager) throw new Error("BegreatModels not initialized");
+  if (!manager) throw new Error('BegreatModels not initialized');
   return manager;
 }
 

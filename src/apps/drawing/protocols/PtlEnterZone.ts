@@ -3,8 +3,8 @@ export interface ReqEnterZone {
     userId: string;
     zoneId: string;   // 区 ID，和 SysCfgComponent 里的 zone 配置对应
   }
-  
-  export interface ResEnterZone {
+
+export interface ResEnterZone {
     zoneId: string;
     serverTime: number;
   }

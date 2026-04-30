@@ -6,13 +6,13 @@
  * @LastEditors: lyh
  * @LastEditTime: 2025-01-07 10:34:03
  */
-import { CronCommand, CronJob } from "cron";
+import { CronCommand, CronJob } from 'cron';
 
 const jobList: CronJob[] = [];
 export function registerJob(
   cronStr: string,
   func: CronCommand<null, boolean>,
-  timeZone: string = "Asia/Shanghai",
+  timeZone: string = 'Asia/Shanghai',
 ) {
   const job = new CronJob(
     cronStr, // cronTime

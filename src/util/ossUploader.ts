@@ -1,8 +1,8 @@
-import https from "https";
-import crypto from "crypto";
-import { ComponentManager, EComName } from "../common/BaseComponent";
-import { SysCfgComponent } from "../component/SysCfgComponent";
-import { gameLogger as logger } from "./logger";
+import https from 'https';
+import crypto from 'crypto';
+import { ComponentManager, EComName } from '../common/BaseComponent';
+import { SysCfgComponent } from '../component/SysCfgComponent';
+import { gameLogger as logger } from './logger';
 
 interface OssConfig {
   region: string;
@@ -23,11 +23,11 @@ function loadOssConfig(): OssConfig {
   ) as SysCfgComponent;
   const raw = sysCfg.server_auth_config as { oss?: Partial<OssConfig> };
   if (!raw?.oss) {
-    throw new Error("OSS config not found in server_auth_config");
+    throw new Error('OSS config not found in server_auth_config');
   }
   const cfg = raw.oss;
   if (!cfg.region || !cfg.accessKeyId || !cfg.accessKeySecret || !cfg.bucket) {
-    throw new Error("OSS config is incomplete");
+    throw new Error('OSS config is incomplete');
   }
   cachedOssConfig = {
     region: cfg.region,
@@ -52,7 +52,7 @@ function ossHost(cfg: OssConfig): string {
 }
 
 function hmacSha1Base64(key: string, data: string): string {
-  return crypto.createHmac("sha1", key).update(data).digest("base64");
+  return crypto.createHmac('sha1', key).update(data).digest('base64');
 }
 
 /**
@@ -66,7 +66,7 @@ export function uploadToOss(
   const cfg = loadOssConfig();
   const host = ossHost(cfg);
   const date = new Date().toUTCString();
-  const md5 = crypto.createHash("md5").update(buffer).digest("base64");
+  const md5 = crypto.createHash('md5').update(buffer).digest('base64');
 
   const stringToSign = `PUT\n${md5}\n${contentType}\n${date}\n/${cfg.bucket}/${key}`;
   const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
@@ -75,12 +75,12 @@ export function uploadToOss(
     hostname: host,
     port: 443,
     path: `/${key}`,
-    method: "PUT",
+    method: 'PUT',
     headers: {
       Authorization: `OSS ${cfg.accessKeyId}:${signature}`,
-      "Content-Type": contentType,
-      "Content-Length": buffer.length,
-      "Content-MD5": md5,
+      'Content-Type': contentType,
+      'Content-Length': buffer.length,
+      'Content-MD5': md5,
       Date: date,
       Host: host,
     },
@@ -89,18 +89,18 @@ export function uploadToOss(
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       const chunks: Buffer[] = [];
-      res.on("data", (d) => chunks.push(d));
-      res.on("end", () => {
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          logger.info("OSS upload success, key=", key);
+          logger.info('OSS upload success, key=', key);
           resolve(key);
         } else {
-          const body = Buffer.concat(chunks).toString("utf8");
+          const body = Buffer.concat(chunks).toString('utf8');
           reject(new Error(`OSS upload failed: status=${res.statusCode} body=${body.slice(0, 200)}`));
         }
       });
     });
-    req.on("error", (err) => reject(err));
+    req.on('error', (err) => reject(err));
     req.write(buffer);
     req.end();
   });
@@ -121,7 +121,7 @@ export function deleteFromOss(objectKey: string): Promise<void> {
     hostname: host,
     port: 443,
     path: `/${objectKey}`,
-    method: "DELETE",
+    method: 'DELETE',
     headers: {
       Authorization: `OSS ${cfg.accessKeyId}:${signature}`,
       Date: date,
@@ -132,19 +132,19 @@ export function deleteFromOss(objectKey: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       const chunks: Buffer[] = [];
-      res.on("data", (d) => chunks.push(d));
-      res.on("end", () => {
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => {
         // 204 No Content 或 404（已不存在）都视为成功
         if (res.statusCode === 204 || res.statusCode === 404) {
-          logger.info("OSS delete success, key=", objectKey);
+          logger.info('OSS delete success, key=', objectKey);
           resolve();
         } else {
-          const body = Buffer.concat(chunks).toString("utf8");
+          const body = Buffer.concat(chunks).toString('utf8');
           reject(new Error(`OSS delete failed: status=${res.statusCode} body=${body.slice(0, 200)}`));
         }
       });
     });
-    req.on("error", (err) => reject(err));
+    req.on('error', (err) => reject(err));
     req.end();
   });
 }
@@ -161,7 +161,7 @@ export function signOssUrl(objectKey: string, expireSeconds = 7200): string {
   const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
 
   let baseUrl = cfg.cdnDomain
-    ? cfg.cdnDomain.replace(/\/+$/, "")
+    ? cfg.cdnDomain.replace(/\/+$/, '')
     : `https://${ossHost(cfg)}`;
   if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
     baseUrl = `https://${baseUrl}`;

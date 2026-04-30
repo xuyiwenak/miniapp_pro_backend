@@ -1,18 +1,19 @@
-import path from "path";
-import { HttpServer } from "tsrpc";
+/* eslint-disable camelcase -- TSRPC generated types use snake_case */
+import path from 'path';
+import { HttpServer } from 'tsrpc';
 import {
   serviceProto as serviceProto_Public,
   ServiceType as ServiceType_Public,
-} from "./protocols/serviceProto";
-import { gameLogger } from "../../util/logger";
-import type { ServerGlobals } from "../../common/ServerGlobal";
+} from './protocols/serviceProto';
+import { gameLogger } from '../../util/logger';
+import type { ServerGlobals } from '../../common/ServerGlobal';
 
 export let httpGameServer: HttpServer<ServiceType_Public> | undefined;
 
 /** 与 TSRPC HttpServer 一致的共享配置，供 miniapp 等复用（logger、CORS） */
 export const sharedHttpOptions = {
   logger: gameLogger,
-  cors: "*" as const,
+  cors: '*' as const,
   corsMaxAge: 3600,
 };
 
@@ -37,17 +38,17 @@ export async function initHttpServer(options: ServerGlobals) {
   });
 
   await httpGameServer.autoImplementApi(
-    path.resolve(__dirname, "./api"),
+    path.resolve(__dirname, './api'),
   );
 }
 
 export async function startHttpServer() {
   if (!httpGameServer) {
     // 防止遗漏 init 调用导致空实例启动
-    throw new Error("HttpServer not initialized");
+    throw new Error('HttpServer not initialized');
   }
 
   await httpGameServer.start();
-  gameLogger.info("HttpServer started at", httpGameServer.options.port);
+  gameLogger.info('HttpServer started at', httpGameServer.options.port);
 }
 

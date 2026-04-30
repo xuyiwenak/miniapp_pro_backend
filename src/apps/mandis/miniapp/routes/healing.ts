@@ -1,10 +1,11 @@
-import { Router, type Response } from 'express';
 import { randomUUID } from 'crypto';
+import { Router, type Request, type Response } from 'express';
 import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { notifyHealingUpdate } from '../ws/chatServer';
+import { getCozeConfig } from '../../../../util/cozeWorkflow';
 import { analyzeArtwork } from '../../../../util/qwenVlAnalyzer';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 import { gameLogger as logger, cozeDebugLogger } from '../../../../util/logger';
@@ -130,6 +131,64 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
 }
 
 export { buildHealingResponse };
+
+// ========== Helper Functions for /coze/callback Route ==========
+
+/**
+ * 验证 Coze webhook 的 token
+ * @returns true 如果验证通过或无需验证，false 如果验证失败
+ */
+function verifyWebhookToken(req: Request, res: Response): boolean {
+  const cfg = getCozeConfig();
+  const secret = cfg.webhookSecret?.trim();
+
+  if (!secret) return true; // 无密钥配置，放行
+
+  const token = req.query?.token;
+  if (typeof token !== 'string' || token !== secret) {
+    res.status(403).json({ code: 403, success: false, message: 'Forbidden' });
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 根据 Coze 工作流执行状态处理疗愈分析结果
+ */
+async function handleWebhookStatus(
+  runId: string,
+  status: string,
+  output: string | null,
+  errorMessage: string | undefined,
+  res: Response,
+): Promise<void> {
+  const upper = status.toUpperCase();
+
+  // 失败状态
+  if (upper === 'FAIL' || upper === 'FAILED' || errorMessage) {
+    await markHealingFailedByRunId(runId);
+    res.status(200).json({ code: 200, success: true });
+    return;
+  }
+
+  // 运行中状态（忽略）
+  if (upper === 'RUNNING' || upper === 'PENDING') {
+    res.status(200).json({ code: 200, success: true, message: 'ignored' });
+    return;
+  }
+
+  // 成功状态
+  if (upper === 'SUCCESS' || upper === 'SUCCEEDED' || output !== null) {
+    const out = output ?? '{}';
+    await applyHealingSuccessFromRunId(runId, out);
+    res.status(200).json({ code: 200, success: true });
+    return;
+  }
+
+  // 无法识别的状态
+  res.status(400).json({ code: 400, success: false, message: 'Unrecognized webhook payload' });
+}
 
 // ========== Helper Functions for /analyze Route ==========
 
@@ -390,6 +449,60 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
   }
 }
 
+function firstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.length) return v;
+  }
+  return undefined;
+}
+
+function normalizeCozeOutputField(v: unknown): string | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** 兼容多种扣子/开放接口可能推送的 JSON 结构 */
+function parseCozeWebhookPayload(body: unknown): {
+  runId?: string;
+  executeStatus?: string;
+  output?: string;
+  errorMessage?: string;
+} {
+  if (!body || typeof body !== 'object') return {};
+  const b = body as Record<string, unknown>;
+  let runId = firstString(b, ['run_id', 'execute_id', 'executeId', 'id']);
+  let output = normalizeCozeOutputField(b.output ?? b.Output);
+  let executeStatus = firstString(b, ['execute_status', 'executeStatus', 'status']);
+  let errorMessage = firstString(b, ['error_message', 'errorMessage', 'error']);
+
+  const data = b.data;
+  if (Array.isArray(data) && data[0] && typeof data[0] === 'object') {
+    const d = data[0] as Record<string, unknown>;
+    runId = runId ?? firstString(d, ['execute_id', 'run_id', 'id']);
+    output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
+    executeStatus = executeStatus ?? firstString(d, ['execute_status', 'executeStatus']);
+    errorMessage = errorMessage ?? firstString(d, ['error_message', 'errorMessage']);
+  } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    runId = runId ?? firstString(d, ['execute_id', 'run_id', 'id']);
+    output = output ?? normalizeCozeOutputField(d.output ?? d.Output);
+    executeStatus = executeStatus ?? firstString(d, ['execute_status', 'executeStatus']);
+    errorMessage = errorMessage ?? firstString(d, ['error_message', 'errorMessage']);
+  }
+
+  if (typeof b.code === 'number' && b.code !== 0 && !errorMessage) {
+    errorMessage = String(b.msg ?? 'Coze error');
+  }
+
+  return { runId, executeStatus, output, errorMessage };
+}
+
 async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
   // ── [DEBUG] 进入解析前记录完整原始字符串 ──────────────────────────
   cozeDebugLogger.info('[coze-debug] outputRaw (full):', outputRaw);
@@ -435,14 +548,6 @@ async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): P
   }
 }
 
-async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
-  const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
-  const desc = work.desc ?? '';
-  const tags = (work.tags ?? []).join(',');
-  const output = await analyzeArtwork(imageUrl, desc, tags);
-  await applyHealingSuccessFromRunId(jobId, output);
-}
-
 async function markHealingFailedByRunId(runId: string): Promise<void> {
   const Work = getWorkModel();
   const work = (await Work.findOne({ 'healing.cozeRunId': runId }).lean().exec()) as IWork | null;
@@ -457,6 +562,46 @@ async function markHealingFailedByRunId(runId: string): Promise<void> {
   if (work?.authorId) {
     notifyHealingUpdate(String(work.authorId), { workId: work.workId, status: 'failed' });
   }
+}
+
+/** Coze 异步完成回调（无用户 JWT；可选 webhookSecret 作为 query token） */
+router.post('/coze/callback', async (req: Request, res: Response) => {
+  // 验证 webhook token
+  if (!verifyWebhookToken(req, res)) return;
+
+  cozeDebugLogger.info('[coze-debug] raw body:', JSON.stringify(req.body));
+
+  try {
+    const parsed = parseCozeWebhookPayload(req.body);
+    const runId = parsed.runId?.trim();
+
+    cozeDebugLogger.info('[coze-debug] parsed webhook:', {
+      runId: parsed.runId,
+      executeStatus: parsed.executeStatus,
+      errorMessage: parsed.errorMessage,
+      outputSnippet: parsed.output ? parsed.output.slice(0, 500) : null,
+    });
+
+    if (!runId) {
+      logger.error('Coze webhook missing run_id, body=', JSON.stringify(req.body).slice(0, 800));
+      res.status(400).json({ code: 400, success: false, message: 'Missing run id' });
+      return;
+    }
+
+    const status = (parsed.executeStatus ?? '').trim();
+    await handleWebhookStatus(runId, status, parsed.output ?? null, parsed.errorMessage, res);
+  } catch (err) {
+    logger.error('Coze webhook handler error', (err as Error).message);
+    res.status(500).json({ code: 500, success: false, message: 'Internal error' });
+  }
+});
+
+async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
+  const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
+  const desc = work.desc ?? '';
+  const tags = (work.tags ?? []).join(',');
+  const output = await analyzeArtwork(imageUrl, desc, tags);
+  await applyHealingSuccessFromRunId(jobId, output);
 }
 
 router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Response) => {
@@ -481,17 +626,25 @@ router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Respons
   if (!quotaOk) return;
 
   try {
+    // 验证作品所有权
     const work = await validateWorkOwnership(workId, userId, res);
     if (!work) return;
 
     const jobId = randomUUID();
-    await initializePendingHealing(workId, jobId);
+
+    // 计入当日用量
     void incrementHealDailyUsage(userId).catch(() => {});
+
+    // 初始化 pending 状态
+    await initializePendingHealing(workId, jobId);
+
+    // 立即返回响应，异步执行 Qwen VL 分析
     sendSucc(res, { workId, status: 'pending', runId: jobId });
 
     void runQwenVlAnalysis(work, jobId).catch(async (err) => {
       logger.error('QwenVL analysis failed workId=', workId, (err as Error).message);
-      await markHealingFailedByRunId(jobId);
+      const Work = getWorkModel();
+      await Work.updateOne({ workId }, { $set: { 'healing.status': 'failed' } }).exec();
     });
   } catch (err) {
     logRequestError('healing.ts:analyze:error', 'healing analyze error', {

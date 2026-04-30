@@ -1,6 +1,6 @@
-import COS from "cos-nodejs-sdk-v5";
-import { ComponentManager, EComName } from "../common/BaseComponent";
-import { SysCfgComponent } from "../component/SysCfgComponent";
+import COS from 'cos-nodejs-sdk-v5';
+import { ComponentManager, EComName } from '../common/BaseComponent';
+import { SysCfgComponent } from '../component/SysCfgComponent';
 
 type CosConfig = {
   secretId: string;
@@ -23,11 +23,11 @@ function loadCosConfig(): CosConfig {
     cos?: Partial<CosConfig>;
   };
   if (!raw || !raw.cos) {
-    throw new Error("COS config not found in server_auth_config");
+    throw new Error('COS config not found in server_auth_config');
   }
   const cfg = raw.cos;
   if (!cfg.secretId || !cfg.secretKey || !cfg.bucket || !cfg.region) {
-    throw new Error("COS config is incomplete");
+    throw new Error('COS config is incomplete');
   }
   cachedCosConfig = {
     secretId: cfg.secretId,
@@ -86,7 +86,7 @@ export async function uploadToCos(
   });
 
   if (cfg.cdnDomain) {
-    const trimmedDomain = cfg.cdnDomain.replace(/\/+$/, "");
+    const trimmedDomain = cfg.cdnDomain.replace(/\/+$/, '');
     return `${trimmedDomain}/${key}`;
   }
   // fallback to COS 原始访问域名

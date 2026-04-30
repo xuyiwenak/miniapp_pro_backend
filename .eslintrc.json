@@ -1,0 +1,62 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.json",
+    "ecmaVersion": 2021,
+    "sourceType": "module"
+  },
+  "plugins": ["@typescript-eslint"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-non-null-assertion": "warn",
+    "@typescript-eslint/no-var-requires": "warn",
+    "@typescript-eslint/ban-ts-comment": "warn",
+    "@typescript-eslint/ban-types": "warn",
+
+    "camelcase": ["error", { "properties": "never" }],
+    "quotes": ["error", "single", { "avoidEscape": true }],
+    "indent": ["error", 2, { "SwitchCase": 1 }],
+    "max-len": ["error", { "code": 120, "ignoreComments": true, "ignoreStrings": true, "ignoreTemplateLiterals": true, "ignoreUrls": true }],
+    "max-lines-per-function": ["warn", { "max": 40, "skipBlankLines": true, "skipComments": true }],
+    "no-magic-numbers": "off",
+    "no-nested-ternary": "error",
+    "eqeqeq": ["error", "always"],
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-console": "off",
+    "eol-last": ["error", "always"],
+    "no-trailing-spaces": "error",
+    "semi": ["error", "always"]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/shared/serviceProto*.ts",
+        "src/shared/type/ServiceType*.ts",
+        "src/shared/type/Type.ts",
+        "src/common/CommonType.ts"
+      ],
+      "rules": {
+        "camelcase": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "dist/",
+    "node_modules/",
+    "*.js",
+    "scripts/",
+    "test/"
+  ],
+  "env": {
+    "node": true,
+    "es2021": true
+  }
+}

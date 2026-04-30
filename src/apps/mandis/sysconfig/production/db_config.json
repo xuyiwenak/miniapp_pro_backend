@@ -2,7 +2,7 @@
   "db_global": {
     "host": "mongo",
     "port": 27017,
-    "db": "global_db",
+    "db": "mandis_global_db",
     "user": "root",
     "password": "password",
     "authSource": "admin"
@@ -11,41 +11,16 @@
     "front_1": {
       "host": "mongo",
       "port": 27017,
-      "db": "server_1",
-      "user": "root",
-      "password": "password",
-      "authSource": "admin"
-    },
-    "front_2": {
-      "host": "mongo",
-      "port": 27017,
-      "db": "server_2",
+      "db": "mandis_server_1",
       "user": "root",
       "password": "password",
       "authSource": "admin"
     }
   },
-  "db_zones": {
-    "zone1": {
-      "host": "mongo",
-      "port": 27017,
-      "db": "zone_1",
-      "user": "root",
-      "password": "password",
-      "authSource": "admin"
-    },
-    "zone2": {
-      "host": "mongo",
-      "port": 27017,
-      "db": "zone_2",
-      "user": "root",
-      "password": "password",
-      "authSource": "admin"
-    }
-  },
+  "db_zones": {},
   "redis_global": {
     "host": "redis",
     "port": 6379,
-    "db": 0
+    "db": 2
   }
 }

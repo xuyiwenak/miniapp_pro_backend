@@ -6,12 +6,15 @@
     "proto": "tsrpc-cli proto",
     "build": "tsrpc-cli build && npm run copy-config && npm run doc",
     "doc": "tsrpc-cli doc",
-    "copy-config": "copyfiles -u 1 \"src/apps/drawing/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/begreat/sysconfig/**/*.json\" dist/",
+    "copy-config": "copyfiles -u 1 \"src/apps/drawing/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/begreat/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/mandis/sysconfig/**/*.json\" dist/",
     "dev:drawing": "ts-node src/apps/drawing/front.ts",
     "dev:begreat": "ts-node src/apps/begreat/front.ts",
+    "dev:mandis": "ts-node src/apps/mandis/front.ts",
     "json-to-schemas-development": "node json_to_schema.mjs development",
     "json-to-schemas-production": "node json_to_schema.mjs production",
-    "test": "TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register \"test/**/*.test.ts\""
+    "test": "TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register \"test/**/*.test.ts\"",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bull": "^4.10.4",
@@ -21,7 +24,10 @@
     "@types/sinon": "^21.0.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "copyfiles": "^2.4.1",
+    "eslint": "^8.57.1",
     "mocha": "^11.7.5",
     "sinon": "^21.0.1",
     "ts-node": "^10.9.2",
@@ -29,7 +35,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "xlsx": "^0.18.5",
     "bull": "^4.16.5",
     "cos-nodejs-sdk-v5": "^2.14.7",
     "cron": "^3.1.7",
@@ -45,6 +50,7 @@
     "swagger-ui-express": "^5.0.1",
     "tsrpc": "^3.4.21",
     "ws": "^8.18.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.23.8",
     "zod-to-ts": "^1.2.0"
   }

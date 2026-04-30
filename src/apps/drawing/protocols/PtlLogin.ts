@@ -3,8 +3,8 @@ export interface ReqLogin {
     account: string;
     password: string;
   }
-  
-  export interface ResLogin {
+
+export interface ResLogin {
     userId: string;      // 内部玩家唯一 ID
     hasRole: boolean;    // 是否已经有角色
   }

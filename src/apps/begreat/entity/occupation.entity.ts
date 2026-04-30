@@ -1,7 +1,19 @@
-import { Schema } from "mongoose";
-import type { AgeGroup } from "./norm.entity";
+import { Schema } from 'mongoose';
 
-export type OccupationLevel = "entry" | "mid" | "senior";
+export type OccupationLevel = 'entry' | 'mid' | 'senior';
+
+/** 职业匹配使用的年龄分组（与常模 AgeGroup 不同） */
+export type OccupationAgeGroup = '18-21' | '22-24' | '25-30' | '31-35' | '36-44' | '45+';
+
+/** 职业排除规则（硬规则/软规则共用结构） */
+export interface IExcludeRule {
+  id: string;
+  metric: string;
+  op: '<' | '<=' | '>' | '>=' | '==' | 'in' | 'not_in';
+  value: number | number[];
+  penalty?: number;
+  reason: string;
+}
 
 export interface IOccupationNorm {
   code: string;
@@ -15,11 +27,29 @@ export interface IOccupationNorm {
     openness: number;
     conscientiousness: number;
     emotionalStability: number;
+    /** 外向性（可选，仅销售/市场/HR等职业需要） */
+    extraversion?: number;
+    /** 宜人性（可选，仅教育/咨询/医疗等职业需要） */
+    agreeableness?: number;
+  };
+  /** 硬性门槛：低于此值不推荐（可选，仅高风险职业需要） */
+  minimumRequirements?: {
+    emotionalStability?: number;
+    conscientiousness?: number;
+    extraversion?: number;
+    agreeableness?: number;
+  };
+  /** 动态排除/降权规则（支持硬排除和软降权） */
+  excludeRules?: {
+    hard: IExcludeRule[];
+    soft: IExcludeRule[];
+    advice?: string;
   };
   /** 2026 高薪指数 0-1 */
   salaryIndex: number;
-  /** 年龄适配系数 */
-  ageBonusMultiplier: number;
+  /** 年龄适配系数（按年龄段分段配置） */
+  ageBonusMultiplier: Partial<Record<OccupationAgeGroup, number>>;
+  /** 年龄适用范围（用于过滤不符合年龄段的职业） */
   ageRange: { min: number; max: number };
   description: string;
   isActive: boolean;
@@ -28,16 +58,16 @@ export interface IOccupationNorm {
   industry?: { primary: string; secondary: string };
   /** 职业阶段（入门/中级/资深） */
   level?: OccupationLevel;
-  /** 薪资区间（元/月 或 元/年） */
-  salary?: { min: number; max: number; unit: "month" | "year" };
+  /** 薪资区间（千元/月 或 千元/年，如 min:18 表示 18K/月） */
+  salary?: { min: number; max: number; unit: 'month' | 'year' };
   /** 所需技能 */
   skills?: { required: string[]; tools: string[] };
   /** AI 替代风险（0–1，值越高风险越大） */
   aiRisk?: number;
   /** 职业专属 AI 应对建议（优先级高于行业通用建议） */
   aiImpactAdvice?: string;
-  /** 各年龄段情境化说明，key 为 AgeGroup */
-  ageHints?: Partial<Record<AgeGroup, string>>;
+  /** 各年龄段情境化说明，key 为 OccupationAgeGroup */
+  ageHints?: Partial<Record<OccupationAgeGroup, string>>;
 }
 
 export const OccupationSchema = new Schema<IOccupationNorm>(
@@ -50,25 +80,37 @@ export const OccupationSchema = new Schema<IOccupationNorm>(
       openness:          { type: Number, default: 0 },
       conscientiousness: { type: Number, default: 0 },
       emotionalStability:{ type: Number, default: 0 },
+      extraversion:      { type: Number },
+      agreeableness:     { type: Number },
+    },
+    minimumRequirements: {
+      emotionalStability: { type: Number },
+      conscientiousness:  { type: Number },
+      extraversion:       { type: Number },
+      agreeableness:      { type: Number },
     },
     salaryIndex:         { type: Number, default: 0.5 },
-    ageBonusMultiplier:  { type: Number, default: 1.0 },
+    ageBonusMultiplier:  {
+      type: Schema.Types.Mixed,
+      default: { '18-21': 1.0, '22-24': 1.0, '25-30': 1.0, '31-35': 1.0, '45+': 1.0 },
+    },
+    excludeRules:        { type: Schema.Types.Mixed, default: undefined },
     ageRange: {
       min: { type: Number, default: 18 },
       max: { type: Number, default: 60 },
     },
-    description: { type: String, default: "" },
+    description: { type: String, default: '' },
     isActive:    { type: Boolean, default: true, index: true },
 
     industry: {
       primary:   { type: String },
       secondary: { type: String },
     },
-    level:   { type: String, enum: ["entry", "mid", "senior"] },
+    level:   { type: String, enum: ['entry', 'mid', 'senior'] },
     salary: {
       min:  { type: Number },
       max:  { type: Number },
-      unit: { type: String, enum: ["month", "year"], default: "month" },
+      unit: { type: String, enum: ['month', 'year'], default: 'month' },
     },
     skills: {
       required: { type: [String], default: [] },

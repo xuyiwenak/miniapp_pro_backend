@@ -1,33 +1,7 @@
 {
-    "RegisterServerUrl": "127.0.0.1:40005",
-    "version": 10,
-    "front_1": {
-        "zoneList": [
-            "zone1"
-        ]
-    },
-    "front_2": {
-        "zoneList": [
-            "zone2"
-        ]
-    },
-    "front_3": {
-        "zoneList": [
-            "zone2"
-        ]
-    },
-    "group": {
-        "1": {
-            "front": "front_1",
-            "logic": "logic_1"
-        },
-        "2": {
-            "front": "front_2",
-            "logic": "logic_2"
-        },
-        "3": {
-            "front": "front_3",
-            "logic": "logic_3"
-        }
-    }
+  "RegisterServerUrl": "127.0.0.1:42005",
+  "version": 1,
+  "front_1": {
+    "zoneList": []
+  }
 }

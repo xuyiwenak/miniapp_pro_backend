@@ -1,19 +1,19 @@
-import type { Gender } from "../entity/session.entity";
-import type { AgeGroup } from "../miniapp/services/CalculationEngine";
+import type { Gender } from '../entity/session.entity';
+import type { AgeGroup } from '../miniapp/services/CalculationEngine';
 
 /**
  * BFI-2 领域分常模：量纲为「每领域 12 题、反向编码后的算术均分」，理论范围 1–5。
  * 以下为 Zhang 等 Assessment 2021 中国大学生样本的近似占位（请用论文 Table 1 精确替换并更新 normVersion）。
  * 各年龄段暂用同一组 college 常模；仅性别分栏。
  */
-type Seg = Record<Gender | "all", Record<AgeGroup, [number, number]>>;
+type Seg = Record<Gender | 'all', Record<AgeGroup, [number, number]>>;
 
 function fillAgeGroups(m: [number, number]): Record<AgeGroup, [number, number]> {
   return {
-    "18-24": m,
-    "25-34": m,
-    "35-44": m,
-    "45+": m,
+    '18-24': m,
+    '25-34': m,
+    '35-44': m,
+    '45+': m,
   };
 }
 

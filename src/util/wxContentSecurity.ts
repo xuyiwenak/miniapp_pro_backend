@@ -1,7 +1,7 @@
-import https from "https";
-import { ComponentManager, EComName } from "../common/BaseComponent";
-import { getAccessToken } from "./wxAccessToken";
-import { gameLogger as logger } from "./logger";
+import https from 'https';
+import { ComponentManager, EComName } from '../common/BaseComponent';
+import { getAccessToken } from './wxAccessToken';
+import { gameLogger as logger } from './logger';
 
 type SecurityResult = {
   safe: boolean;
@@ -27,16 +27,16 @@ function httpsPost(url: string, body: Buffer, headers: Record<string, string>): 
       {
         hostname: parsed.hostname,
         path: parsed.pathname + parsed.search,
-        method: "POST",
+        method: 'POST',
         headers,
       },
       (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", (d) => chunks.push(d));
-        res.on("end", () => resolve(Buffer.concat(chunks)));
+        res.on('data', (d) => chunks.push(d));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
       },
     );
-    req.on("error", (err) => reject(err));
+    req.on('error', (err) => reject(err));
     req.end(body);
   });
 }
@@ -67,24 +67,24 @@ export async function checkText(content: string, openId?: string, scene: number 
       openid: openId,
     });
 
-    const raw = await httpsPost(url, Buffer.from(payload, "utf8"), {
-      "Content-Type": "application/json",
+    const raw = await httpsPost(url, Buffer.from(payload, 'utf8'), {
+      'Content-Type': 'application/json',
     });
-    const json = JSON.parse(raw.toString("utf8"));
+    const json = JSON.parse(raw.toString('utf8'));
 
     if (json.errcode !== 0) {
-      logger.warn("msg_sec_check error:", json.errcode, json.errmsg);
+      logger.warn('msg_sec_check error:', json.errcode, json.errmsg);
       return { safe: true, errcode: json.errcode };
     }
 
     const suggest: string | undefined = json.result?.suggest;
     const label: string | undefined = json.result?.label;
-    if (suggest === "risky") {
-      return { safe: false, label: label ?? "risky" };
+    if (suggest === 'risky') {
+      return { safe: false, label: label ?? 'risky' };
     }
     return { safe: true, label };
   } catch (err) {
-    logger.error("checkText exception:", (err as Error).message);
+    logger.error('checkText exception:', (err as Error).message);
     return { safe: true };
   }
 }
@@ -102,9 +102,9 @@ export async function checkImage(buffer: Buffer, contentType: string): Promise<S
     const token = await getAccessToken();
     const url = `https://api.weixin.qq.com/wxa/img_sec_check?access_token=${token}`;
 
-    const boundary = "----WxSecBoundary" + Date.now();
-    const fieldName = "media";
-    const filename = "image." + (contentType.includes("png") ? "png" : "jpg");
+    const boundary = '----WxSecBoundary' + Date.now();
+    const fieldName = 'media';
+    const filename = 'image.' + (contentType.includes('png') ? 'png' : 'jpg');
 
     const header = Buffer.from(
       `--${boundary}\r\n` +
@@ -115,20 +115,20 @@ export async function checkImage(buffer: Buffer, contentType: string): Promise<S
     const body = Buffer.concat([header, buffer, footer]);
 
     const raw = await httpsPost(url, body, {
-      "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      "Content-Length": String(body.length),
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': String(body.length),
     });
-    const json = JSON.parse(raw.toString("utf8"));
+    const json = JSON.parse(raw.toString('utf8'));
 
     if (json.errcode === 87014) {
-      return { safe: false, label: "risky", errcode: 87014 };
+      return { safe: false, label: 'risky', errcode: 87014 };
     }
     if (json.errcode !== 0) {
-      logger.warn("img_sec_check error:", json.errcode, json.errmsg);
+      logger.warn('img_sec_check error:', json.errcode, json.errmsg);
     }
     return { safe: true, errcode: json.errcode };
   } catch (err) {
-    logger.error("checkImage exception:", (err as Error).message);
+    logger.error('checkImage exception:', (err as Error).message);
     return { safe: true };
   }
 }

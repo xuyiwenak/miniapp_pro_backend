@@ -1,9 +1,9 @@
 // 文件顶部
-import { ComponentManager, EComName, IBaseComponent } from "../common/BaseComponent";
-import { getPlayerModel } from "../dbservice/model/ZoneDBModel";
-import { gameLogger } from "../util/logger";
-import { v4 as uuidv4 } from "uuid";
-import { AccountLevel } from "../shared/enum/AccountLevel";
+import { ComponentManager, EComName, IBaseComponent } from '../common/BaseComponent';
+import { getPlayerModel } from '../dbservice/model/ZoneDBModel';
+import { gameLogger } from '../util/logger';
+import { v4 as uuidv4 } from 'uuid';
+import { AccountLevel } from '../shared/enum/AccountLevel';
 
 type PlayerDTO = {
   userId: string;
@@ -19,7 +19,7 @@ type PlayerResult =
 
 export class PlayerComponent implements IBaseComponent {
   // 当前服默认区，start 时从 SysCfg 取
-  private defaultZone: string = "zone1";
+  private defaultZone: string = 'zone1';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   init(): void {}
@@ -29,16 +29,16 @@ export class PlayerComponent implements IBaseComponent {
       EComName.SysCfgComponent,
     );
     const zoneIdList = sysCfg.server?.zoneIdList ?? [];
-    this.defaultZone = zoneIdList[0] ?? "";
-    gameLogger.debug("PlayerComponent start, defaultZone=", this.defaultZone);
+    this.defaultZone = zoneIdList[0] ?? '';
+    gameLogger.debug('PlayerComponent start, defaultZone=', this.defaultZone);
   }
 
   async afterStart(): Promise<void> {
-    gameLogger.debug("PlayerComponent afterStart");
+    gameLogger.debug('PlayerComponent afterStart');
   }
 
   async stop(): Promise<void> {
-    gameLogger.debug("PlayerComponent stop");
+    gameLogger.debug('PlayerComponent stop');
   }
 
   public getDefaultZoneId(): string {
@@ -53,7 +53,7 @@ export class PlayerComponent implements IBaseComponent {
     if (!this.defaultZone) return undefined;
     try {
       const Player = getPlayerModel(this.defaultZone);
-      const player = await Player.findOne({ userId }).select("openId").lean().exec();
+      const player = await Player.findOne({ userId }).select('openId').lean().exec();
       return player?.openId ?? undefined;
     } catch {
       return undefined;
@@ -65,13 +65,13 @@ export class PlayerComponent implements IBaseComponent {
    */
   async findByOpenId(openId: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
-      return { ok: false, error: "DefaultZoneNotReady" };
+      return { ok: false, error: 'DefaultZoneNotReady' };
     }
     try {
       const Player = getPlayerModel(this.defaultZone);
       const player = await Player.findOne({ openId }).exec();
       if (!player) {
-        return { ok: false, error: "NotFound" };
+        return { ok: false, error: 'NotFound' };
       }
       return {
         ok: true,
@@ -84,8 +84,8 @@ export class PlayerComponent implements IBaseComponent {
         },
       };
     } catch (err) {
-      gameLogger.error("findByOpenId exception, openId=", openId, err);
-      return { ok: false, error: "FindByOpenIdException" };
+      gameLogger.error('findByOpenId exception, openId=', openId, err);
+      return { ok: false, error: 'FindByOpenIdException' };
     }
   }
 
@@ -95,18 +95,18 @@ export class PlayerComponent implements IBaseComponent {
   async register(account: string, password: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
       gameLogger.error(
-        "register failed: defaultZone is empty, account=",
+        'register failed: defaultZone is empty, account=',
         account,
       );
-      return { ok: false, error: "DefaultZoneNotReady" };
+      return { ok: false, error: 'DefaultZoneNotReady' };
     }
 
     try {
       const Player = getPlayerModel(this.defaultZone); // 用默认区
       const exist = await Player.findOne({ account }).exec();
       if (exist) {
-        gameLogger.warn("register failed: account exists, account=", account);
-        return { ok: false, error: "AccountExists" };
+        gameLogger.warn('register failed: account exists, account=', account);
+        return { ok: false, error: 'AccountExists' };
       }
 
       const userId = uuidv4();
@@ -120,11 +120,11 @@ export class PlayerComponent implements IBaseComponent {
       });
 
       gameLogger.info(
-        "register success, account=",
+        'register success, account=',
         account,
-        "userId=",
+        'userId=',
         userId,
-        "zoneId=",
+        'zoneId=',
         zoneId,
       );
 
@@ -138,21 +138,21 @@ export class PlayerComponent implements IBaseComponent {
         },
       };
     } catch (err) {
-      gameLogger.error("register exception, account=", account, err);
-      return { ok: false, error: "RegisterException" };
+      gameLogger.error('register exception, account=', account, err);
+      return { ok: false, error: 'RegisterException' };
     }
   }
 
   /*
    * 登录：账号 + 密码校验
-   */ 
+   */
   async login(account: string, password: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
       gameLogger.error(
-        "login failed: defaultZone is empty, account=",
+        'login failed: defaultZone is empty, account=',
         account,
       );
-      return { ok: false, error: "DefaultZoneNotReady" };
+      return { ok: false, error: 'DefaultZoneNotReady' };
     }
 
     try {
@@ -160,21 +160,21 @@ export class PlayerComponent implements IBaseComponent {
       const player = await Player.findOne({ account }).exec();
 
       if (!player) {
-        gameLogger.warn("login failed: account not found, account=", account);
-        return { ok: false, error: "AccountNotFound" };
+        gameLogger.warn('login failed: account not found, account=', account);
+        return { ok: false, error: 'AccountNotFound' };
       }
 
       if (player.password !== password) {
-        gameLogger.warn("login failed: password error, account=", account);
-        return { ok: false, error: "PasswordError" };
+        gameLogger.warn('login failed: password error, account=', account);
+        return { ok: false, error: 'PasswordError' };
       }
 
       gameLogger.info(
-        "login success, account=",
+        'login success, account=',
         account,
-        "userId=",
+        'userId=',
         player.userId,
-        "zoneId=",
+        'zoneId=',
         player.zoneId,
       );
 
@@ -189,8 +189,8 @@ export class PlayerComponent implements IBaseComponent {
         },
       };
     } catch (err) {
-      gameLogger.error("login exception, account=", account, err);
-      return { ok: false, error: "LoginException" };
+      gameLogger.error('login exception, account=', account, err);
+      return { ok: false, error: 'LoginException' };
     }
   }
 
@@ -200,10 +200,10 @@ export class PlayerComponent implements IBaseComponent {
   async loginByOpenId(openId: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
       gameLogger.error(
-        "loginByOpenId failed: defaultZone is empty, openId=",
+        'loginByOpenId failed: defaultZone is empty, openId=',
         openId,
       );
-      return { ok: false, error: "DefaultZoneNotReady" };
+      return { ok: false, error: 'DefaultZoneNotReady' };
     }
 
     try {
@@ -213,11 +213,11 @@ export class PlayerComponent implements IBaseComponent {
       let player = await Player.findOne({ openId }).exec();
       if (player) {
         gameLogger.info(
-          "loginByOpenId success (existing), openId=",
+          'loginByOpenId success (existing), openId=',
           openId,
-          "userId=",
+          'userId=',
           player.userId,
-          "zoneId=",
+          'zoneId=',
           player.zoneId,
         );
 
@@ -248,11 +248,11 @@ export class PlayerComponent implements IBaseComponent {
       });
 
       gameLogger.info(
-        "loginByOpenId auto register success, openId=",
+        'loginByOpenId auto register success, openId=',
         openId,
-        "userId=",
+        'userId=',
         userId,
-        "zoneId=",
+        'zoneId=',
         zoneId,
       );
 
@@ -267,8 +267,8 @@ export class PlayerComponent implements IBaseComponent {
         },
       };
     } catch (err) {
-      gameLogger.error("loginByOpenId exception, openId=", openId, err);
-      return { ok: false, error: "LoginByOpenIdException" };
+      gameLogger.error('loginByOpenId exception, openId=', openId, err);
+      return { ok: false, error: 'LoginByOpenIdException' };
     }
   }
 
@@ -278,10 +278,10 @@ export class PlayerComponent implements IBaseComponent {
   async createRole(userId: string, nickname: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
       gameLogger.error(
-        "createRole failed: defaultZone is empty, userId=",
+        'createRole failed: defaultZone is empty, userId=',
         userId,
       );
-      return { ok: false, error: "DefaultZoneNotReady" };
+      return { ok: false, error: 'DefaultZoneNotReady' };
     }
 
     try {
@@ -289,25 +289,25 @@ export class PlayerComponent implements IBaseComponent {
       const player = await Player.findOne({ userId }).exec();
 
       if (!player) {
-        gameLogger.warn("createRole failed: user not found, userId=", userId);
-        return { ok: false, error: "UserNotFound" };
+        gameLogger.warn('createRole failed: user not found, userId=', userId);
+        return { ok: false, error: 'UserNotFound' };
       }
 
       if (player.nickname) {
         gameLogger.warn(
-          "createRole failed: role already exists, userId=",
+          'createRole failed: role already exists, userId=',
           userId,
         );
-        return { ok: false, error: "RoleAlreadyExists" };
+        return { ok: false, error: 'RoleAlreadyExists' };
       }
 
       player.nickname = nickname;
       await player.save();
 
       gameLogger.info(
-        "createRole success, userId=",
+        'createRole success, userId=',
         userId,
-        "nickname=",
+        'nickname=',
         nickname,
       );
 
@@ -321,8 +321,8 @@ export class PlayerComponent implements IBaseComponent {
         },
       };
     } catch (err) {
-      gameLogger.error("createRole exception, userId=", userId, err);
-      return { ok: false, error: "CreateRoleException" };
+      gameLogger.error('createRole exception, userId=', userId, err);
+      return { ok: false, error: 'CreateRoleException' };
     }
   }
 
@@ -336,18 +336,18 @@ export class PlayerComponent implements IBaseComponent {
 
       if (!player) {
         gameLogger.warn(
-          "enterZone failed: role not found in zone, userId=",
+          'enterZone failed: role not found in zone, userId=',
           userId,
-          "zoneId=",
+          'zoneId=',
           zoneId,
         );
-        return { ok: false, error: "RoleNotFoundInZone" };
+        return { ok: false, error: 'RoleNotFoundInZone' };
       }
 
       gameLogger.info(
-        "enterZone success, userId=",
+        'enterZone success, userId=',
         userId,
-        "zoneId=",
+        'zoneId=',
         zoneId,
       );
 
@@ -362,13 +362,13 @@ export class PlayerComponent implements IBaseComponent {
       };
     } catch (err) {
       gameLogger.error(
-        "enterZone exception, userId=",
+        'enterZone exception, userId=',
         userId,
-        "zoneId=",
+        'zoneId=',
         zoneId,
         err,
       );
-      return { ok: false, error: "EnterZoneException" };
+      return { ok: false, error: 'EnterZoneException' };
     }
   }
 }
