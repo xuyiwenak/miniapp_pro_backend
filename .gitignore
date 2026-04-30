@@ -60,3 +60,6 @@ nginx/ssl/*.pem
 *local.json
 *.secret.*
 *.private.*
+
+# MongoDB data
+data/mongo/
