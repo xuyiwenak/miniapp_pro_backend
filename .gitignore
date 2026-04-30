@@ -61,5 +61,5 @@ nginx/ssl/*.pem
 *.secret.*
 *.private.*
 
-# MongoDB data
-data/mongo/
+# Runtime data (MongoDB, Redis snapshots, uploads, etc.)
+data/
