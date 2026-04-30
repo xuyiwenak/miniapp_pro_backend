@@ -133,6 +133,46 @@ services:
       - ./static:/app/static
       - ./logs/begreat:/app/logs
 
+  mandis_app:
+    image: art-backend:latest          # 复用 drawing_app 构建的镜像，无需重复 build
+    container_name: miniapp-mandis
+    restart: unless-stopped
+    command: ["node", "dist/apps/mandis/front.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      drawing_app:                     # 确保镜像先由 drawing_app build 完成
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      SYSCONFIG_ROOT: /app/config
+      ENV: production
+      environment: production
+      SERVER_ID: front_1
+      id: front_1
+      GAME_TYPE: front
+      gameType: front
+      HTTP_PORT: 42001
+      httpPort: 42001
+      MINIAPP_PORT: 42002
+      miniappApiPort: 42002
+      WS_PORT: 42000
+      port: 42000
+      connectionTickTimeout: 30000
+      MONGO_URI: mongodb://root:password@mongo:27017
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "42000:42000"
+      - "42001:42001"
+      - "42002:42002"
+    volumes:
+      - ./src/apps/mandis/sysconfig:/app/config:ro
+      - ./static:/app/static
+      - ./logs/mandis:/app/logs
+
   nginx:
     image: nginx:1.27-alpine
     pull_policy: if_not_present
@@ -141,6 +181,7 @@ services:
     depends_on:
       - drawing_app
       - begreat_app
+      - mandis_app
     ports:
       - "80:80"
       - "443:443"
