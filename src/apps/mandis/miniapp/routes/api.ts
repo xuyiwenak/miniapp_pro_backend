@@ -1,5 +1,5 @@
 import path from 'path';
-import { Router, Response } from 'express';
+import { Router, Response, type NextFunction } from 'express';
 // @ts-ignore 类型通过运行时依赖提供
 import multer from 'multer';
 import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
@@ -10,15 +10,40 @@ import { checkImage } from '../../../../util/wxContentSecurity';
 
 const OSS_PREFIX = 'oss://';
 const MANDIS_IMAGE_UPLOAD_PREFIX = 'mandis/user_upload/images';
+/** 通用作品等上传单文件上限 */
+const UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** 头像：微信官方《头像昵称填写》未写死字节上限；开放社区常见按约 1MB 控制大图失败率，此处与之间对齐 */
+const AVATAR_UPLOAD_MAX_FILE_BYTES = 1 * 1024 * 1024;
 
 const router = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
+    fileSize: UPLOAD_MAX_FILE_BYTES,
   },
 });
+
+const uploadAvatarMw = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: AVATAR_UPLOAD_MAX_FILE_BYTES,
+  },
+});
+
+function handleAvatarUpload(req: MiniappRequest, res: Response, next: NextFunction): void {
+  uploadAvatarMw.single('file')(req, res, (err: unknown) => {
+    if (!err) {
+      next();
+      return;
+    }
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      sendErr(res, '头像文件过大，请选择较小图片或稍后再试', 400);
+      return;
+    }
+    sendErr(res, '头像上传失败', 400);
+  });
+}
 
 const DEFAULT_PERSONAL = {
   image: '/static/avatar1.png',
@@ -44,6 +69,7 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
     const info = doc
       ? {
         image: doc.image ?? DEFAULT_PERSONAL.image,
+        wechatAvatarUrl: (doc as { wechatAvatarUrl?: string }).wechatAvatarUrl ?? '',
         name: (doc.name && doc.name.trim()) || fallbackName,
         star: doc.star ?? DEFAULT_PERSONAL.star,
         mbti: doc.mbti ?? DEFAULT_PERSONAL.mbti,
@@ -63,6 +89,7 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
     sendSucc(res, {
       data: {
         ...DEFAULT_PERSONAL,
+        wechatAvatarUrl: '',
         name: fallbackName,
       },
     });
@@ -274,11 +301,11 @@ router.post(
   },
 );
 
-/** 上传头像：兼容老接口，按配置走 COS 或本地存储；期望字段 file（multipart） */
+/** 上传头像：multipart file；期望字段 file */
 router.post(
   '/uploadAvatar',
   authMiddleware,
-  upload.single('file'),
+  handleAvatarUpload,
   async (req: MiniappRequest, res: Response) => {
     const userId = req.userId!;
     const anyReq = req as any;
@@ -307,7 +334,11 @@ router.post(
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);
-      sendSucc(res, { url });
+      const payload: { url: string; cdnUrl?: string } = { url };
+      if (url.startsWith(OSS_PREFIX)) {
+        payload.cdnUrl = resolveImageUrl(url);
+      }
+      sendSucc(res, payload);
     } catch (err) {
       sendErr(res, 'Upload avatar failed', 500);
     }
@@ -330,18 +361,34 @@ router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res
       (body.name as string | undefined)?.trim() ||
       (existing?.name && existing.name.trim()) ||
       `用户_${String(userId).slice(0, 8)}`;
-    const update = {
-      userId,
-      image: body.image ?? existing?.image ?? DEFAULT_PERSONAL.image,
-      name: autoName,
-      star: body.star ?? existing?.star ?? DEFAULT_PERSONAL.star,
-      mbti: typeof body.mbti === 'string' ? body.mbti : existing?.mbti,
-      gender: body.gender ?? DEFAULT_PERSONAL.gender,
-      birth: body.birth ?? DEFAULT_PERSONAL.birth,
-      address: Array.isArray(body.address) ? body.address : DEFAULT_PERSONAL.address,
-      brief: body.brief ?? DEFAULT_PERSONAL.brief,
-      photos: Array.isArray(body.photos) ? body.photos : DEFAULT_PERSONAL.photos,
+    const bodyRecord = body as {
+      image?: string;
+      wechatAvatarUrl?: string;
+      name?: string;
+      star?: string;
+      mbti?: string;
+      gender?: number;
+      birth?: string;
+      address?: string[];
+      brief?: string;
+      photos?: { url: string; name: string; type: string }[];
     };
+    const update: Record<string, unknown> = {
+      userId,
+      image: bodyRecord.image ?? existing?.image ?? DEFAULT_PERSONAL.image,
+      name: autoName,
+      star: bodyRecord.star ?? existing?.star ?? DEFAULT_PERSONAL.star,
+      mbti: typeof bodyRecord.mbti === 'string' ? bodyRecord.mbti : existing?.mbti,
+      gender: bodyRecord.gender ?? DEFAULT_PERSONAL.gender,
+      birth: bodyRecord.birth ?? DEFAULT_PERSONAL.birth,
+      address: Array.isArray(bodyRecord.address) ? bodyRecord.address : DEFAULT_PERSONAL.address,
+      brief: bodyRecord.brief ?? DEFAULT_PERSONAL.brief,
+      photos: Array.isArray(bodyRecord.photos) ? bodyRecord.photos : DEFAULT_PERSONAL.photos,
+    };
+    if (Object.prototype.hasOwnProperty.call(bodyRecord, 'wechatAvatarUrl')) {
+      const w = typeof bodyRecord.wechatAvatarUrl === 'string' ? bodyRecord.wechatAvatarUrl.trim() : '';
+      update.wechatAvatarUrl = w;
+    }
     const doc = await PersonalInfo.findOneAndUpdate(
       { userId },
       { $set: update },
@@ -349,16 +396,29 @@ router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res
     )
       .lean()
       .exec();
+    const docRow = doc as {
+      image?: string;
+      wechatAvatarUrl?: string;
+      name?: string;
+      star?: string;
+      mbti?: string;
+      gender: number;
+      birth?: string;
+      address?: string[];
+      brief?: string;
+      photos?: { url: string; name: string; type: string }[];
+    };
     const info = {
-      image: doc!.image ?? DEFAULT_PERSONAL.image,
-      name: doc!.name ?? `用户_${String(userId).slice(0, 8)}`,
-      star: doc!.star ?? '',
-      mbti: doc!.mbti ?? '',
-      gender: doc!.gender ?? DEFAULT_PERSONAL.gender,
-      birth: doc!.birth ?? DEFAULT_PERSONAL.birth,
-      address: Array.isArray(doc!.address) ? doc!.address : DEFAULT_PERSONAL.address,
-      brief: doc!.brief ?? DEFAULT_PERSONAL.brief,
-      photos: Array.isArray(doc!.photos) ? doc!.photos : DEFAULT_PERSONAL.photos,
+      image: docRow.image ?? DEFAULT_PERSONAL.image,
+      wechatAvatarUrl: docRow.wechatAvatarUrl ?? '',
+      name: docRow.name ?? `用户_${String(userId).slice(0, 8)}`,
+      star: docRow.star ?? '',
+      mbti: docRow.mbti ?? '',
+      gender: docRow.gender ?? DEFAULT_PERSONAL.gender,
+      birth: docRow.birth ?? DEFAULT_PERSONAL.birth,
+      address: Array.isArray(docRow.address) ? docRow.address : DEFAULT_PERSONAL.address,
+      brief: docRow.brief ?? DEFAULT_PERSONAL.brief,
+      photos: Array.isArray(docRow.photos) ? docRow.photos : DEFAULT_PERSONAL.photos,
     };
     sendSucc(res, { data: info });
   } catch {
