@@ -9,6 +9,7 @@ import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader
 import { checkImage } from '../../../../util/wxContentSecurity';
 
 const OSS_PREFIX = 'oss://';
+const MANDIS_IMAGE_UPLOAD_PREFIX = 'mandis/user_upload/images';
 
 const router = Router();
 
@@ -258,7 +259,7 @@ router.post(
     const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1e9);
-    const key = `images/${userId}/${timestamp}-${random}${safeExt}`;
+    const key = `${MANDIS_IMAGE_UPLOAD_PREFIX}/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);
@@ -302,7 +303,7 @@ router.post(
     const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1e9);
-    const key = `avatars/${userId}/${timestamp}-${random}${safeExt}`;
+    const key = `${MANDIS_IMAGE_UPLOAD_PREFIX}/avatars/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);
