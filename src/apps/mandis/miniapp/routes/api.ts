@@ -6,10 +6,10 @@ import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/respons
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { getFeedbackModel, getPersonalInfoModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader';
+import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { checkImage } from '../../../../util/wxContentSecurity';
 
 const OSS_PREFIX = 'oss://';
-const MANDIS_IMAGE_UPLOAD_PREFIX = 'mandis/user_upload/images';
 /** 通用作品等上传单文件上限 */
 const UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** 头像：微信官方《头像昵称填写》未写死字节上限；开放社区常见按约 1MB 控制大图失败率，此处与之间对齐 */
@@ -286,7 +286,8 @@ router.post(
     const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1e9);
-    const key = `${MANDIS_IMAGE_UPLOAD_PREFIX}/${userId}/${timestamp}-${random}${safeExt}`;
+    const { worksObjectPrefix } = getOssUploadPrefixes();
+    const key = `${worksObjectPrefix}/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);
@@ -330,7 +331,8 @@ router.post(
     const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1e9);
-    const key = `${MANDIS_IMAGE_UPLOAD_PREFIX}/avatars/${userId}/${timestamp}-${random}${safeExt}`;
+    const { avatarObjectPrefix } = getOssUploadPrefixes();
+    const key = `${avatarObjectPrefix}/${userId}/${timestamp}-${random}${safeExt}`;
 
     try {
       const url = await uploadToStorage(file.buffer, key, file.mimetype);

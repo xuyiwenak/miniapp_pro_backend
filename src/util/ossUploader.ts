@@ -4,6 +4,10 @@ import { ComponentManager, EComName } from '../common/BaseComponent';
 import { SysCfgComponent } from '../component/SysCfgComponent';
 import { gameLogger as logger } from './logger';
 
+/** 未配置时与历史路径一致，避免已有对象键失效 */
+const DEFAULT_OSS_WORKS_OBJECT_PREFIX = 'mandis/user_upload/images';
+const DEFAULT_OSS_AVATAR_OBJECT_PREFIX = 'mandis/user_upload/images/avatars';
+
 interface OssConfig {
   region: string;
   accessKeyId: string;
@@ -11,9 +15,27 @@ interface OssConfig {
   bucket: string;
   /** 可选：自定义 CDN/外网域名，用于签名 URL；不填则用 bucket.region.aliyuncs.com */
   cdnDomain?: string;
+  /** 作品与通用用户上传（如 /api/upload）对象键前缀，勿尾随 / */
+  worksObjectPrefix: string;
+  /** 头像（/api/uploadAvatar）对象键前缀，勿尾随 / */
+  avatarObjectPrefix: string;
 }
 
+type OssConfigFile = Partial<OssConfig> & {
+  region?: string;
+  accessKeyId?: string;
+  accessKeySecret?: string;
+  bucket?: string;
+};
+
 let cachedOssConfig: OssConfig | null = null;
+
+function normalizeOssObjectPrefix(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().replace(/\/+$/, '');
+}
 
 function loadOssConfig(): OssConfig {
   if (cachedOssConfig) return cachedOssConfig;
@@ -21,7 +43,7 @@ function loadOssConfig(): OssConfig {
   const sysCfg = ComponentManager.instance.getComponent(
     EComName.SysCfgComponent,
   ) as SysCfgComponent;
-  const raw = sysCfg.server_auth_config as { oss?: Partial<OssConfig> };
+  const raw = sysCfg.server_auth_config as { oss?: OssConfigFile };
   if (!raw?.oss) {
     throw new Error('OSS config not found in server_auth_config');
   }
@@ -29,14 +51,26 @@ function loadOssConfig(): OssConfig {
   if (!cfg.region || !cfg.accessKeyId || !cfg.accessKeySecret || !cfg.bucket) {
     throw new Error('OSS config is incomplete');
   }
+  const worksObjectPrefix =
+    normalizeOssObjectPrefix(cfg.worksObjectPrefix) || DEFAULT_OSS_WORKS_OBJECT_PREFIX;
+  const avatarObjectPrefix =
+    normalizeOssObjectPrefix(cfg.avatarObjectPrefix) || DEFAULT_OSS_AVATAR_OBJECT_PREFIX;
   cachedOssConfig = {
     region: cfg.region,
     accessKeyId: cfg.accessKeyId,
     accessKeySecret: cfg.accessKeySecret,
     bucket: cfg.bucket,
     cdnDomain: cfg.cdnDomain?.trim() || undefined,
+    worksObjectPrefix,
+    avatarObjectPrefix,
   };
   return cachedOssConfig;
+}
+
+/** mandis 等：从配置读取作品/头像 OSS 对象前缀（同一 bucket，不同目录） */
+export function getOssUploadPrefixes(): Pick<OssConfig, 'worksObjectPrefix' | 'avatarObjectPrefix'> {
+  const c = loadOssConfig();
+  return { worksObjectPrefix: c.worksObjectPrefix, avatarObjectPrefix: c.avatarObjectPrefix };
 }
 
 export function getOssConfigOrNull(): OssConfig | null {

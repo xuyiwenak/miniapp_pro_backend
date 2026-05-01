@@ -10,12 +10,12 @@ import { buildHealingResponse } from './healing';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { checkText, checkImage } from '../../../../util/wxContentSecurity';
 import { uploadToStorage, resolveImageUrl, deleteFromStorage } from '../../../../util/imageUploader';
+import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 
 const OSS_PREFIX = 'oss://';
-const MANDIS_IMAGE_UPLOAD_PREFIX = 'mandis/user_upload/images';
 
 /** 是否为小程序临时路径（服务端无法访问，需客户端先上传或传 base64） */
 function isTempOrUnfetchableUrl(url: string): boolean {
@@ -184,7 +184,8 @@ router.post('/publish', async (req: MiniappRequest, res: Response) => {
         }
         const ext = path.extname(name).toLowerCase() || '.png';
         const safeExt = /^\.(png|jpe?g|gif|webp)$/i.test(ext) ? ext : '.png';
-        const key = `${MANDIS_IMAGE_UPLOAD_PREFIX}/${authorId}/${workId}-${i}${safeExt}`;
+        const { worksObjectPrefix } = getOssUploadPrefixes();
+        const key = `${worksObjectPrefix}/${authorId}/${workId}-${i}${safeExt}`;
         const storedUrl = await uploadToStorage(buffer, key, 'image/png');
         images.push({ url: storedUrl, name, type });
         continue;
