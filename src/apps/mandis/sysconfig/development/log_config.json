@@ -1,7 +1,7 @@
 {
   "appenders": {
     "server": {
-      "filename": "../logs/server.log",
+      "filename": "logs/server.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
@@ -14,7 +14,7 @@
       "alwaysIncludePattern": true
     },
     "game": {
-      "filename": "../logs/game.log",
+      "filename": "logs/game.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
@@ -34,7 +34,7 @@
       }
     },
     "coze_debug": {
-      "filename": "../logs/coze_debug.log",
+      "filename": "logs/coze_debug.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
