@@ -9,6 +9,14 @@ export interface IHealingLineAnalysis {
   energy_score?: number;
 }
 
+export interface IHealingVad {
+  valence: number;
+  arousal: number;
+  dominance: number;
+  quadrant: string;
+  interpretation: string;
+}
+
 export interface IHealingData {
   scores: IHealingScores;
   summary: string;
@@ -22,6 +30,8 @@ export interface IHealingData {
   lineAnalysis?: IHealingLineAnalysis;
   suggestion?: string;
   keyColors?: string[];
+  failReason?: string;
+  vad?: IHealingVad;
 }
 
 export interface IWork {
@@ -65,6 +75,19 @@ const HealingDataSubSchema = new Schema<IHealingData>(
     lineAnalysis: { type: HealingLineAnalysisSubSchema },
     suggestion: { type: String },
     keyColors: [{ type: String }],
+    failReason: { type: String },
+    vad: {
+      type: new Schema(
+        {
+          valence: { type: Number, required: true },
+          arousal: { type: Number, required: true },
+          dominance: { type: Number, required: true },
+          quadrant: { type: String, required: true },
+          interpretation: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+    },
   },
   { _id: false },
 );
