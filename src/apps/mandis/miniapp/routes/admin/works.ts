@@ -40,7 +40,8 @@ router.get('/', async (req: AdminRequest, res: Response) => {
     });
 
     sendSucc(res, { total, page, limit, list });
-  } catch {
+  } catch (err) {
+    logger.error('admin:works:list error', { page, limit, status, authorId, error: (err as Error).message });
     sendErr(res, 'Failed to list works', 500);
   }
 });
@@ -60,7 +61,8 @@ router.patch('/:workId/status', async (req: AdminRequest, res: Response) => {
     const result = await Work.updateOne({ workId }, { $set: { status } }).exec();
     if (result.matchedCount === 0) { sendErr(res, 'Work not found', 404); return; }
     sendSucc(res, { workId, status });
-  } catch {
+  } catch (err) {
+    logger.error('admin:works:updateStatus error', { workId, status, error: (err as Error).message });
     sendErr(res, 'Failed to update work status', 500);
   }
 });
@@ -80,7 +82,8 @@ router.patch('/:workId/featured', async (req: AdminRequest, res: Response) => {
     const result = await Work.updateOne({ workId }, { $set: { featured } }).exec();
     if (result.matchedCount === 0) { sendErr(res, 'Work not found', 404); return; }
     sendSucc(res, { workId, featured });
-  } catch {
+  } catch (err) {
+    logger.error('admin:works:featured error', { workId, featured, error: (err as Error).message });
     sendErr(res, 'Failed to update featured', 500);
   }
 });
@@ -110,7 +113,8 @@ router.delete('/:workId', async (req: AdminRequest, res: Response) => {
         });
       });
     }
-  } catch {
+  } catch (err) {
+    logger.error('admin:works:delete error', { workId, error: (err as Error).message });
     sendErr(res, 'Failed to delete work', 500);
   }
 });

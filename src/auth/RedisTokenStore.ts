@@ -57,7 +57,7 @@ export async function revokeToken(token: string): Promise<void> {
 // ── 每日分析配额 ──────────────────────────────────────────────────────────────
 
 const HEAL_LIMIT_KEY = 'sys:heal_daily_limit';
-const DEFAULT_HEAL_DAILY_LIMIT = 3;
+const DEFAULT_HEAL_DAILY_LIMIT = 100;
 
 export async function getHealDailyLimit(): Promise<number> {
   const client = getRedis();

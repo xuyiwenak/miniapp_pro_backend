@@ -3,6 +3,8 @@ import { Schema } from 'mongoose';
 export interface IPersonalInfo {
   userId: string;
   image?: string;
+  /** 微信 CDN 头像链（qlogo/qpic），展示优先于 OSS，省签名与 OSS 下行 */
+  wechatAvatarUrl?: string;
   name: string;
   star?: string;
   mbti?: string;
@@ -21,6 +23,7 @@ export const PersonalInfoSchema = new Schema<IPersonalInfo>(
   {
     userId: { type: String, required: true, unique: true },
     image: { type: String },
+    wechatAvatarUrl: { type: String },
     name: { type: String, required: true },
     star: { type: String },
     mbti: { type: String },

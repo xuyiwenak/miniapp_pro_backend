@@ -147,7 +147,8 @@ router.post('/wxLogin', async (req: Request, res: Response) => {
       return;
     }
     openid = wxResp.openid;
-  } catch {
+  } catch (err) {
+    logger.error('wxLogin jscode2session error', { code, error: (err as Error).message });
     sendErr(res, 'WeChat login error', 500);
     return;
   }
@@ -205,6 +206,50 @@ router.post('/unbindWechat', authMiddleware, async (req: MiniappRequest, res: Re
   sendSucc(res, { success: true });
 });
 
+/** 绑定手机号：前端传微信 getPhoneNumber 返回的 code */
+router.post('/bindPhone', authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId!;
+  const payload = req.body?.data ?? req.body;
+  const code = (payload?.code as string | undefined)?.trim();
+  if (!code) {
+    sendErr(res, 'Missing code', 400);
+    return;
+  }
+  const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
+  if (!playerComp) {
+    sendErr(res, 'Server not ready', 503);
+    return;
+  }
+  const ret = await playerComp.bindPhone(userId, code);
+  if (!ret.ok) {
+    sendErr(res, ret.error, 500);
+    return;
+  }
+  sendSucc(res, { phone: ret.phone });
+});
+
+/** 手机号登录（供未来网站使用）：需要已绑定手机号的用户 */
+router.post('/phoneLogin', async (req: Request, res: Response) => {
+  const payload = req.body?.data ?? req.body;
+  const phone = (payload?.phone as string | undefined)?.trim();
+  if (!phone) {
+    sendErr(res, 'Missing phone', 400);
+    return;
+  }
+  const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
+  if (!playerComp) {
+    sendErr(res, 'Server not ready', 503);
+    return;
+  }
+  const ret = await playerComp.findByPhone(phone);
+  if (!ret.ok) {
+    sendErr(res, ret.error === 'NotFound' ? 'PhoneNotBound' : ret.error, ret.error === 'NotFound' ? 404 : 500);
+    return;
+  }
+  const token = await issueToken(ret.data.userId);
+  sendSucc(res, { token, userId: ret.data.userId });
+});
+
 /** 退出登录：令当前 token 失效 */
 router.post('/logout', async (req: Request, res: Response) => {
   const auth = req.headers.authorization;
@@ -213,8 +258,8 @@ router.post('/logout', async (req: Request, res: Response) => {
     if (token) {
       try {
         await revokeToken(token);
-      } catch {
-        // 后端记录即可，这里对前端仍返回成功，避免阻塞退出流程
+      } catch (err) {
+        logger.error('logout revokeToken error', { token: token.slice(0, 8) + '...', error: (err as Error).message });
       }
     }
   }

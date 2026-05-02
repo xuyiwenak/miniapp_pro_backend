@@ -7,6 +7,7 @@ import type { PlayerComponent } from '../../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../../dbservice/model/ZoneDBModel';
 import { AccountLevel } from '../../../../../shared/enum/AccountLevel';
 import { getHealDailyUsageBatch, setHealDailyUsage } from '../../../../../auth/RedisTokenStore';
+import { gameLogger as logger } from '../../../../../util/logger';
 
 const router = Router();
 
@@ -51,7 +52,8 @@ router.get('/', async (req: AdminRequest, res: Response) => {
     const listWithUsage = list.map((u) => ({ ...u, healTodayUsage: healUsageMap[u.userId] ?? 0 }));
 
     sendSucc(res, { total, page, limit, list: listWithUsage });
-  } catch {
+  } catch (err) {
+    logger.error('admin:users:list error', { page, limit, search, level, error: (err as Error).message });
     sendErr(res, 'Failed to list users', 500);
   }
 });
@@ -69,7 +71,8 @@ router.get('/:userId', async (req: AdminRequest, res: Response) => {
     if (!player) { sendErr(res, 'User not found', 404); return; }
 
     sendSucc(res, player);
-  } catch {
+  } catch (err) {
+    logger.error('admin:users:get error', { userId, error: (err as Error).message });
     sendErr(res, 'Failed to get user', 500);
   }
 });
@@ -98,7 +101,8 @@ router.patch('/:userId/level', requireSuperAdmin, async (req: AdminRequest, res:
     if (result.matchedCount === 0) { sendErr(res, 'User not found', 404); return; }
 
     sendSucc(res, { userId, level });
-  } catch {
+  } catch (err) {
+    logger.error('admin:users:updateLevel error', { userId, level, error: (err as Error).message });
     sendErr(res, 'Failed to update user level', 500);
   }
 });
@@ -114,7 +118,8 @@ router.patch('/:userId/heal-usage', async (req: AdminRequest, res: Response) => 
   try {
     await setHealDailyUsage(userId, usage);
     sendSucc(res, { userId, healTodayUsage: usage });
-  } catch {
+  } catch (err) {
+    logger.error('admin:users:healUsage error', { userId, usage, error: (err as Error).message });
     sendErr(res, 'Failed to update heal usage', 500);
   }
 });
@@ -134,7 +139,8 @@ router.delete('/:userId', requireSuperAdmin, async (req: AdminRequest, res: Resp
     if (result.deletedCount === 0) { sendErr(res, 'User not found', 404); return; }
 
     sendSucc(res, { userId });
-  } catch {
+  } catch (err) {
+    logger.error('admin:users:delete error', { userId, error: (err as Error).message });
     sendErr(res, 'Failed to delete user', 500);
   }
 });

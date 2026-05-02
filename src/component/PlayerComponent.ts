@@ -4,6 +4,8 @@ import { getPlayerModel } from '../dbservice/model/ZoneDBModel';
 import { gameLogger } from '../util/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { AccountLevel } from '../shared/enum/AccountLevel';
+import { getAccessToken } from '../util/wxAccessToken';
+import https from 'https';
 
 type PlayerDTO = {
   userId: string;
@@ -323,6 +325,88 @@ export class PlayerComponent implements IBaseComponent {
     } catch (err) {
       gameLogger.error('createRole exception, userId=', userId, err);
       return { ok: false, error: 'CreateRoleException' };
+    }
+  }
+
+  /**
+   * 按手机号查找用户（用于网站手机号登录）
+   */
+  async findByPhone(phone: string): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ phone }).exec();
+      if (!player) return { ok: false, error: 'NotFound' };
+      return {
+        ok: true,
+        data: {
+          userId: player.userId,
+          account: player.account,
+          nickname: player.nickname,
+          zoneId: player.zoneId,
+          openId: player.openId ?? undefined,
+        },
+      };
+    } catch (err) {
+      gameLogger.error('findByPhone exception, phone=', phone, err);
+      return { ok: false, error: 'FindByPhoneException' };
+    }
+  }
+
+  /**
+   * 绑定手机号：用微信 getPhoneNumber code 换取手机号并保存
+   */
+  async bindPhone(userId: string, wxCode: string): Promise<{ ok: true; phone: string } | { ok: false; error: string }> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+
+    const sysCfgComp = ComponentManager.instance.getComponent(EComName.SysCfgComponent) as {
+      server_auth_config?: { wx_miniapp?: { appId?: string } };
+    } | null;
+    const appId = sysCfgComp?.server_auth_config?.wx_miniapp?.appId;
+    if (!appId) return { ok: false, error: 'WxConfigMissing' };
+
+    let phone: string;
+    try {
+      const accessToken = await getAccessToken();
+      const body = JSON.stringify({ code: wxCode });
+      const phoneResp = await new Promise<{ phone_info?: { purePhoneNumber?: string }; errcode?: number; errmsg?: string }>(
+        (resolve, reject) => {
+          const req = https.request(
+            `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+            (wxRes) => {
+              const chunks: Buffer[] = [];
+              wxRes.on('data', (d) => chunks.push(d));
+              wxRes.on('end', () => {
+                try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+                catch (e) { reject(e); }
+              });
+            },
+          );
+          req.on('error', reject);
+          req.write(body);
+          req.end();
+        },
+      );
+      const rawPhone = phoneResp?.phone_info?.purePhoneNumber;
+      if (!rawPhone) {
+        gameLogger.warn('bindPhone: wx returned no phone', phoneResp);
+        return { ok: false, error: 'WxPhoneError' };
+      }
+      phone = rawPhone;
+    } catch (err) {
+      gameLogger.error('bindPhone wx request exception', err);
+      return { ok: false, error: 'WxRequestException' };
+    }
+
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      await Player.updateOne({ userId }, { phone }).exec();
+      gameLogger.info('bindPhone success, userId=', userId, 'phone=', phone);
+      return { ok: true, phone };
+    } catch (err) {
+      gameLogger.error('bindPhone db exception, userId=', userId, err);
+      return { ok: false, error: 'DbException' };
     }
   }
 

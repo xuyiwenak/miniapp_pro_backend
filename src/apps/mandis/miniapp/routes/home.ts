@@ -7,6 +7,7 @@ import { buildHealingResponse } from './healing';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 import { loadUserIdByToken } from '../../../../auth/RedisTokenStore';
+import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 const OSS_PREFIX = 'oss://';
@@ -75,8 +76,8 @@ router.get('/cards', async (_req: Request, res: Response) => {
         : CARDS;
 
     sendSucc(res, list);
-  } catch {
-    // 查询异常时回退到静态卡片
+  } catch (err) {
+    logger.error('home:cards error', { error: (err as Error).message });
     sendSucc(res, CARDS);
   }
 });

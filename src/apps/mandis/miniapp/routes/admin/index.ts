@@ -4,6 +4,7 @@ import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/resp
 import { ComponentManager } from '../../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../../dbservice/model/ZoneDBModel';
+import { gameLogger as logger } from '../../../../../util/logger';
 import statsRouter from './stats';
 import usersRouter from './users';
 import worksRouter from './works';
@@ -32,7 +33,8 @@ router.get('/me', async (req: AdminRequest, res: Response) => {
       nickname: player.nickname,
       level: player.level,
     });
-  } catch {
+  } catch (err) {
+    logger.error('admin:me error', { userId: req.userId, error: (err as Error).message });
     sendErr(res, 'Failed to get admin info', 500);
   }
 });

@@ -5,6 +5,7 @@ import { getWorkModel, getFeedbackModel } from '../../../../../dbservice/model/G
 import { ComponentManager } from '../../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../../dbservice/model/ZoneDBModel';
+import { gameLogger as logger } from '../../../../../util/logger';
 
 const router = Router();
 
@@ -33,7 +34,8 @@ router.get('/', async (_req: AdminRequest, res: Response) => {
     }
 
     sendSucc(res, { totalUsers, totalWorks, publishedWorks, draftWorks, totalFeedback, pendingFeedback });
-  } catch {
+  } catch (err) {
+    logger.error('admin:stats error', { error: (err as Error).message });
     sendErr(res, 'Failed to get stats', 500);
   }
 });

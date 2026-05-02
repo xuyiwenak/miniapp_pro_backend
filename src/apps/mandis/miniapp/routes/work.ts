@@ -10,6 +10,7 @@ import { buildHealingResponse } from './healing';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { checkText, checkImage } from '../../../../util/wxContentSecurity';
 import { uploadToStorage, resolveImageUrl, deleteFromStorage } from '../../../../util/imageUploader';
+import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
@@ -183,7 +184,8 @@ router.post('/publish', async (req: MiniappRequest, res: Response) => {
         }
         const ext = path.extname(name).toLowerCase() || '.png';
         const safeExt = /^\.(png|jpe?g|gif|webp)$/i.test(ext) ? ext : '.png';
-        const key = `images/${authorId}/${workId}-${i}${safeExt}`;
+        const { worksObjectPrefix } = getOssUploadPrefixes();
+        const key = `${worksObjectPrefix}/${authorId}/${workId}-${i}${safeExt}`;
         const storedUrl = await uploadToStorage(buffer, key, 'image/png');
         images.push({ url: storedUrl, name, type });
         continue;

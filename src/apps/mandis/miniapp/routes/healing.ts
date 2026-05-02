@@ -6,10 +6,10 @@ import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { notifyHealingUpdate } from '../ws/chatServer';
 import { getCozeConfig } from '../../../../util/cozeWorkflow';
-import { analyzeArtwork } from '../../../../util/qwenVlAnalyzer';
+import { analyzeArtwork, NotArtworkError } from '../../../../util/qwenVlAnalyzer';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 import { gameLogger as logger, cozeDebugLogger } from '../../../../util/logger';
-import type { IWork, IHealingScores } from '../../../../entity/work.entity';
+import type { IWork, IHealingScores, IHealingVad } from '../../../../entity/work.entity';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../dbservice/model/ZoneDBModel';
@@ -54,6 +54,18 @@ const ENERGY_TO_EMOTION_OFFSET = 10;
 
 /** 能量分数转换为情绪分数的缩放系数 */
 const ENERGY_TO_EMOTION_SCALE = 80;
+
+/** VAD 效价/唤醒高阈值（≥此值视为"高"） */
+const VAD_HIGH_THRESHOLD = 55;
+
+/** VAD 效价/唤醒低阈值（<此值视为"低"） */
+const VAD_LOW_THRESHOLD = 45;
+
+const VAD_QUADRANT_ACTIVE_POSITIVE = '活跃积极';
+const VAD_QUADRANT_CALM_POSITIVE = '平静愉悦';
+const VAD_QUADRANT_TENSE_NEGATIVE = '紧张焦虑';
+const VAD_QUADRANT_SUPPRESSED = '压抑低沉';
+const VAD_QUADRANT_BALANCED = '情绪平衡';
 
 // 情绪维度系数（从能量分数推导各维度）
 const EMOTION_COEFFICIENT_JOY = 0.9;
@@ -126,6 +138,7 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
     healingLineAnalysis: healing.lineAnalysis,
     healingSuggestion: healing.suggestion,
     healingKeyColors: healing.keyColors,
+    healingVad: healing.vad ?? null,
     isOwner,
   };
 }
@@ -287,6 +300,35 @@ export interface ParsedHealingReport {
   lineAnalysis?: CozeLineAnalysis;
   suggestion?: string;
   keyColors?: string[];
+  vad?: IHealingVad;
+}
+
+function clampVadScore(val: unknown): number {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return 50;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function computeVadQuadrant(valence: number, arousal: number): string {
+  const vHigh = valence >= VAD_HIGH_THRESHOLD;
+  const vLow = valence < VAD_LOW_THRESHOLD;
+  const aHigh = arousal >= VAD_HIGH_THRESHOLD;
+  const aLow = arousal < VAD_LOW_THRESHOLD;
+  if (vHigh && aHigh) return VAD_QUADRANT_ACTIVE_POSITIVE;
+  if (vHigh && aLow) return VAD_QUADRANT_CALM_POSITIVE;
+  if (vLow && aHigh) return VAD_QUADRANT_TENSE_NEGATIVE;
+  if (vLow && aLow) return VAD_QUADRANT_SUPPRESSED;
+  return VAD_QUADRANT_BALANCED;
+}
+
+function parseVad(output: Record<string, unknown>): IHealingVad | undefined {
+  const raw = output.vad as Record<string, unknown> | undefined;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const valence = clampVadScore(raw.valence);
+  const arousal = clampVadScore(raw.arousal);
+  const dominance = clampVadScore(raw.dominance);
+  const interpretation = typeof raw.interpretation === 'string' ? raw.interpretation.trim() : '';
+  return { valence, arousal, dominance, quadrant: computeVadQuadrant(valence, arousal), interpretation };
 }
 
 /**
@@ -443,8 +485,10 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
       lineAnalysis,
       suggestion,
       keyColors,
+      vad: parseVad(output),
     };
-  } catch {
+  } catch (err) {
+    logger.error('healing:parseCozeOutput error', { rawSnippet: raw.slice(0, 200), error: (err as Error).message });
     return fallback;
   }
 }
@@ -541,6 +585,7 @@ async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): P
   if (parsed.lineAnalysis !== null) updatePayload['healing.lineAnalysis'] = parsed.lineAnalysis;
   if (parsed.suggestion !== null) updatePayload['healing.suggestion'] = parsed.suggestion;
   if (parsed.keyColors !== undefined && parsed.keyColors.length) updatePayload['healing.keyColors'] = parsed.keyColors;
+  if (parsed.vad) updatePayload['healing.vad'] = parsed.vad;
   await Work.updateOne({ workId }, { $set: updatePayload }).exec();
   logger.info('Coze webhook success for workId=', workId);
   if (work.authorId) {
@@ -642,9 +687,19 @@ router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Respons
     sendSucc(res, { workId, status: 'pending', runId: jobId });
 
     void runQwenVlAnalysis(work, jobId).catch(async (err) => {
-      logger.error('QwenVL analysis failed workId=', workId, (err as Error).message);
       const Work = getWorkModel();
+      if (err instanceof NotArtworkError) {
+        logger.warn('QwenVL not artwork workId=', workId, 'reason=', err.reason);
+        await Work.updateOne(
+          { workId },
+          { $set: { 'healing.status': 'failed', 'healing.failReason': 'NOT_ARTWORK' } },
+        ).exec();
+        notifyHealingUpdate(userId, { workId, status: 'failed', errorCode: 'NOT_ARTWORK' });
+        return;
+      }
+      logger.error('QwenVL analysis failed workId=', workId, (err as Error).message);
       await Work.updateOne({ workId }, { $set: { 'healing.status': 'failed' } }).exec();
+      notifyHealingUpdate(userId, { workId, status: 'failed' });
     });
   } catch (err) {
     logRequestError('healing.ts:analyze:error', 'healing analyze error', {
@@ -697,7 +752,7 @@ router.get('/status', authMiddleware, async (req: MiniappRequest, res: Response)
     }
 
     if (healing.status === 'failed') {
-      sendSucc(res, { workId, status: 'failed' });
+      sendSucc(res, { workId, status: 'failed', failReason: healing.failReason ?? null });
       return;
     }
 
@@ -717,6 +772,7 @@ router.get('/status', authMiddleware, async (req: MiniappRequest, res: Response)
       lineAnalysis: healing.lineAnalysis,
       suggestion: healing.suggestion,
       keyColors: healing.keyColors,
+      vad: healing.vad ?? null,
     });
   } catch (err) {
     logRequestError('healing.ts:status:error', 'healing status error', {

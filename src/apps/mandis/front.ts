@@ -103,8 +103,8 @@ function swaggui() {
 
     const app = express();
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
-    app.listen(39999, () => {
-      console.log('Swagger UI is running on http://localhost:39999/api-docs');
+    app.listen(42999, () => {
+      logger.info('Swagger UI running on http://localhost:42999/api-docs');
     });
   }
 }
