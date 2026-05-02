@@ -31,7 +31,10 @@ export class PlayerComponent implements IBaseComponent {
       EComName.SysCfgComponent,
     );
     const zoneIdList = sysCfg.server?.zoneIdList ?? [];
-    this.defaultZone = zoneIdList[0] ?? '';
+    this.defaultZone = zoneIdList[0] ?? 'zone1';
+    if (!zoneIdList.length) {
+      gameLogger.warn('PlayerComponent: zoneIdList is empty in zone_config.json, falling back to default zone "zone1"');
+    }
     gameLogger.debug('PlayerComponent start, defaultZone=', this.defaultZone);
   }
 
