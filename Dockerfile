@@ -24,7 +24,9 @@ COPY admin-panel ./admin-panel
 
 RUN npm run build \
   && test -f dist/apps/drawing/sysconfig/production/log_config.json \
-  && test -f dist/apps/begreat/sysconfig/production/log_config.json
+  && test -f dist/apps/begreat/sysconfig/production/log_config.json \
+  && test -f dist/apps/mandis/sysconfig/production/log_config.json \
+  && test -f dist/apps/mandis/front.js
 
 # 移除开发依赖，仅保留生产环境需要的包
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
