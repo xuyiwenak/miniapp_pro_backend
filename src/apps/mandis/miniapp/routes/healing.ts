@@ -487,7 +487,8 @@ function parseCozeOutput(raw: string): ParsedHealingReport {
       keyColors,
       vad: parseVad(output),
     };
-  } catch {
+  } catch (err) {
+    logger.error('healing:parseCozeOutput error', { rawSnippet: raw.slice(0, 200), error: (err as Error).message });
     return fallback;
   }
 }

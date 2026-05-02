@@ -147,7 +147,8 @@ router.post('/wxLogin', async (req: Request, res: Response) => {
       return;
     }
     openid = wxResp.openid;
-  } catch {
+  } catch (err) {
+    logger.error('wxLogin jscode2session error', { code, error: (err as Error).message });
     sendErr(res, 'WeChat login error', 500);
     return;
   }
@@ -257,8 +258,8 @@ router.post('/logout', async (req: Request, res: Response) => {
     if (token) {
       try {
         await revokeToken(token);
-      } catch {
-        // 后端记录即可，这里对前端仍返回成功，避免阻塞退出流程
+      } catch (err) {
+        logger.error('logout revokeToken error', { token: token.slice(0, 8) + '...', error: (err as Error).message });
       }
     }
   }

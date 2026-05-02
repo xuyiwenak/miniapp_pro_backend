@@ -8,6 +8,7 @@ import { requireSuperAdmin } from '../../middleware/adminAuth';
 import type { AdminRequest } from '../../middleware/adminAuth';
 import type { Response } from 'express';
 import { getHealDailyLimit, setHealDailyLimit } from '../../../../../auth/RedisTokenStore';
+import { gameLogger as logger } from '../../../../../util/logger';
 
 /** 采样 200ms 计算 CPU 使用率 */
 function sampleCpuUsage(): Promise<number> {
@@ -70,6 +71,7 @@ router.get('/metrics', async (_req: AdminRequest, res: Response) => {
       },
     });
   } catch (e) {
+    logger.error('admin:system:metrics error', { error: (e as Error).message });
     sendErr(res, String(e), 500);
   }
 });
@@ -157,6 +159,7 @@ router.get('/config', async (_req: AdminRequest, res: Response) => {
     const healDailyLimit = await getHealDailyLimit();
     sendSucc(res, { healDailyLimit });
   } catch (e) {
+    logger.error('admin:system:getConfig error', { error: (e as Error).message });
     sendErr(res, String(e), 500);
   }
 });
@@ -172,6 +175,7 @@ router.patch('/config', requireSuperAdmin, async (req: AdminRequest, res: Respon
     await setHealDailyLimit(healDailyLimit);
     sendSucc(res, { healDailyLimit });
   } catch (e) {
+    logger.error('admin:system:updateConfig error', { healDailyLimit, error: (e as Error).message });
     sendErr(res, String(e), 500);
   }
 });

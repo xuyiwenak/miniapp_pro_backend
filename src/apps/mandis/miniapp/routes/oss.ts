@@ -3,6 +3,7 @@ import path from 'path';
 import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
 import type { MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { signOssUrl } from '../../../../util/ossUploader';
+import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.get('/temp-url', async (req: MiniappRequest, res: Response) => {
     const url = signOssUrl(objectKey);
     sendSucc(res, { url });
   } catch (err) {
+    logger.error('oss:sign error', { objectKey, error: (err as Error).message });
     sendErr(res, 'Failed to generate signed URL', 500);
   }
 });

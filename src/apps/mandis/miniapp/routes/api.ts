@@ -8,6 +8,7 @@ import { getFeedbackModel, getPersonalInfoModel } from '../../../../dbservice/mo
 import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader';
 import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { checkImage } from '../../../../util/wxContentSecurity';
+import { gameLogger as logger } from '../../../../util/logger';
 
 const OSS_PREFIX = 'oss://';
 /** 通用作品等上传单文件上限 */
@@ -84,7 +85,8 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
         name: fallbackName,
       };
     sendSucc(res, { data: info });
-  } catch {
+  } catch (err) {
+    logger.error('api:genPersonalInfo error', { userId, error: (err as Error).message });
     const fallbackName = `用户_${String(userId).slice(0, 8)}`;
     sendSucc(res, {
       data: {
@@ -122,7 +124,8 @@ router.post('/feedback', authMiddleware, async (req: MiniappRequest, res: Respon
     sendSucc(res, {
       id: String(doc._id),
     });
-  } catch {
+  } catch (err) {
+    logger.error('api:feedback:create error', { userId, title, error: (err as Error).message });
     sendErr(res, 'Save feedback failed', 500);
   }
 });
@@ -142,7 +145,8 @@ router.get('/feedback', authMiddleware, async (req: MiniappRequest, res: Respons
       createdAt: item.createdAt,
     }));
     sendSucc(res, { list: mapped });
-  } catch {
+  } catch (err) {
+    logger.error('api:feedback:list error', { userId, error: (err as Error).message });
     sendErr(res, 'Get feedback failed', 500);
   }
 });
@@ -191,7 +195,8 @@ router.patch('/feedback/:id', authMiddleware, async (req: MiniappRequest, res: R
       status: doc.status,
       reply: doc.reply ?? '',
     });
-  } catch {
+  } catch (err) {
+    logger.error('api:feedback:update error', { userId, feedbackId, error: (err as Error).message });
     sendErr(res, 'Update feedback failed', 500);
   }
 });
@@ -218,7 +223,8 @@ router.get('/onboarding', authMiddleware, async (req: MiniappRequest, res: Respo
       presetTags: ART_TAGS,
       forceReset,
     });
-  } catch {
+  } catch (err) {
+    logger.error('api:onboarding:get error', { userId, error: (err as Error).message });
     sendErr(res, 'Get onboarding failed', 500);
   }
 });
@@ -251,7 +257,8 @@ router.patch('/onboarding', authMiddleware, async (req: MiniappRequest, res: Res
       { upsert: true, new: true },
     ).exec();
     sendSucc(res, { ok: true });
-  } catch {
+  } catch (err) {
+    logger.error('api:onboarding:update error', { userId, update, error: (err as Error).message });
     sendErr(res, 'Update onboarding failed', 500);
   }
 });
@@ -297,6 +304,7 @@ router.post(
       }
       sendSucc(res, payload);
     } catch (err) {
+      logger.error('api:upload error', { userId, key, error: (err as Error).message });
       sendErr(res, 'Upload failed', 500);
     }
   },
@@ -342,6 +350,7 @@ router.post(
       }
       sendSucc(res, payload);
     } catch (err) {
+      logger.error('api:uploadAvatar error', { userId, key, error: (err as Error).message });
       sendErr(res, 'Upload avatar failed', 500);
     }
   },
@@ -423,7 +432,8 @@ router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res
       photos: Array.isArray(docRow.photos) ? docRow.photos : DEFAULT_PERSONAL.photos,
     };
     sendSucc(res, { data: info });
-  } catch {
+  } catch (err) {
+    logger.error('api:savePersonalInfo error', { userId, error: (err as Error).message });
     sendErr(res, 'Save personal info failed', 500);
   }
 });

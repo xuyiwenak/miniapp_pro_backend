@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import type { AdminRequest } from '../../middleware/adminAuth';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { getFeedbackModel } from '../../../../../dbservice/model/GlobalInfoDBModel';
+import { gameLogger as logger } from '../../../../../util/logger';
 
 const router = Router();
 
@@ -26,7 +27,8 @@ router.get('/', async (req: AdminRequest, res: Response) => {
         .exec(),
     ]);
     sendSucc(res, { total, page, limit, list });
-  } catch {
+  } catch (err) {
+    logger.error('admin:feedback:list error', { page, limit, status, error: (err as Error).message });
     sendErr(res, 'Failed to list feedback', 500);
   }
 });
@@ -56,7 +58,8 @@ router.patch('/:id', async (req: AdminRequest, res: Response) => {
     const result = await Feedback.updateOne({ _id: id }, { $set: update }).exec();
     if (result.matchedCount === 0) { sendErr(res, 'Feedback not found', 404); return; }
     sendSucc(res, { id, ...update });
-  } catch {
+  } catch (err) {
+    logger.error('admin:feedback:update error', { id, status, reply, error: (err as Error).message });
     sendErr(res, 'Failed to update feedback', 500);
   }
 });
