@@ -14,7 +14,14 @@
     "json-to-schemas-production": "node json_to_schema.mjs production",
     "test": "TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register \"test/**/*.test.ts\"",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --max-warnings 0 --fix",
+      "git add"
+    ]
   },
   "devDependencies": {
     "@types/bull": "^4.10.4",
@@ -28,6 +35,8 @@
     "@typescript-eslint/parser": "^7.18.0",
     "copyfiles": "^2.4.1",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "mocha": "^11.7.5",
     "sinon": "^21.0.1",
     "ts-node": "^10.9.2",
