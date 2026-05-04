@@ -21,6 +21,8 @@ COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
 # 管理后台静态页面（运行时由 Express 直接服务）
 COPY admin-panel ./admin-panel
+# openapi.json 由 tsrpc-cli doc 生成后提交到仓库，编译时 front.ts 会 import 它
+COPY docs ./docs
 
 RUN npm run build \
   && test -f dist/apps/drawing/sysconfig/production/log_config.json \
