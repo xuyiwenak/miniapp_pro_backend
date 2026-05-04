@@ -50,16 +50,29 @@ fi
 echo "--- 目标服务: ${SERVICES[*]} ---"
 
 # ── 强制停止旧容器（Docker 层面保证同名容器唯一）────────────────────────────
-# docker rm -f 对运行中/已停止的容器均有效，避免 docker kill 的 permission denied 问题
+# Ubuntu 24.04 + Docker 29.x + AppArmor 场景下 docker kill/stop/rm -f 均会 permission denied。
+# 绕过方式：直接用宿主机 kill -9 发送信号，再等容器变为 exited，最后 docker rm 清理。
 echo "--- 强制清理旧容器 ---"
 for svc in "${SERVICES[@]}"; do
   cname="${CONTAINER_NAMES[$svc]}"
-  if docker ps -aq --filter "name=^${cname}$" | grep -q .; then
-    echo "  rm -f: $cname"
-    docker rm -f "$cname"
-  else
+  if ! docker ps -aq --filter "name=^${cname}$" | grep -q .; then
     echo "  skip:  $cname (不存在)"
+    continue
   fi
+  # 获取容器主进程 PID（仅运行中才有非 0 PID）
+  pid=$(docker inspect --format '{{.State.Pid}}' "$cname" 2>/dev/null || echo 0)
+  if [[ "$pid" -gt 0 ]]; then
+    echo "  kill -9 pid=$pid ($cname)"
+    kill -9 "$pid" 2>/dev/null || true
+    # 等待容器状态变为 exited（最多 5s）
+    for i in {1..10}; do
+      state=$(docker inspect --format '{{.State.Status}}' "$cname" 2>/dev/null || echo "gone")
+      [[ "$state" != "running" ]] && break
+      sleep 0.5
+    done
+  fi
+  echo "  rm:    $cname"
+  docker rm "$cname" 2>/dev/null || true
 done
 
 # ── 构建镜像 ──────────────────────────────────────────────────────────────────
