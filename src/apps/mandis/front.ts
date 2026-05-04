@@ -28,7 +28,8 @@ import { startMiniappServer } from './miniapp/server';
 // @ts-expect-error swagger-ui-express 无官方 @types，通过运行时依赖提供类型
 import swaggerUi from 'swagger-ui-express';
 import express from 'express';
-import swaggerFile from '../../../docs/public/front/openapi.json';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const swaggerFile = require('../../../docs/public/front/openapi.json') as Record<string, unknown>;
 
 // Entry function
 async function main() {
