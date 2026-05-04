@@ -58,7 +58,7 @@ router.get('/config', adminAuth, (_req: Request, res: Response) => {
 // 支持 ?reset=true 先清空再写入（谨慎使用）
 
 router.post('/occupations/seed', adminAuth, async (req: Request, res: Response) => {
-  const seedPath = path.resolve(__dirname, '../../../../../../tpl/seed_occupation.json');
+  const seedPath = path.resolve(process.cwd(), 'tpl/seed_occupation.json');
 
   if (!fs.existsSync(seedPath)) {
     res.status(404).json({ success: false, message: 'seed_occupation.json 不存在' });
@@ -110,7 +110,7 @@ router.post('/occupations/seed', adminAuth, async (req: Request, res: Response) 
 
 // GET /admin/occupations/seed — 预览 seed 文件（不写库，方便校验）
 router.get('/occupations/seed', adminAuth, async (_req: Request, res: Response) => {
-  const seedPath = path.resolve(__dirname, '../../../../../../tpl/seed_occupation.json');
+  const seedPath = path.resolve(process.cwd(), 'tpl/seed_occupation.json');
   if (!fs.existsSync(seedPath)) {
     res.status(404).json({ success: false, message: 'seed_occupation.json 不存在' });
     return;

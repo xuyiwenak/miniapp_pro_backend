@@ -13,6 +13,7 @@ import { matchCareersWithDiagnostics } from '../services/MatchingService';
 import { buildBegreatReportSnapshot } from '../services/reportTemplate';
 import type { Gender, AssessmentType } from '../../entity/session.entity';
 import { gameLogger as logger } from '../../../../util/logger';
+import { getRuntimeConfig } from '../../config/BegreatRuntimeConfig';
 import {
   BFI2_INSTRUMENT_VERSION,
   bfi2AdjustedScore,
@@ -147,7 +148,8 @@ router.post('/start', authMiddleware, async (req: MiniappRequest, res: Response)
       assessmentType,
       createdAt: { $gte: todayStart },
     });
-    const isDev = (process.env.environment ?? 'development') === 'development';
+    const { dev_openids } = getRuntimeConfig();
+    const isDev = (process.env.environment ?? 'development') === 'development' || dev_openids.includes(openId);
     if (!isDev && todayCount >= DAILY_LIMITS[assessmentType]) {
       const typeLabel = assessmentType === 'BFI2_FREE' ? '免费版' : '完整版';
       sendErr(res, `今日${typeLabel}测评次数已达上限，请明天再来`, 429);
