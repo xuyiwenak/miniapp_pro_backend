@@ -88,7 +88,7 @@ fi
 # ── step 3: merge ─────────────────────────────────────────────────────────────
 info "Merging $MASTER into $RELEASE..."
 MASTER_SHA=$(git rev-parse --short "$MASTER")
-git merge "$MASTER" --no-edit -m "chore(release): merge $MASTER ($MASTER_SHA) into $RELEASE"
+git merge "$MASTER" --no-edit -X theirs -m "chore(release): merge $MASTER ($MASTER_SHA) into $RELEASE"
 
 # ── step 4: push ──────────────────────────────────────────────────────────────
 info "Pushing $RELEASE to origin..."
