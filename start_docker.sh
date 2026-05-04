@@ -50,17 +50,15 @@ fi
 echo "--- 目标服务: ${SERVICES[*]} ---"
 
 # ── 强制停止旧容器（Docker 层面保证同名容器唯一）────────────────────────────
-# 直接按容器名 kill，不依赖 docker-compose 状态，确保旧实例必须退出
+# docker rm -f 对运行中/已停止的容器均有效，避免 docker kill 的 permission denied 问题
 echo "--- 强制清理旧容器 ---"
 for svc in "${SERVICES[@]}"; do
   cname="${CONTAINER_NAMES[$svc]}"
-  if docker ps -q --filter "name=^${cname}$" | grep -q .; then
-    echo "  kill: $cname (运行中)"
-    docker kill "$cname"
-  fi
   if docker ps -aq --filter "name=^${cname}$" | grep -q .; then
-    echo "  rm:   $cname (已停止但未删除)"
+    echo "  rm -f: $cname"
     docker rm -f "$cname"
+  else
+    echo "  skip:  $cname (不存在)"
   fi
 done
 
