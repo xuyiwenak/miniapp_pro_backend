@@ -104,47 +104,47 @@ async function updatePaymentStatus(outTradeNo: string): Promise<void> {
 // ========== Helper Functions for /prepay Route ==========
 
 /**
+ * 开发模式下创建自动成功的支付记录（幂等）
+ */
+async function createDevPaymentRecord(sessionId: string, userId: string): Promise<void> {
+  const Sessions = getSessionModel();
+  const Payments = getPaymentModel();
+  const outTradeNo = `bg_${sessionId}_dev`;
+  const priceFen = getRuntimeConfig().price_fen;
+
+  await Payments.updateOne(
+    { outTradeNo },
+    {
+      $setOnInsert: {
+        outTradeNo, sessionId, openId: userId,
+        amount: priceFen, status: 'success', paidAt: new Date(), imageGenerated: false,
+      },
+    },
+    { upsert: true },
+  );
+
+  await Sessions.updateOne({ sessionId }, { $set: { status: 'paid', paidAt: new Date() } });
+  logger.info('[payment/prepay] dev mode: auto-paid', sessionId);
+}
+
+/**
  * 处理开发模式下的自动支付
  * @returns true 如果处理成功（包括已支付），false 如果发生错误
  */
 async function handleDevModePayment(sessionId: string, userId: string, res: Response): Promise<boolean> {
   try {
     const Sessions = getSessionModel();
-    const Payments = getPaymentModel();
-
     const session = await Sessions.findOne({ sessionId, openId: userId }).lean().exec();
-    if (!session) {
-      sendErr(res, 'Session not found', 404);
-      return false;
-    }
+    if (!session) { sendErr(res, 'Session not found', 404); return false; }
 
-    if (session.status !== 'completed' && session.status !== 'invite_unlocked' && session.status !== 'paid') {
+    const validStatuses = ['completed', 'invite_unlocked', 'paid'];
+    if (!validStatuses.includes(session.status)) {
       sendErr(res, 'Assessment not completed', 400);
       return false;
     }
 
     if (session.status !== 'paid') {
-      const outTradeNo = `bg_${sessionId}_dev`;
-      const priceFen = getRuntimeConfig().price_fen;
-
-      await Payments.updateOne(
-        { outTradeNo },
-        {
-          $setOnInsert: {
-            outTradeNo,
-            sessionId,
-            openId: userId,
-            amount: priceFen,
-            status: 'success',
-            paidAt: new Date(),
-            imageGenerated: false,
-          },
-        },
-        { upsert: true },
-      );
-
-      await Sessions.updateOne({ sessionId }, { $set: { status: 'paid', paidAt: new Date() } });
-      logger.info('[payment/prepay] dev mode: auto-paid', sessionId);
+      await createDevPaymentRecord(sessionId, userId);
     }
 
     sendSucc(res, { devMode: true });
@@ -154,6 +154,41 @@ async function handleDevModePayment(sessionId: string, userId: string, res: Resp
     sendErr(res, 'Internal error', 500);
     return false;
   }
+}
+
+/**
+ * 发起 HTTPS POST 请求到微信支付 API
+ */
+async function postToWxPay(
+  urlPath: string,
+  reqBody: string,
+  auth: string,
+): Promise<{ prepay_id?: string; code?: string; message?: string }> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.mch.weixin.qq.com',
+      path: urlPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0',
+        Authorization: auth,
+      },
+    };
+
+    const httpReq = https.request(options, (r) => {
+      let data = '';
+      r.on('data', (c) => (data += c));
+      r.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid wx response')); }
+      });
+    });
+
+    httpReq.on('error', reject);
+    httpReq.write(reqBody);
+    httpReq.end();
+  });
 }
 
 /**
@@ -180,51 +215,16 @@ async function createWxPayOrder(
 
   const urlPath = '/v3/pay/transactions/jsapi';
   const auth = buildV3Authorization('POST', urlPath, reqBody, payCfg.mchId, payCfg.serialNo, privateKey);
-
-  const wxRes = await new Promise<{ prepay_id?: string; code?: string; message?: string }>((resolve, reject) => {
-    const options = {
-      hostname: 'api.mch.weixin.qq.com',
-      path: urlPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0',
-        Authorization: auth,
-      },
-    };
-
-    const httpReq = https.request(options, (r) => {
-      let data = '';
-      r.on('data', (c) => (data += c));
-      r.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch {
-          reject(new Error('Invalid wx response'));
-        }
-      });
-    });
-
-    httpReq.on('error', reject);
-    httpReq.write(reqBody);
-    httpReq.end();
-  });
+  const wxRes = await postToWxPay(urlPath, reqBody, auth);
 
   if (!wxRes.prepay_id) {
     logger.warn('[payment/prepay] wx error:', wxRes);
     return null;
   }
 
-  // 保存支付记录
   const Payments = getPaymentModel();
   await Payments.create({
-    outTradeNo,
-    sessionId,
-    openId: userId,
-    amount: priceFen,
-    status: 'pending',
-    imageGenerated: false,
+    outTradeNo, sessionId, openId: userId, amount: priceFen, status: 'pending', imageGenerated: false,
   });
 
   return { prepayId: wxRes.prepay_id, outTradeNo };
@@ -307,22 +307,33 @@ router.get('/config', (_req, res: Response) => {
  * POST /payment/prepay
  * 创建预下单，同步写入 PaymentRecord(pending)
  */
+/**
+ * 验证 session 是否满足支付条件，返回错误信息或 null（无错）
+ */
+async function validatePrepaySession(
+  sessionId: string,
+  userId: string,
+): Promise<string | null> {
+  const Sessions = getSessionModel();
+  const session = await Sessions.findOne({ sessionId, openId: userId }).lean().exec();
+  if (!session) return 'Session not found';
+  if (session.status === 'paid') return 'Already paid';
+  if (session.status !== 'completed' && session.status !== 'invite_unlocked') return 'Assessment not completed';
+  return null;
+}
+
 router.post('/prepay', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.body ?? {};
-  if (!sessionId) {
-    sendErr(res, 'Missing sessionId', 400);
-    return;
-  }
+  if (!sessionId) { sendErr(res, 'Missing sessionId', 400); return; }
 
+  const userId = req.userId ?? '';
   const isDev = (process.env.ENV ?? process.env.environment ?? 'development') === 'development';
 
-  // 开发模式：自动支付
   if (isDev) {
-    await handleDevModePayment(sessionId, req.userId!, res);
+    await handleDevModePayment(sessionId, userId, res);
     return;
   }
 
-  // 生产模式：微信支付
   const payCfg = getPayConfig().wx_pay;
   if (!payCfg?.mchId) {
     logger.error('[payment/prepay] wx_pay config missing');
@@ -331,30 +342,16 @@ router.post('/prepay', authMiddleware, async (req: MiniappRequest, res: Response
   }
 
   try {
-    const Sessions = getSessionModel();
-    const session = await Sessions.findOne({ sessionId, openId: req.userId }).lean().exec();
-
-    if (!session) {
-      sendErr(res, 'Session not found', 404);
-      return;
-    }
-    if (session.status === 'paid') {
-      sendErr(res, 'Already paid', 400);
-      return;
-    }
-    if (session.status !== 'completed' && session.status !== 'invite_unlocked') {
-      sendErr(res, 'Assessment not completed', 400);
+    const validationError = await validatePrepaySession(sessionId, userId);
+    if (validationError) {
+      const statusCode = validationError === 'Session not found' ? 404 : 400;
+      sendErr(res, validationError, statusCode);
       return;
     }
 
-    // 创建微信订单
-    const orderResult = await createWxPayOrder(sessionId, req.userId!, payCfg);
-    if (!orderResult) {
-      sendErr(res, 'WeChat payment creation failed', 500);
-      return;
-    }
+    const orderResult = await createWxPayOrder(sessionId, userId, payCfg);
+    if (!orderResult) { sendErr(res, 'WeChat payment creation failed', 500); return; }
 
-    // 生成签名并返回
     const signature = generateJsapiSignature(orderResult.prepayId, payCfg);
     sendSucc(res, signature);
   } catch (err) {
@@ -403,6 +400,39 @@ router.post('/callback', async (req: Request, res: Response) => {
   }
 });
 
+interface WxOrderQueryResponse {
+  trade_state?: string;
+  code?: string;
+  message?: string;
+}
+
+/**
+ * 发起 HTTPS GET 请求到微信支付查询 API
+ */
+async function getFromWxPay(urlPath: string, auth: string): Promise<WxOrderQueryResponse> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.mch.weixin.qq.com',
+      path: urlPath,
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0',
+        'Authorization': auth,
+      },
+    };
+    const httpReq = https.request(options, (r) => {
+      let data = '';
+      r.on('data', (c) => (data += c));
+      r.on('end', () => {
+        try { resolve(JSON.parse(data) as WxOrderQueryResponse); } catch { reject(new Error('Invalid wx response')); }
+      });
+    });
+    httpReq.on('error', reject);
+    httpReq.end();
+  });
+}
+
 /**
  * 查询微信订单状态（主动查询，不依赖回调）
  * 用于回调失败时的补偿机制
@@ -424,36 +454,11 @@ async function queryWxPaymentStatus(outTradeNo: string): Promise<{
     const auth = buildV3Authorization('GET', urlPath, '', payCfg.mchId, payCfg.serialNo, privateKey);
 
     logger.info(`[payment/query] Querying WeChat order: ${outTradeNo}`);
-
-    const wxRes = await new Promise<any>((resolve, reject) => {
-      const options = {
-        hostname: 'api.mch.weixin.qq.com',
-        path: urlPath,
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0',
-          'Authorization': auth,
-        },
-      };
-      const httpReq = https.request(options, (r) => {
-        let data = '';
-        r.on('data', (c) => (data += c));
-        r.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            reject(new Error('Invalid wx response'));
-          }
-        });
-      });
-      httpReq.on('error', reject);
-      httpReq.end();
-    });
+    const wxRes = await getFromWxPay(urlPath, auth);
 
     if (wxRes.code) {
       logger.warn(`[payment/query] WeChat query failed: ${outTradeNo}`, wxRes);
-      return { success: false, errorMsg: wxRes.message || 'Unknown error' };
+      return { success: false, errorMsg: wxRes.message ?? 'Unknown error' };
     }
 
     const tradeState = wxRes.trade_state;
@@ -492,7 +497,7 @@ router.get('/status/:sessionId', authMiddleware, async (req: MiniappRequest, res
 
     // 如果状态是completed，尝试查询并更新待支付订单
     if (session.status === 'completed' || session.status === 'invite_unlocked') {
-      const paymentUpdated = await handlePendingPayment(sessionId, req.userId!);
+      const paymentUpdated = await handlePendingPayment(sessionId, req.userId ?? '');
 
       if (paymentUpdated) {
         sendSucc(res, { status: 'paid', isPaid: true });
@@ -511,6 +516,19 @@ router.get('/status/:sessionId', authMiddleware, async (req: MiniappRequest, res
 });
 
 /**
+ * 查询成功后更新订单和 session 状态
+ */
+async function markPaymentSuccess(outTradeNo: string, sessionId: string): Promise<void> {
+  const Payments = getPaymentModel();
+  const Sessions = getSessionModel();
+  const paidAt = new Date();
+  logger.info(`[payment/query] Payment confirmed SUCCESS: ${outTradeNo}, updating DB...`);
+  await Payments.updateOne({ outTradeNo }, { $set: { status: 'success', paidAt } });
+  await Sessions.updateOne({ sessionId }, { $set: { status: 'paid', paidAt } });
+  logger.info(`[payment/query] DB updated successfully for order: ${outTradeNo}`);
+}
+
+/**
  * POST /payment/query/:outTradeNo
  * 手动触发查询微信订单状态并更新数据库
  * 用于测试或手动补偿回调失败的订单
@@ -520,26 +538,13 @@ router.post('/query/:outTradeNo', authMiddleware, async (req: MiniappRequest, re
 
   try {
     const Payments = getPaymentModel();
-    const Sessions = getSessionModel();
-
-    // 查找订单
     const payment = await Payments.findOne({ outTradeNo }).lean().exec();
-    if (!payment) {
-      sendErr(res, 'Order not found', 404);
-      return;
-    }
-
-    // 验证订单所属用户
-    if (payment.openId !== req.userId) {
-      sendErr(res, 'Unauthorized', 403);
-      return;
-    }
+    if (!payment) { sendErr(res, 'Order not found', 404); return; }
+    if (payment.openId !== req.userId) { sendErr(res, 'Unauthorized', 403); return; }
 
     logger.info(`[payment/query] Manual query triggered for order: ${outTradeNo}`);
 
-    // 查询微信订单状态
     const queryResult = await queryWxPaymentStatus(outTradeNo);
-
     if (!queryResult.success) {
       logger.warn(`[payment/query] Query failed for ${outTradeNo}: ${queryResult.errorMsg}`);
       sendErr(res, `Query failed: ${queryResult.errorMsg}`, 500);
@@ -547,22 +552,8 @@ router.post('/query/:outTradeNo', authMiddleware, async (req: MiniappRequest, re
     }
 
     const tradeState = queryResult.tradeState;
-
     if (tradeState === 'SUCCESS') {
-      // 支付成功，更新数据库
-      const paidAt = new Date();
-      logger.info(`[payment/query] Payment confirmed SUCCESS: ${outTradeNo}, updating DB...`);
-
-      await Payments.updateOne(
-        { outTradeNo },
-        { $set: { status: 'success', paidAt } }
-      );
-      await Sessions.updateOne(
-        { sessionId: payment.sessionId },
-        { $set: { status: 'paid', paidAt } }
-      );
-
-      logger.info(`[payment/query] DB updated successfully for order: ${outTradeNo}`);
+      await markPaymentSuccess(outTradeNo, payment.sessionId);
       sendSucc(res, { tradeState, updated: true, message: 'Payment confirmed and DB updated' });
     } else {
       logger.info(`[payment/query] Order ${outTradeNo} current state: ${tradeState}`);

@@ -7,7 +7,6 @@
  * @LastEditTime: 2025-01-15 16:00:16
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type TGameInfo = {
   id: string;
   publicUrl: string;
@@ -23,15 +22,6 @@ export type TGameInfo = {
 
 export type TstatusString = 'normal' | 'maintenance' | 'closing';
 
-/* eslint-disable @typescript-eslint/no-unsafe-function-type */
-export interface IStorage {
-  valueMapMem: Map<string, any>;
-  valueMapMemExt?: Map<string, any>;
-  sName: string;
-  setPlayerInfoById: Function;
-  saveValueByPlayerId: Function;
-  getValueByPlayerId: Function;
-}
 export type ResultWithError<T> =
   | [BadCode.Ok, T]
   | [Exclude<BadCode, BadCode.Ok>, undefined];

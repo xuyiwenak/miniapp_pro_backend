@@ -2,7 +2,7 @@ import { envFirst } from './env';
 import { gameLogger } from './logger';
 import { readSysconfigJsonFileUtf8 } from './sysconfig_path';
 
-export function loadSysConfigJson(filename: string): [any, string] {
+export function loadSysConfigJson(filename: string): [unknown, string] {
   const environment = envFirst('environment', 'ENV') ?? 'development';
   const serverProvide = envFirst('serverProvide', 'SERVER_PROVIDE') ?? '';
   try {

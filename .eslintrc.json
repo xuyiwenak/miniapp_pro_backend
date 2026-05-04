@@ -2,7 +2,6 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "project": "./tsconfig.json",
     "ecmaVersion": 2021,
     "sourceType": "module"
   },
@@ -12,19 +11,49 @@
     "plugin:@typescript-eslint/recommended"
   ],
   "rules": {
-    "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
     "@typescript-eslint/explicit-function-return-type": "off",
     "@typescript-eslint/no-non-null-assertion": "warn",
-    "@typescript-eslint/no-var-requires": "warn",
-    "@typescript-eslint/ban-ts-comment": "warn",
-    "@typescript-eslint/ban-types": "warn",
+    "@typescript-eslint/no-var-requires": "error",
+    "@typescript-eslint/ban-ts-comment": [
+      "warn",
+      {
+        "ts-expect-error": "allow-with-description",
+        "minimumDescriptionLength": 5
+      }
+    ],
+    "@typescript-eslint/ban-types": "error",
+    "@typescript-eslint/prefer-ts-expect-error": "error",
 
     "camelcase": ["error", { "properties": "never" }],
     "quotes": ["error", "single", { "avoidEscape": true }],
     "indent": ["error", 2, { "SwitchCase": 1 }],
-    "max-len": ["error", { "code": 120, "ignoreComments": true, "ignoreStrings": true, "ignoreTemplateLiterals": true, "ignoreUrls": true }],
-    "max-lines-per-function": ["warn", { "max": 40, "skipBlankLines": true, "skipComments": true }],
+    "max-len": [
+      "error",
+      {
+        "code": 120,
+        "ignoreComments": true,
+        "ignoreStrings": true,
+        "ignoreTemplateLiterals": true,
+        "ignoreUrls": true
+      }
+    ],
+    "max-lines-per-function": [
+      "warn",
+      {
+        "max": 40,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
     "no-magic-numbers": "off",
     "no-nested-ternary": "error",
     "eqeqeq": ["error", "always"],
@@ -33,7 +62,8 @@
     "no-console": "off",
     "eol-last": ["error", "always"],
     "no-trailing-spaces": "error",
-    "semi": ["error", "always"]
+    "semi": ["error", "always"],
+    "no-duplicate-imports": "error"
   },
   "overrides": [
     {

@@ -48,13 +48,14 @@ export class SysCfgComponent implements IBaseComponent {
     }
 
     // const config = ZoneConfig.parse(data);
-    let zoneList = data[globalVar.id]?.zoneList as Array<string>;
-    zoneList = zoneList ? zoneList : [];
+    const cfg = data as Record<string, unknown>;
+    const zoneEntry = cfg[globalVar.id] as { zoneList?: string[] } | undefined;
+    const zoneList = zoneEntry?.zoneList ?? [];
     this._server = {
       gameType: globalVar.gameType,
-      version: data.version,
+      version: cfg['version'] as number,
       serverId: globalVar.id,
-      registerServerUrl: data.RegisterServerUrl as string,
+      registerServerUrl: cfg['RegisterServerUrl'] as string,
       zoneIdList: zoneList,
     };
   }
@@ -66,24 +67,21 @@ export class SysCfgComponent implements IBaseComponent {
       return;
     }
 
-    const config = data;
+    const config = data as Record<string, unknown>;
 
-    // 假设配置文件包含 `db_global` 和 `db_server` 信息
-    this._db_global = config.db_global as DBCfg;
+    this._db_global = config['db_global'] as DBCfg;
     if (this._server.serverId) {
-      for (const [zone, dbConfig] of Object.entries(config.db_server)) {
+      for (const [zone, dbConfig] of Object.entries(config['db_server'] as Record<string, unknown>)) {
         this._db_server_map.set(zone, dbConfig as DBCfg);
       }
     }
-    // 如果包含多个区的配置，假设是 `db_zones`
-    if (config.db_zones) {
-      for (const [zone, dbConfig] of Object.entries(config.db_zones)) {
+    if (config['db_zones']) {
+      for (const [zone, dbConfig] of Object.entries(config['db_zones'] as Record<string, unknown>)) {
         this._db_zone_map.set(zone, dbConfig as DBCfg);
       }
     }
-
-    if (config.redis_global) {
-      this._redis_global = config.redis_global as RedisCfg;
+    if (config['redis_global']) {
+      this._redis_global = config['redis_global'] as RedisCfg;
     }
     logger.info('DB config loaded.');
   }

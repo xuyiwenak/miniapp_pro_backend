@@ -25,6 +25,10 @@ import { gameLogger, gameLogger as logger } from '../../util/logger';
 import { stopFrontServer } from '../../util/tool';
 import { getMiniappPort, initHttpServer, startHttpServer } from './httpServer';
 import { startMiniappServer } from './miniapp/server';
+// @ts-expect-error swagger-ui-express 无官方 @types，通过运行时依赖提供类型
+import swaggerUi from 'swagger-ui-express';
+import express from 'express';
+import swaggerFile from '../../../docs/public/front/openapi.json';
 
 // Entry function
 async function main() {
@@ -94,13 +98,6 @@ function swaggui() {
     EComName.GlobalVarComponent
   );
   if (globalVarComp.globalVar.environment === 'development') {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const swaggerUi = require('swagger-ui-express');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const express = require('express');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const swaggerFile = require('../../../docs/public/front/openapi.json');
-
     const app = express();
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
     app.listen(42999, () => {

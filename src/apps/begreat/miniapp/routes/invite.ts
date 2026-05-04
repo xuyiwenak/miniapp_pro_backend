@@ -27,7 +27,7 @@ function generateCode(): string {
  * 获取（或首次创建）当前用户的邀请码
  */
 router.get('/my-code', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const openId = req.userId!;
+  const openId = req.userId ?? '';
   try {
     const InviteCodes = getInviteCodeModel();
     let record = await InviteCodes.findOne({ openId }).lean().exec();
@@ -59,7 +59,7 @@ router.get('/my-code', authMiddleware, async (req: MiniappRequest, res: Response
  * 查询当前用户的邀请积分和累计邀请数
  */
 router.get('/stats', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const openId = req.userId!;
+  const openId = req.userId ?? '';
   try {
     const InviteRewards = getInviteRewardModel();
     const reward = await InviteRewards.findOne({ openId }).lean().exec();
@@ -79,7 +79,7 @@ router.get('/stats', authMiddleware, async (req: MiniappRequest, res: Response) 
  */
 router.post('/claim-unlock/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
-  const openId = req.userId!;
+  const openId = req.userId ?? '';
 
   try {
     const Sessions      = getSessionModel();

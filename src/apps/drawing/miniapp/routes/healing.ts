@@ -9,7 +9,7 @@ import { getCozeConfig } from '../../../../util/cozeWorkflow';
 import { analyzeArtwork } from '../../../../util/qwenVlAnalyzer';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 import { gameLogger as logger, cozeDebugLogger } from '../../../../util/logger';
-import type { IWork, IHealingScores } from '../../../../entity/work.entity';
+import type { IWork, IHealingData, IHealingScores } from '../../../../entity/work.entity';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../dbservice/model/ZoneDBModel';
@@ -604,6 +604,47 @@ async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
   await applyHealingSuccessFromRunId(jobId, output);
 }
 
+function buildHealingStatusResponse(workId: string, healing: IHealingData): Record<string, unknown> {
+  const dominant = pickDominantEmotion(healing.scores);
+  return {
+    workId,
+    status: 'success',
+    scores: healing.scores,
+    scoreDimensions: SCORE_DIMENSIONS,
+    summary: healing.summary,
+    colorAnalysis: healing.colorAnalysis,
+    isPublic: healing.isPublic,
+    dominantEmotion: dominant.key,
+    dominantEmotionLabel: dominant.label,
+    dominantEmotionScore: dominant.value,
+    compositionReport: healing.compositionReport,
+    lineAnalysis: healing.lineAnalysis,
+    suggestion: healing.suggestion,
+    keyColors: healing.keyColors,
+  };
+}
+
+function mapHealingListItem(w: IWork & { healing: IHealingData }): Record<string, unknown> {
+  const healing = w.healing;
+  const cover = w.images?.[0];
+  const dominant = pickDominantEmotion(healing.scores);
+  const rawCoverUrl = cover?.url ?? '/static/home/card0.png';
+  const coverUrl = rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawCoverUrl) : rawCoverUrl;
+  return {
+    workId: w.workId,
+    isPublic: healing.isPublic,
+    status: healing.status,
+    scores: healing.scores,
+    dominantEmotion: dominant.key,
+    dominantEmotionLabel: dominant.label,
+    dominantEmotionScore: dominant.value,
+    coverUrl,
+    desc: w.desc ?? '',
+    tags: w.tags ?? [],
+    createdAt: healing.analyzedAt ?? w.updatedAt,
+  };
+}
+
 router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
@@ -663,70 +704,28 @@ router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Respons
 router.get('/status', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const workId = (req.query?.workId as string | undefined)?.trim();
   const userId = req.userId;
-
-  if (!workId) {
-    sendErr(res, 'Missing workId', 400);
-    return;
-  }
-  if (!userId) {
-    sendErr(res, 'Unauthorized', 401);
-    return;
-  }
-
+  if (!workId) { sendErr(res, 'Missing workId', 400); return; }
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const Work = getWorkModel();
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
-    if (!work) {
-      sendErr(res, 'Work not found', 404);
-      return;
-    }
-    if (work.authorId !== userId) {
-      sendErr(res, 'Forbidden', 403);
-      return;
-    }
-
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+    if (work.authorId !== userId) { sendErr(res, 'Forbidden', 403); return; }
     const healing = work.healing;
-    if (!healing) {
-      sendSucc(res, { workId, status: 'none' });
-      return;
-    }
-
+    if (!healing) { sendSucc(res, { workId, status: 'none' }); return; }
     if (healing.status === 'pending') {
-      sendSucc(res, { workId, status: 'pending', submittedAt: healing.submittedAt, estimatedSeconds: HEALING_ESTIMATED_SECONDS });
+      sendSucc(res, {
+        workId, status: 'pending',
+        submittedAt: healing.submittedAt, estimatedSeconds: HEALING_ESTIMATED_SECONDS,
+      });
       return;
     }
-
-    if (healing.status === 'failed') {
-      sendSucc(res, { workId, status: 'failed' });
-      return;
-    }
-
-    const dominant = pickDominantEmotion(healing.scores);
-    sendSucc(res, {
-      workId,
-      status: 'success',
-      scores: healing.scores,
-      scoreDimensions: SCORE_DIMENSIONS,
-      summary: healing.summary,
-      colorAnalysis: healing.colorAnalysis,
-      isPublic: healing.isPublic,
-      dominantEmotion: dominant.key,
-      dominantEmotionLabel: dominant.label,
-      dominantEmotionScore: dominant.value,
-      compositionReport: healing.compositionReport,
-      lineAnalysis: healing.lineAnalysis,
-      suggestion: healing.suggestion,
-      keyColors: healing.keyColors,
-    });
+    if (healing.status === 'failed') { sendSucc(res, { workId, status: 'failed' }); return; }
+    sendSucc(res, buildHealingStatusResponse(workId, healing));
   } catch (err) {
     logRequestError('healing.ts:status:error', 'healing status error', {
-      req,
-      requestBody: { workId },
-      statusCode: 500,
-      extra: {
-        errorName: (err as Error).name,
-        errorMessage: (err as Error).message,
-      },
+      req, requestBody: { workId }, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Get status failed', 500);
   }
@@ -773,57 +772,22 @@ router.get('/report', async (req: MiniappRequest, res: Response) => {
 
 router.get('/list', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
-  if (!userId) {
-    sendErr(res, 'Unauthorized', 401);
-    return;
-  }
-
-  logRequest('healing.ts:list:entry', 'healing list request', {
-    req,
-    requestBody: { userId },
-  });
-
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  logRequest('healing.ts:list:entry', 'healing list request', { req, requestBody: { userId } });
   try {
     const Work = getWorkModel();
     const works = (await Work.find({ authorId: userId, 'healing.status': 'success' })
       .sort({ 'healing.analyzedAt': -1, updatedAt: -1 })
       .lean()
       .exec()) as IWork[];
-
-    const list = works.map((w) => {
-      const healing = w.healing!;
-      const cover = w.images?.[0];
-      const dominant = pickDominantEmotion(healing.scores);
-      const rawCoverUrl = cover?.url ?? '/static/home/card0.png';
-      const coverUrl =
-        rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX)
-          ? resolveImageUrl(rawCoverUrl)
-          : rawCoverUrl;
-
-      return {
-        workId: w.workId,
-        isPublic: healing.isPublic,
-        status: healing.status,
-        scores: healing.scores,
-        dominantEmotion: dominant.key,
-        dominantEmotionLabel: dominant.label,
-        dominantEmotionScore: dominant.value,
-        coverUrl,
-        desc: w.desc ?? '',
-        tags: w.tags ?? [],
-        createdAt: healing.analyzedAt ?? w.updatedAt,
-      };
-    });
-
+    const list = works
+      .filter((w): w is IWork & { healing: IHealingData } => w.healing !== null && w.healing !== undefined)
+      .map(mapHealingListItem);
     sendSucc(res, list);
   } catch (err) {
     logRequestError('healing.ts:list:error', 'healing list error', {
-      req,
-      statusCode: 500,
-      extra: {
-        errorName: (err as Error).name,
-        errorMessage: (err as Error).message,
-      },
+      req, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Get list failed', 500);
   }
@@ -833,52 +797,22 @@ router.post('/privacy', authMiddleware, async (req: MiniappRequest, res: Respons
   const body = (req.body?.data ?? req.body) as { workId?: string; isPublic?: boolean };
   const workId = body?.workId?.trim();
   const isPublic = body?.isPublic;
-
   const userId = req.userId;
-  if (!userId) {
-    sendErr(res, 'Unauthorized', 401);
-    return;
-  }
-
-  logRequest('healing.ts:privacy:entry', 'healing privacy request', {
-    req,
-    requestBody: body,
-  });
-
-  if (!workId || typeof isPublic !== 'boolean') {
-    sendErr(res, 'Invalid params', 400);
-    return;
-  }
-
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  logRequest('healing.ts:privacy:entry', 'healing privacy request', { req, requestBody: body });
+  if (!workId || typeof isPublic !== 'boolean') { sendErr(res, 'Invalid params', 400); return; }
   try {
     const Work = getWorkModel();
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
-
-    if (!work) {
-      sendErr(res, 'Work not found', 404);
-      return;
-    }
-    if (work.authorId !== userId) {
-      sendErr(res, 'Forbidden', 403);
-      return;
-    }
-    if (!work.healing) {
-      sendErr(res, 'Report not found', 404);
-      return;
-    }
-
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+    if (work.authorId !== userId) { sendErr(res, 'Forbidden', 403); return; }
+    if (!work.healing) { sendErr(res, 'Report not found', 404); return; }
     await Work.updateOne({ workId }, { $set: { 'healing.isPublic': isPublic } }).exec();
-
     sendSucc(res, { workId, isPublic });
   } catch (err) {
     logRequestError('healing.ts:privacy:error', 'healing privacy error', {
-      req,
-      requestBody: body,
-      statusCode: 500,
-      extra: {
-        errorName: (err as Error).name,
-        errorMessage: (err as Error).message,
-      },
+      req, requestBody: body, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Update privacy failed', 500);
   }
@@ -888,45 +822,20 @@ router.post('/delete', authMiddleware, async (req: MiniappRequest, res: Response
   const userId = req.userId;
   const body = (req.body?.data ?? req.body) as { workId?: string };
   const workId = body?.workId?.trim();
-
-  if (!userId) {
-    sendErr(res, 'Unauthorized', 401);
-    return;
-  }
-
-  if (!workId) {
-    sendErr(res, 'Missing workId', 400);
-    return;
-  }
-
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  if (!workId) { sendErr(res, 'Missing workId', 400); return; }
   try {
     const Work = getWorkModel();
     const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
-
-    if (!work) {
-      sendErr(res, 'Work not found', 404);
-      return;
-    }
-    if (work.authorId !== userId) {
-      sendErr(res, 'Forbidden', 403);
-      return;
-    }
-    if (!work.healing) {
-      sendErr(res, 'Report not found', 404);
-      return;
-    }
-
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+    if (work.authorId !== userId) { sendErr(res, 'Forbidden', 403); return; }
+    if (!work.healing) { sendErr(res, 'Report not found', 404); return; }
     await Work.updateOne({ workId }, { $set: { healing: null } }).exec();
     sendSucc(res, { workId });
   } catch (err) {
     logRequestError('healing.ts:delete:error', 'healing delete error', {
-      req,
-      requestBody: body,
-      statusCode: 500,
-      extra: {
-        errorName: (err as Error).name,
-        errorMessage: (err as Error).message,
-      },
+      req, requestBody: body, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Delete report failed', 500);
   }

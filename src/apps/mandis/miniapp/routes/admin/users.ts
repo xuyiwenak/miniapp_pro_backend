@@ -1,6 +1,5 @@
-import { Router, Response } from 'express';
-import type { AdminRequest } from '../../middleware/adminAuth';
-import { requireSuperAdmin } from '../../middleware/adminAuth';
+import { Router, type Response } from 'express';
+import { requireSuperAdmin, type AdminRequest } from '../../middleware/adminAuth';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { ComponentManager } from '../../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../../component/PlayerComponent';

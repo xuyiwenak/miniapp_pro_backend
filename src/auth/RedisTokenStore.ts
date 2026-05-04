@@ -108,7 +108,8 @@ export async function getHealDailyUsageBatch(userIds: string[]): Promise<Record<
   const values = await client.mget(...keys);
   const result: Record<string, number> = {};
   userIds.forEach((id, i) => {
-    result[id] = values[i] !== null ? parseInt(values[i]!, 10) : 0;
+    const val = values[i];
+    result[id] = val !== null && val !== undefined ? parseInt(val, 10) : 0;
   });
   return result;
 }

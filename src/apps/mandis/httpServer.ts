@@ -26,9 +26,12 @@ export function getMiniappPort(options: ServerGlobals): number {
 }
 
 export async function initHttpServer(options: ServerGlobals) {
+  if (!options.httpPort) {
+    throw new Error('httpPort is required');
+  }
   // 主 HTTP 服务只承载 TSRPC；miniapp 走独立 Express 端口（见 getMiniappPort）
   httpGameServer = new HttpServer<ServiceType_Public>(serviceProto_Public, {
-    port: options.httpPort!,
+    port: options.httpPort,
     logger: sharedHttpOptions.logger,
     json: true,
     logReqBody: true,

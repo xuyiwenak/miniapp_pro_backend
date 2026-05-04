@@ -132,6 +132,40 @@ function ageMultiplierForJob(age: number, job: IOccupationNorm): number {
   return 0.50;                       // 极度偏离
 }
 
+/**
+ * 计算三核心维度的方向性差值和加权距离平方
+ */
+function computeCoreDiffs(
+  input: MatchInput,
+  job: IOccupationNorm,
+): { oDiff: number; cDiff: number; nDiff: number; weightedSquares: number; isHighStressJob: boolean } {
+  const DIFF_CAP = 1.5;
+  const openness = input.big5Norm['O'] ?? 0;
+  const conscientiousness = input.big5Norm['C'] ?? 0;
+  const emotionalStability = -(input.big5Norm['N'] ?? 0);
+  const isHighStressJob = job.requiredBig5.emotionalStability >= 0.3;
+  const stabilityWeight = isHighStressJob ? 1.3 : 0.95;
+
+  let oDiff = openness - job.requiredBig5.openness;
+  let cDiff = conscientiousness - job.requiredBig5.conscientiousness;
+  let nDiff = emotionalStability - job.requiredBig5.emotionalStability;
+
+  if (oDiff > 0) oDiff *= 0.5;
+  if (cDiff > 0) cDiff *= 0.5;
+  if (nDiff > 0) nDiff *= 0.5;
+
+  oDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, oDiff));
+  cDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, cDiff));
+  nDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, nDiff));
+
+  const weightedSquares =
+    oDiff * oDiff * (1.2 + job.salaryIndex * 0.8) +
+    cDiff * cDiff * 1.05 +
+    nDiff * nDiff * stabilityWeight;
+
+  return { oDiff, cDiff, nDiff, weightedSquares, isHighStressJob };
+}
+
 function scoreCareer(
   input: MatchInput,
   job: IOccupationNorm,
@@ -141,42 +175,11 @@ function scoreCareer(
   breakdown: ScoreBreakdown;
   ageMultiplier: number;
 } {
-  // 核心维度
-  const openness = input.big5Norm['O'] ?? 0;
-  const conscientiousness = input.big5Norm['C'] ?? 0;
-  const emotionalStability = -(input.big5Norm['N'] ?? 0);
-
-  // 可选维度
   const extraversion = input.big5Norm['E'] ?? 0;
   const agreeableness = input.big5Norm['A'] ?? 0;
 
-  // 计算差异 - 使用方向性匹配
-  // 对于"越高越好"的维度（O, C, N），超出上限时减少惩罚
-  let oDiff = openness - job.requiredBig5.openness;
-  let cDiff = conscientiousness - job.requiredBig5.conscientiousness;
-  let nDiff = emotionalStability - job.requiredBig5.emotionalStability;
-
-  // 如果用户特质高于职业要求，只按一半差距计算（越高越好的维度，超出不扣分）
-  if (oDiff > 0) oDiff *= 0.5;
-  if (cDiff > 0) cDiff *= 0.5;
-  if (nDiff > 0) nDiff *= 0.5;
-
-  // 单维度差值限幅：防止单个极端维度（如极高N）压垮整体得分
-  // Z 分超过 ±1.5 后差距已足够表达"明显不适合"，继续放大无实际意义
-  const DIFF_CAP = 1.5;
-  oDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, oDiff));
-  cDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, cDiff));
-  nDiff = Math.max(-DIFF_CAP, Math.min(DIFF_CAP, nDiff));
-
-  // 动态调整情绪稳定性权重 - 高压职业(要求≥0.3)提高权重
-  const isHighStressJob = job.requiredBig5.emotionalStability >= 0.3;
-  const stabilityWeight = isHighStressJob ? 1.3 : 0.95;
-
-  // 基础加权距离（O, C, N）
-  let weightedSquares =
-    oDiff * oDiff * (1.2 + job.salaryIndex * 0.8) +
-    cDiff * cDiff * 1.05 +
-    nDiff * nDiff * stabilityWeight;
+  const { oDiff, cDiff, nDiff, isHighStressJob } = computeCoreDiffs(input, job);
+  let { weightedSquares } = computeCoreDiffs(input, job);
 
   const breakdown: ScoreBreakdown = {
     openness: -Math.abs(oDiff) * 12 * (0.7 + job.salaryIndex * 0.6),
@@ -184,14 +187,12 @@ function scoreCareer(
     emotionalStability: -Math.abs(nDiff) * (isHighStressJob ? 12 : 8),
   };
 
-  // 优化2: 启用外向性维度（如果职业要求）
   if (job.requiredBig5.extraversion !== undefined) {
     const eDiff = extraversion - job.requiredBig5.extraversion;
     weightedSquares += eDiff * eDiff * 1.0;
     breakdown.extraversion = -Math.abs(eDiff) * 10;
   }
 
-  // 优化3: 启用宜人性维度（如果职业要求）
   if (job.requiredBig5.agreeableness !== undefined) {
     const aDiff = agreeableness - job.requiredBig5.agreeableness;
     weightedSquares += aDiff * aDiff * 1.0;
@@ -199,26 +200,77 @@ function scoreCareer(
   }
 
   const distance = Math.sqrt(weightedSquares);
-
-  // logistic 映射：中段更敏感，头尾拉开
-  // center 从 1.35 放宽到 1.8，steepness 从 1.2 降低到 1.0，避免分数过度向低端压缩
   const steepness = 1.0;
   const center = 1.8;
   const baseScore = 100 / (1 + Math.exp(steepness * (distance - center)));
 
-  // 年龄调整：对范围内使用乘法加成；范围外最低不低于 0.75，防止极端年龄把低 base 压到接近 0
   const rawAgeMult = ageMultiplierForJob(input.age, job);
   const ageMultiplier = input.age >= job.ageRange.min && input.age <= job.ageRange.max
     ? rawAgeMult
     : Math.max(0.75, rawAgeMult);
 
-  // 软规则惩罚最低不低于 0.85，防止多条规则叠乘把已偏低的分数进一步压垮
   const safeSoftPenalty = Math.max(0.85, softPenaltyMultiplier);
-
-  const withAge = baseScore * ageMultiplier * safeSoftPenalty;
-  const finalScore = clampScore(withAge);
+  const finalScore = clampScore(baseScore * ageMultiplier * safeSoftPenalty);
 
   return { finalScore, breakdown, ageMultiplier };
+}
+
+interface MinReqInput {
+  emotionalStability: number;
+  conscientiousness: number;
+  extraversion: number;
+  agreeableness: number;
+}
+
+/**
+ * 检查职业最低特质要求，返回失败原因列表
+ */
+function checkMinimumRequirements(
+  job: IOccupationNorm,
+  traits: MinReqInput,
+): { failedReasons: string[]; failedIds: string[] } {
+  const failedReasons: string[] = [];
+  const failedIds: string[] = [];
+  const req = job.minimumRequirements;
+  if (!req) return { failedReasons, failedIds };
+
+  if (req.emotionalStability !== undefined && traits.emotionalStability < req.emotionalStability) {
+    failedReasons.push(`情绪稳定性不足（该职业要求 ≥ ${req.emotionalStability.toFixed(2)}，当前 ${traits.emotionalStability.toFixed(2)}）`);
+    failedIds.push('min_req_emotional_stability');
+  }
+  if (req.conscientiousness !== undefined && traits.conscientiousness < req.conscientiousness) {
+    failedReasons.push(`尽责性不足（该职业要求 ≥ ${req.conscientiousness.toFixed(2)}，当前 ${traits.conscientiousness.toFixed(2)}）`);
+    failedIds.push('min_req_conscientiousness');
+  }
+  if (req.extraversion !== undefined && traits.extraversion < req.extraversion) {
+    failedReasons.push(`外向性不足（该职业要求 ≥ ${req.extraversion.toFixed(2)}，当前 ${traits.extraversion.toFixed(2)}）`);
+    failedIds.push('min_req_extraversion');
+  }
+  if (req.agreeableness !== undefined && traits.agreeableness < req.agreeableness) {
+    failedReasons.push(`宜人性不足（该职业要求 ≥ ${req.agreeableness.toFixed(2)}，当前 ${traits.agreeableness.toFixed(2)}）`);
+    failedIds.push('min_req_agreeableness');
+  }
+  return { failedReasons, failedIds };
+}
+
+/**
+ * 将单个职业评分并映射为 ICareerMatch
+ */
+function scoreAndMapCareer(input: MatchInput, job: IOccupationNorm): ICareerMatch {
+  const ruleEval = evaluateExcludeRules(input, job);
+  const { finalScore, breakdown, ageMultiplier } = scoreCareer(input, job, ruleEval.softPenaltyMultiplier);
+  return {
+    code: job.code, title: job.title, matchScore: parseFloat(finalScore.toFixed(1)),
+    salaryIndex: job.salaryIndex, description: job.description, industry: job.industry,
+    level: job.level, salary: job.salary, skills: job.skills, aiRisk: job.aiRisk,
+    aiImpactAdvice: job.aiImpactAdvice, ageHints: job.ageHints,
+    scoreBreakdown: { ...breakdown, ageMultiplier, softPenaltyMultiplier: ruleEval.softPenaltyMultiplier },
+    ruleAdjustments: {
+      softHitIds: ruleEval.softHits.map((h) => h.id),
+      softHitReasons: ruleEval.softHits.map((h) => h.reason),
+      advice: ruleEval.advice,
+    },
+  };
 }
 
 /**
@@ -229,103 +281,53 @@ function scoreCareer(
  * 3. 改进年龄惩罚机制
  * 4. 添加硬性门槛过滤
  */
-export function matchCareersWithDiagnostics(
-  { big5Norm, age }: MatchInput,
-  occupations: IOccupationNorm[],
-  limit = 10
-): MatchDiagnostics {
-  const emotionalStability = -(big5Norm['N'] ?? 0);
-  const extraversion = big5Norm['E'] ?? 0;
-  const agreeableness = big5Norm['A'] ?? 0;
-  const conscientiousness = big5Norm['C'] ?? 0;
-  const input = { big5Norm, age };
-
-  const activeJobs = occupations.filter((job) => job.isActive);
+function collectHardExclusions(
+  activeJobs: IOccupationNorm[],
+  input: MatchInput,
+  traits: MinReqInput,
+): { passed: IOccupationNorm[]; hardExcluded: IExcludedCareer[] } {
   const hardExcluded: IExcludedCareer[] = [];
-
-  const jobsAfterExclude = activeJobs.filter((job) => {
+  const afterRule = activeJobs.filter((job) => {
     const ruleEval = evaluateExcludeRules(input, job);
     if (!ruleEval.hardBlocked) return true;
     hardExcluded.push({
-      code: job.code,
-      title: job.title,
+      code: job.code, title: job.title,
       reasons: ruleEval.hardHits.map((h) => h.reason),
       ruleIds: ruleEval.hardHits.map((h) => h.id),
       advice: ruleEval.advice,
     });
     return false;
   });
+  const passed = afterRule.filter((job) => {
+    const { failedReasons, failedIds } = checkMinimumRequirements(job, traits);
+    if (failedReasons.length === 0) return true;
+    hardExcluded.push({
+      code: job.code, title: job.title, reasons: failedReasons, ruleIds: failedIds,
+      advice: job.excludeRules?.advice ?? '建议先提升相关特质，再重新评估该职业的适合度。',
+    });
+    return false;
+  });
+  return { passed, hardExcluded };
+}
 
-  const results = jobsAfterExclude
-    // 硬性门槛过滤：不满足最低要求的职业纳入 hardExcluded，附带中文原因说明
-    .filter((job) => {
-      if (!job.minimumRequirements) return true;
-      const req = job.minimumRequirements;
-      const failedReasons: string[] = [];
-      const failedIds: string[] = [];
+export function matchCareersWithDiagnostics(
+  { big5Norm, age }: MatchInput,
+  occupations: IOccupationNorm[],
+  limit = 10
+): MatchDiagnostics {
+  const traits: MinReqInput = {
+    emotionalStability: -(big5Norm['N'] ?? 0),
+    extraversion: big5Norm['E'] ?? 0,
+    agreeableness: big5Norm['A'] ?? 0,
+    conscientiousness: big5Norm['C'] ?? 0,
+  };
+  const input = { big5Norm, age };
+  const { passed, hardExcluded } = collectHardExclusions(
+    occupations.filter((job) => job.isActive), input, traits,
+  );
 
-      if (req.emotionalStability !== undefined && emotionalStability < req.emotionalStability) {
-        failedReasons.push(`情绪稳定性不足（该职业要求 ≥ ${req.emotionalStability.toFixed(2)}，当前 ${emotionalStability.toFixed(2)}）`);
-        failedIds.push('min_req_emotional_stability');
-      }
-      if (req.conscientiousness !== undefined && conscientiousness < req.conscientiousness) {
-        failedReasons.push(`尽责性不足（该职业要求 ≥ ${req.conscientiousness.toFixed(2)}，当前 ${conscientiousness.toFixed(2)}）`);
-        failedIds.push('min_req_conscientiousness');
-      }
-      if (req.extraversion !== undefined && extraversion < req.extraversion) {
-        failedReasons.push(`外向性不足（该职业要求 ≥ ${req.extraversion.toFixed(2)}，当前 ${extraversion.toFixed(2)}）`);
-        failedIds.push('min_req_extraversion');
-      }
-      if (req.agreeableness !== undefined && agreeableness < req.agreeableness) {
-        failedReasons.push(`宜人性不足（该职业要求 ≥ ${req.agreeableness.toFixed(2)}，当前 ${agreeableness.toFixed(2)}）`);
-        failedIds.push('min_req_agreeableness');
-      }
-
-      if (failedReasons.length > 0) {
-        hardExcluded.push({
-          code: job.code,
-          title: job.title,
-          reasons: failedReasons,
-          ruleIds: failedIds,
-          advice: job.excludeRules?.advice ?? '建议先提升相关特质，再重新评估该职业的适合度。',
-        });
-        return false;
-      }
-      return true;
-    })
-    .map((job): ICareerMatch => {
-      const ruleEval = evaluateExcludeRules(input, job);
-      const { finalScore, breakdown, ageMultiplier } = scoreCareer(
-        input,
-        job,
-        ruleEval.softPenaltyMultiplier
-      );
-
-      return {
-        code:           job.code,
-        title:          job.title,
-        matchScore:     parseFloat(finalScore.toFixed(1)),
-        salaryIndex:    job.salaryIndex,
-        description:    job.description,
-        industry:       job.industry,
-        level:          job.level,
-        salary:         job.salary,
-        skills:         job.skills,
-        aiRisk:         job.aiRisk,
-        aiImpactAdvice: job.aiImpactAdvice,
-        ageHints:       job.ageHints,
-        scoreBreakdown: {
-          ...breakdown,
-          ageMultiplier,
-          softPenaltyMultiplier: ruleEval.softPenaltyMultiplier,
-        },
-        ruleAdjustments: {
-          softHitIds: ruleEval.softHits.map((h) => h.id),
-          softHitReasons: ruleEval.softHits.map((h) => h.reason),
-          advice: ruleEval.advice,
-        },
-      };
-    })
+  const results = passed
+    .map((job) => scoreAndMapCareer(input, job))
     .sort((a, b) => {
       if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
       if (b.salaryIndex !== a.salaryIndex) return b.salaryIndex - a.salaryIndex;
@@ -336,9 +338,7 @@ export function matchCareersWithDiagnostics(
   const softAdjusted: ISoftAdjustedCareer[] = results
     .filter((c) => (c.ruleAdjustments?.softHitIds?.length ?? 0) > 0)
     .map((c) => ({
-      code: c.code,
-      title: c.title,
-      matchScore: c.matchScore,
+      code: c.code, title: c.title, matchScore: c.matchScore,
       softPenaltyMultiplier: c.scoreBreakdown?.softPenaltyMultiplier ?? 1,
       reasons: c.ruleAdjustments?.softHitReasons ?? [],
       ruleIds: c.ruleAdjustments?.softHitIds ?? [],

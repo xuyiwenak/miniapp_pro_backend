@@ -35,7 +35,9 @@ router.get('/', async (req: AdminRequest, res: Response) => {
       const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
       const rawUrl = (cover as { url?: string } | null)?.url ?? '';
       const coverUrl = rawUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawUrl) : rawUrl;
-      const healingAnalyzed = !!(w as any).healing?.status && (w as any).healing.status !== 'none';
+      const wRec = w as Record<string, unknown>;
+      const healing = wRec.healing as { status?: string } | undefined;
+      const healingAnalyzed = !!(healing?.status) && healing.status !== 'none';
       return { ...w, coverUrl, healingAnalyzed };
     });
 
@@ -98,7 +100,8 @@ router.delete('/:workId', async (req: AdminRequest, res: Response) => {
     sendSucc(res, { workId });
 
     // 异步清理 OSS / 本地文件
-    const imageUrls = ((work as any).images as { url?: string }[] | undefined)
+    const workRec = work as Record<string, unknown>;
+    const imageUrls = (workRec.images as { url?: string }[] | undefined)
       ?.map((img) => img?.url)
       .filter(Boolean) as string[] | undefined;
     if (imageUrls?.length) {

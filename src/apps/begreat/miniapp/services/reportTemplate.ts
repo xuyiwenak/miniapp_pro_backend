@@ -234,61 +234,105 @@ function buildMatchReasonForCareer(
   return hits.length > 0 ? hits.join('，') : '你的综合人格特质与该职业方向高度契合';
 }
 
+function annotateCareer(
+  c: ICareerMatch,
+  big5Z: Record<string, number>,
+  occupationAgeGroup: OccupationAgeGroup,
+  ct: ReportTemplateJson['careers'],
+): IAnnotatedCareerMatch {
+  const industryLabel = c.industry?.primary
+    ? (ct.industries[c.industry.primary]?.label ?? c.industry.primary)
+    : undefined;
+  const levelInfo = c.level ? ct.levels[c.level] : undefined;
+  const salaryText = c.salary !== undefined
+    ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === 'month' ? '月' : '年'}`
+    : undefined;
+  return {
+    ...c,
+    industryLabel,
+    levelLabel: levelInfo?.label,
+    levelYears: levelInfo?.years,
+    salaryText,
+    ageContextText: shortenText(c.ageHints?.[occupationAgeGroup], 120),
+    matchReason: buildMatchReasonForCareer(big5Z, c, ct.match_reasons),
+    aiImpact: buildAiImpact(c.aiRisk, c.industry?.primary, c.aiImpactAdvice, ct.ai_impact),
+  };
+}
+
 function buildCareerSection(
   careers: ICareerMatch[],
   ageGroup: AgeGroup,
   age: number,
   gender: Gender,
   big5Z: Record<string, number>,
-  tpl: ReportTemplateJson
+  tpl: ReportTemplateJson,
 ): ICareerSection {
   const ct = tpl.careers;
-  const intro = ct.intro_by_age_gender[ageGroup]?.[gender] ?? '';
-  const ageCareerContext = ct.age_career_context[ageGroup] ?? '';
-
   const occupationAgeGroup = getOccupationAgeGroup(age);
-
-  const annotated: IAnnotatedCareerMatch[] = careers.map((c) => {
-    const industryLabel = c.industry?.primary
-      ? (ct.industries[c.industry.primary]?.label ?? c.industry.primary)
-      : undefined;
-
-    const levelInfo = c.level ? ct.levels[c.level] : undefined;
-
-    const salaryText =
-      c.salary !== undefined
-        ? `${c.salary.min}k–${c.salary.max}k / ${c.salary.unit === 'month' ? '月' : '年'}`
-        : undefined;
-
-    const ageContextText = shortenText(c.ageHints?.[occupationAgeGroup], 120);
-
-    // 每个职业独立计算匹配原因，突出与该职业最相关的特质维度
-    const matchReason = buildMatchReasonForCareer(big5Z, c, ct.match_reasons);
-
-    // 优先使用职业专属 AI 建议，其次行业通用
-    const aiImpact = buildAiImpact(c.aiRisk, c.industry?.primary, c.aiImpactAdvice, ct.ai_impact);
-
-    return {
-      ...c,
-      industryLabel,
-      levelLabel: levelInfo?.label,
-      levelYears: levelInfo?.years,
-      salaryText,
-      ageContextText,
-      matchReason,
-      aiImpact,
-    };
-  });
-
   return {
     sectionTitle: ct.section_title,
-    intro,
-    ageCareerContext,
-    careers: annotated,
+    intro: ct.intro_by_age_gender[ageGroup]?.[gender] ?? '',
+    ageCareerContext: ct.age_career_context[ageGroup] ?? '',
+    careers: careers.map((c) => annotateCareer(c, big5Z, occupationAgeGroup, ct)),
   };
 }
 
 // ── 报告快照主函数 ─────────────────────────────────────────────────────────────
+
+type AgeInfo = { label: string; stage: string; norm_comparison: string; reading_hint: string };
+type GenderInfo = { label: string; norm_comparison: string; reading_hint: string };
+
+function buildBig5Dimensions(
+  big5Z: Record<string, number>,
+  tpl: ReportTemplateJson,
+): { big5Dimensions: IBig5ReportDimension[]; big5T: Record<string, number> } {
+  const big5Dimensions: IBig5ReportDimension[] = [];
+  const big5T: Record<string, number> = {};
+  for (const code of BIG5_ORDER) {
+    const z = big5Z[code] ?? 0;
+    const t = zToT(z);
+    big5T[code] = t;
+    const levelKey = tToLevelKey(t);
+    const dimTpl = tpl.dimensions[code];
+    const levelTpl = tpl.levels[levelKey];
+    big5Dimensions.push({
+      code, name: dimTpl.name, desc: dimTpl.desc,
+      zScore: z, tScore: t, levelKey,
+      levelName: levelTpl.name, levelRange: levelTpl.range,
+      interpretation: dimTpl.texts[levelKey],
+    });
+  }
+  return { big5Dimensions, big5T };
+}
+
+function buildSummaryLines(
+  sortedByT: IBig5ReportDimension[],
+  big5T: Record<string, number>,
+  personalitySummary: string,
+  tpl: ReportTemplateJson,
+  ageInfo: AgeInfo,
+  genderInfo: GenderInfo,
+): { summaryLine: string; coverLine: string; advantageLine: string; improveLine: string; suggestionLine: string } {
+  const [highDim, , midDim, , lowDim] = sortedByT;
+  if (!highDim || !midDim || !lowDim) throw new Error('big5Dimensions must have exactly 5 entries');
+  const advNames = sortedByT.slice(0, 2).map((d) => d.name).join('、');
+  const impNames = sortedByT.slice(3, 5).map((d) => d.name).join('、');
+  const summaryLine = replacePlaceholders(tpl.summary.template, {
+    high_dim1: highDim.name, mid_dim1: midDim.name, low_dim1: lowDim.name, summary_text: personalitySummary,
+  });
+  const coverLine = replacePlaceholders(tpl.summary.cover_line, {
+    gender_label: genderInfo.label, age_label: ageInfo.label, life_stage: ageInfo.stage,
+    age_norm_line: ageInfo.norm_comparison, gender_norm_line: genderInfo.norm_comparison,
+  });
+  const advantageLine = replacePlaceholders(tpl.summary.advantage, { adv_text: `相对突出的维度包括 ${advNames}。` });
+  const improveLine = replacePlaceholders(tpl.summary.improve, {
+    imp_text: `可留意 ${impNames} 的平衡发展，结合日常情境逐步调整。`,
+  });
+  const suggestionLine = replacePlaceholders(tpl.summary.suggestion, {
+    career: careerHint(big5T), relationship: relationshipHint(big5T), growth: growthHint(big5T),
+  });
+  return { summaryLine, coverLine, advantageLine, improveLine, suggestionLine };
+}
 
 /**
  * 根据 BFI-2 模板与会话信息生成报告快照（写入 session.result.report）
@@ -305,62 +349,9 @@ export function buildBegreatReportSnapshot(input: {
   const ageInfo = tpl.norm_context.age_groups[ageGroup];
   const genderInfo = tpl.norm_context.genders[input.gender];
 
-  const big5Dimensions: IBig5ReportDimension[] = [];
-  const big5T: Record<string, number> = {};
-
-  for (const code of BIG5_ORDER) {
-    const z = input.big5Z[code] ?? 0;
-    const t = zToT(z);
-    big5T[code] = t;
-    const levelKey = tToLevelKey(t);
-    const dimTpl = tpl.dimensions[code];
-    const levelTpl = tpl.levels[levelKey];
-    big5Dimensions.push({
-      code,
-      name: dimTpl.name,
-      desc: dimTpl.desc,
-      zScore: z,
-      tScore: t,
-      levelKey,
-      levelName: levelTpl.name,
-      levelRange: levelTpl.range,
-      interpretation: dimTpl.texts[levelKey],
-    });
-  }
-
+  const { big5Dimensions, big5T } = buildBig5Dimensions(input.big5Z, tpl);
   const sortedByT = [...big5Dimensions].sort((a, b) => b.tScore - a.tScore);
-  const highDim = sortedByT[0]!;
-  const midDim = sortedByT[2]!;
-  const lowDim = sortedByT[4]!;
-
-  const advNames = sortedByT.slice(0, 2).map((d) => d.name).join('、');
-  const impNames = sortedByT.slice(3, 5).map((d) => d.name).join('、');
-
-  const summaryLine = replacePlaceholders(tpl.summary.template, {
-    high_dim1: highDim.name,
-    mid_dim1: midDim.name,
-    low_dim1: lowDim.name,
-    summary_text: input.personalitySummary,
-  });
-
-  const coverLine = replacePlaceholders(tpl.summary.cover_line, {
-    gender_label: genderInfo.label,
-    age_label: ageInfo.label,
-    life_stage: ageInfo.stage,
-    age_norm_line: ageInfo.norm_comparison,
-    gender_norm_line: genderInfo.norm_comparison,
-  });
-
-  const advantageLine = replacePlaceholders(tpl.summary.advantage, { adv_text: `相对突出的维度包括 ${advNames}。` });
-  const improveLine = replacePlaceholders(tpl.summary.improve, {
-    imp_text: `可留意 ${impNames} 的平衡发展，结合日常情境逐步调整。`,
-  });
-  const suggestionLine = replacePlaceholders(tpl.summary.suggestion, {
-    career: careerHint(big5T),
-    relationship: relationshipHint(big5T),
-    growth: growthHint(big5T),
-  });
-
+  const lines = buildSummaryLines(sortedByT, big5T, input.personalitySummary, tpl, ageInfo, genderInfo);
   const careerSection = input.topCareers?.length
     ? buildCareerSection(input.topCareers, ageGroup, input.age, input.gender, input.big5Z, tpl)
     : undefined;
@@ -369,7 +360,7 @@ export function buildBegreatReportSnapshot(input: {
     title: tpl.basic.title,
     normDesc: tpl.basic.norm_desc,
     disclaimer: tpl.basic.disclaimer,
-    coverLine,
+    coverLine: lines.coverLine,
     normContext: {
       tScoreLine: tpl.norm_context.t_score_line,
       fallbackNote: tpl.norm_context.fallback_note,
@@ -377,10 +368,10 @@ export function buildBegreatReportSnapshot(input: {
       genderReadingHint: genderInfo.reading_hint,
     },
     big5Dimensions,
-    summaryLine,
-    advantageLine,
-    improveLine,
-    suggestionLine,
+    summaryLine: lines.summaryLine,
+    advantageLine: lines.advantageLine,
+    improveLine: lines.improveLine,
+    suggestionLine: lines.suggestionLine,
     careerSection,
   };
 }

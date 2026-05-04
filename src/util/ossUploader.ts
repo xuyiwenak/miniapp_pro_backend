@@ -89,6 +89,28 @@ function hmacSha1Base64(key: string, data: string): string {
   return crypto.createHmac('sha1', key).update(data).digest('base64');
 }
 
+function buildOssPutOptions(
+  cfg: OssConfig, key: string, contentType: string, md5: string, date: string,
+): https.RequestOptions {
+  const host = ossHost(cfg);
+  const stringToSign = `PUT\n${md5}\n${contentType}\n${date}\n/${cfg.bucket}/${key}`;
+  const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
+  return {
+    hostname: host,
+    port: 443,
+    path: `/${key}`,
+    method: 'PUT',
+    headers: {
+      Authorization: `OSS ${cfg.accessKeyId}:${signature}`,
+      'Content-Type': contentType,
+      'Content-Length': 0, // overwritten by caller
+      'Content-MD5': md5,
+      Date: date,
+      Host: host,
+    },
+  };
+}
+
 /**
  * 上传文件到 OSS（PUT Object），返回 objectKey（不是公开 URL）。
  */
@@ -98,27 +120,11 @@ export function uploadToOss(
   contentType: string,
 ): Promise<string> {
   const cfg = loadOssConfig();
-  const host = ossHost(cfg);
   const date = new Date().toUTCString();
   const md5 = crypto.createHash('md5').update(buffer).digest('base64');
-
-  const stringToSign = `PUT\n${md5}\n${contentType}\n${date}\n/${cfg.bucket}/${key}`;
-  const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
-
-  const options: https.RequestOptions = {
-    hostname: host,
-    port: 443,
-    path: `/${key}`,
-    method: 'PUT',
-    headers: {
-      Authorization: `OSS ${cfg.accessKeyId}:${signature}`,
-      'Content-Type': contentType,
-      'Content-Length': buffer.length,
-      'Content-MD5': md5,
-      Date: date,
-      Host: host,
-    },
-  };
+  const options = buildOssPutOptions(cfg, key, contentType, md5, date);
+  // Set actual content length after building options
+  (options.headers as Record<string, unknown>)['Content-Length'] = buffer.length;
 
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {

@@ -98,8 +98,8 @@ export class WebsocketGameServer {
 
     this.serverState = {
       type: 1,
-      ip: ip!,
-      port: this.options.httpPort!,
+      ip: ip ?? '',
+      port: this.options.httpPort ?? 0,
       userNum: 0,
     };
 

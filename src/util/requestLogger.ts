@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
 import { gameLogger } from './logger';
 
+/** Express `req` has both `.path` and `.url` but they may not be typed on extended request objects */
+function getReqPath(req: Request): string {
+  return req.path ?? (req as Request & { url: string }).url;
+}
+
 export interface LogRequestOptions {
   req: Request;
   res?: Response;
@@ -23,7 +28,7 @@ export function logRequest(
   const { req, params, requestBody, responseBody, statusCode, extra = {} } = opts;
   const data: Record<string, unknown> = {
     method: req.method,
-    path: (req as any).path ?? req.path ?? (req as any).url,
+    path: getReqPath(req),
     query: req.query ?? {},
     params: params ?? (req.params ?? {}),
     request: requestBody !== undefined ? requestBody : req.body,
@@ -48,7 +53,7 @@ export function logRequestIn(
 ): void {
   const data: Record<string, unknown> = {
     method: req.method,
-    path: (req as any).path ?? req.path ?? (req as any).url,
+    path: getReqPath(req),
     query: req.query ?? {},
     params: req.params ?? {},
     body: req.body,
@@ -69,7 +74,7 @@ export function logRequestError(
   const { req, params, requestBody, responseBody, statusCode, extra = {} } = opts;
   const data: Record<string, unknown> = {
     method: req.method,
-    path: (req as any).path ?? req.path ?? (req as any).url,
+    path: getReqPath(req),
     query: req.query ?? {},
     params: params ?? (req.params ?? {}),
     request: requestBody !== undefined ? requestBody : req.body,

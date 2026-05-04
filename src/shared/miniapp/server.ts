@@ -25,17 +25,18 @@ export function setupCommonMiniappApp(
   app.use(express.json({ limit: options.jsonLimit }));
 
   if (options.cors) {
+    const corsOpts = options.cors;
     app.use((_req, res, next) => {
-      res.setHeader('Access-Control-Allow-Origin', options.cors!.origin);
+      res.setHeader('Access-Control-Allow-Origin', corsOpts.origin);
       res.setHeader(
         'Access-Control-Allow-Headers',
-        options.cors!.headers ?? 'Content-Type, Authorization',
+        corsOpts.headers ?? 'Content-Type, Authorization',
       );
-      if (options.cors!.methods) {
-        res.setHeader('Access-Control-Allow-Methods', options.cors!.methods);
+      if (corsOpts.methods) {
+        res.setHeader('Access-Control-Allow-Methods', corsOpts.methods);
       }
-      if (options.cors!.maxAge) {
-        res.setHeader('Access-Control-Max-Age', String(options.cors!.maxAge));
+      if (corsOpts.maxAge) {
+        res.setHeader('Access-Control-Max-Age', String(corsOpts.maxAge));
       }
       next();
     });

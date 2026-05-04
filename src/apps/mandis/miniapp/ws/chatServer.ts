@@ -12,9 +12,10 @@ export function attachChatWs(ws: WebSocket, userId: string): void {
     userIdToSockets.set(userId, set);
   }
   set.add(ws);
+  const capturedSet = set;
   ws.on('close', () => {
-    set!.delete(ws);
-    if (set!.size === 0) userIdToSockets.delete(userId);
+    capturedSet.delete(ws);
+    if (capturedSet.size === 0) userIdToSockets.delete(userId);
   });
 }
 
