@@ -29,7 +29,7 @@ import { startMiniappServer } from './miniapp/server';
 import swaggerUi from 'swagger-ui-express';
 import express from 'express';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const swaggerFile = require('../../../docs/public/front/openapi.json') as Record<string, unknown>;
+const swaggerFile = (() => { try { return require('../../../docs/app1/openapi.json'); } catch { return {}; } })() as Record<string, unknown>;
 
 // Entry function
 async function main() {
