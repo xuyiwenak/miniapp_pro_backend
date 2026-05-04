@@ -28,7 +28,8 @@ RUN npm run build \
   && test -f dist/apps/mandis/front.js
 
 # 移除开发依赖，仅保留生产环境需要的包
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm prune --production; fi
+# HUSKY=0 跳过 prepare 脚本（husky 是 devDep，--omit=dev 后不存在）
+RUN HUSKY=0 npm ci --omit=dev 2>/dev/null || npm prune --production
 
 
 # --- 第二阶段：运行阶段 ---
