@@ -109,8 +109,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      drawing_app:                     # 确保镜像先由 drawing_app build 完成
-        condition: service_started
     environment:
       NODE_ENV: production
       SYSCONFIG_ROOT: /app/config
@@ -143,8 +141,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      drawing_app:                     # 确保镜像先由 drawing_app build 完成
-        condition: service_started
     environment:
       NODE_ENV: production
       SYSCONFIG_ROOT: /app/config
