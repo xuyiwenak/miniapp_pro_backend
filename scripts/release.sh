@@ -63,7 +63,23 @@ git pull origin "$MASTER"
 if git show-ref --verify --quiet "refs/heads/$RELEASE"; then
   info "Checking out existing branch $RELEASE..."
   git checkout "$RELEASE"
-  git pull origin "$RELEASE" 2>/dev/null || true   # ok if remote doesn't exist yet
+  # Only pull if origin/release exists; require fast-forward to avoid silent conflict swallowing
+  if git ls-remote --exit-code origin "$RELEASE" &>/dev/null; then
+    git fetch origin "$RELEASE"
+    LOCAL=$(git rev-parse "$RELEASE")
+    REMOTE=$(git rev-parse "origin/$RELEASE")
+    BASE=$(git merge-base "$RELEASE" "origin/$RELEASE")
+    if [[ "$LOCAL" == "$REMOTE" ]]; then
+      info "$RELEASE is already up to date with origin/$RELEASE"
+    elif [[ "$BASE" == "$LOCAL" ]]; then
+      info "Fast-forwarding $RELEASE to origin/$RELEASE..."
+      git merge --ff-only "origin/$RELEASE"
+    elif [[ "$BASE" == "$REMOTE" ]]; then
+      info "Local $RELEASE is ahead of origin/$RELEASE, no pull needed"
+    else
+      err "$RELEASE has diverged from origin/$RELEASE — please resolve manually before releasing"
+    fi
+  fi
 else
   info "Creating local branch $RELEASE from origin/$MASTER..."
   git checkout -b "$RELEASE"
