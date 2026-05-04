@@ -11,8 +11,9 @@ import {
 } from '../services/CalculationEngine';
 import { matchCareersWithDiagnostics } from '../services/MatchingService';
 import { buildBegreatReportSnapshot } from '../services/reportTemplate';
-import type { Gender, AssessmentType } from '../../entity/session.entity';
+import type { Gender, AssessmentType, ICareerMatch } from '../../entity/session.entity';
 import { gameLogger as logger } from '../../../../util/logger';
+import { getRuntimeConfig } from '../../config/BegreatRuntimeConfig';
 import {
   BFI2_INSTRUMENT_VERSION,
   bfi2AdjustedScore,
@@ -55,7 +56,7 @@ function selectFromFacets(
   const selected: string[] = [];
   const remaining = new Map<string, string[]>();
   for (const facet of facets) {
-    const pool = shuffle(facetMap.get(facet)!);
+    const pool = shuffle(facetMap.get(facet) ?? []);
     if (pool.length === 0) continue;
     selected.push(pool[0]);
     if (pool.length > 1) remaining.set(facet, pool.slice(1));
@@ -67,12 +68,77 @@ function selectFromFacets(
   shuffle(remainingFacets); // 随机化分配顺序
   for (const facet of remainingFacets) {
     if (quota <= 0) break;
-    const pool = remaining.get(facet)!;
-    selected.push(pool[0]);
+    const pool = remaining.get(facet) ?? [];
+    if (pool.length > 0) selected.push(pool[0]);
     quota--;
   }
 
   return selected.slice(0, targetCount);
+}
+
+/**
+ * 检查每日测评次数限制，返回 true 表示已超限
+ */
+async function isDailyLimitExceeded(openId: string, assessmentType: AssessmentType): Promise<boolean> {
+  const DAILY_LIMITS: Record<AssessmentType, number> = {
+    BFI2_FREE: 3,
+    BFI2:      2,
+    MBTI:      2,
+    DISC:      2,
+  };
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const Sessions = getSessionModel();
+  const todayCount = await Sessions.countDocuments({ openId, assessmentType, createdAt: { $gte: todayStart } });
+  const { devOpenids } = getRuntimeConfig();
+  const isDev = (process.env.environment ?? 'development') === 'development' || devOpenids.includes(openId);
+  return !isDev && todayCount >= DAILY_LIMITS[assessmentType];
+}
+
+/**
+ * BFI2_FREE 题目选取：每维度按 facet 分组选 4 题
+ */
+async function selectBfi2FreeQuestions(gender: Gender): Promise<string[] | null> {
+  const Questions = getQuestionModel();
+  const allWithMeta = await Questions.find({
+    isActive: true,
+    modelType: 'BIG5',
+    $or: [{ gender }, { gender: 'both' }],
+    bfiFacet: { $exists: true, $ne: null },
+  })
+    .select('questionId dimension bfiFacet -_id')
+    .lean()
+    .exec();
+
+  if (allWithMeta.length === 0) return null;
+
+  const dimFacetMap = new Map<string, Map<string, string[]>>();
+  for (const dim of BIG5_DIMS) dimFacetMap.set(dim, new Map());
+
+  for (const q of allWithMeta) {
+    const dim = q.dimension as Big5Dim;
+    if (!BIG5_DIMS.includes(dim)) continue;
+    const facet = q.bfiFacet ?? '';
+    if (!facet) continue;
+    const facetMap = dimFacetMap.get(dim) ?? new Map<string, string[]>();
+    if (!facetMap.has(facet)) facetMap.set(facet, []);
+    (facetMap.get(facet) ?? []).push(q.questionId);
+    dimFacetMap.set(dim, facetMap);
+  }
+
+  for (const dim of BIG5_DIMS) {
+    const facetMap = dimFacetMap.get(dim) ?? new Map();
+    if (facetMap.size < 3) return null; // signal: insufficient facets
+  }
+
+  const perDimIds: string[] = [];
+  for (const dim of BIG5_DIMS) {
+    const facetMap = dimFacetMap.get(dim) ?? new Map<string, string[]>();
+    const picked = selectFromFacets(facetMap, BFI2_FREE_ITEMS_PER_DIM);
+    perDimIds.push(...picked);
+  }
+
+  return shuffle(perDimIds);
 }
 
 /**
@@ -116,135 +182,63 @@ router.get('/history', authMiddleware, async (req: MiniappRequest, res: Response
   }
 });
 
+async function prepareQuestionSet(
+  gender: Gender,
+  assessmentType: AssessmentType,
+): Promise<{ questionIds: string[]; instrumentVersion: string } | null> {
+  if (assessmentType === 'BFI2_FREE') {
+    const ids = await selectBfi2FreeQuestions(gender);
+    if (!ids) return null;
+    return { questionIds: ids, instrumentVersion: BFI2_FREE_INSTRUMENT_VERSION };
+  }
+  const Questions = getQuestionModel();
+  const all = await Questions.find({
+    isActive: true,
+    $or: [{ gender }, { gender: 'both' }],
+  })
+    .select('questionId')
+    .lean()
+    .exec();
+  if (all.length === 0) return null;
+  return { questionIds: shuffle(all.map((q) => q.questionId)), instrumentVersion: BFI2_INSTRUMENT_VERSION };
+}
+
 router.post('/start', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const openId = req.userId!;
+  const openId = req.userId ?? '';
   const { gender, age, assessmentType: rawType } = req.body ?? {};
   const assessmentType: AssessmentType = VALID_ASSESSMENT_TYPES.has(rawType) ? rawType : 'BFI2';
 
-  if (!gender || !['male', 'female'].includes(gender)) {
-    sendErr(res, 'Invalid gender', 400);
-    return;
-  }
+  if (!gender || !['male', 'female'].includes(gender)) { sendErr(res, 'Invalid gender', 400); return; }
   const ageNum = Number(age);
-  if (!ageNum || ageNum < 15 || ageNum > 80) {
-    sendErr(res, 'Invalid age', 400);
-    return;
-  }
+  if (!ageNum || ageNum < 15 || ageNum > 80) { sendErr(res, 'Invalid age', 400); return; }
 
   try {
-    // ── 每日测评次数限制 ──────────────────────────────────────────────
-    const DAILY_LIMITS: Record<AssessmentType, number> = {
-      BFI2_FREE: 3,
-      BFI2:      2,
-      MBTI:      2,
-      DISC:      2,
-    };
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const Sessions = getSessionModel();
-    const todayCount = await Sessions.countDocuments({
-      openId,
-      assessmentType,
-      createdAt: { $gte: todayStart },
-    });
-    const isDev = (process.env.environment ?? 'development') === 'development';
-    if (!isDev && todayCount >= DAILY_LIMITS[assessmentType]) {
+    const exceeded = await isDailyLimitExceeded(openId, assessmentType);
+    if (exceeded) {
       const typeLabel = assessmentType === 'BFI2_FREE' ? '免费版' : '完整版';
       sendErr(res, `今日${typeLabel}测评次数已达上限，请明天再来`, 429);
       return;
     }
-    // ─────────────────────────────────────────────────────────────────
-
-    const Questions = getQuestionModel();
     const activeNormVersion = await getActiveNormVersion('BIG5');
     if (!activeNormVersion) {
       sendErr(res, 'No active norm version found. Please import norms first.', 500);
       return;
     }
-
-    let selectedIds: string[];
-    let instrumentVersion: string;
-
-    if (assessmentType === 'BFI2_FREE') {
-      // ── BFI2_FREE：每维度选 4 题，覆盖全部 3 个 facet ──────────────
-      const allWithMeta = await Questions.find({
-        isActive: true,
-        modelType: 'BIG5',
-        $or: [{ gender: gender as Gender }, { gender: 'both' }],
-        bfiFacet: { $exists: true, $ne: null },
-      })
-        .select('questionId dimension bfiFacet -_id')
-        .lean()
-        .exec();
-
-      if (allWithMeta.length === 0) {
-        sendErr(res, 'Question bank is empty', 500);
-        return;
-      }
-
-      // 按维度 → facet 分组
-      const dimFacetMap = new Map<string, Map<string, string[]>>();
-      for (const dim of BIG5_DIMS) dimFacetMap.set(dim, new Map());
-
-      for (const q of allWithMeta) {
-        const dim = q.dimension as Big5Dim;
-        if (!BIG5_DIMS.includes(dim)) continue;
-        const facet = q.bfiFacet!;
-        const facetMap = dimFacetMap.get(dim)!;
-        if (!facetMap.has(facet)) facetMap.set(facet, []);
-        facetMap.get(facet)!.push(q.questionId);
-      }
-
-      // 校验每个维度至少有 3 个 facet 各 1 题
-      for (const dim of BIG5_DIMS) {
-        const facetMap = dimFacetMap.get(dim)!;
-        if (facetMap.size < 3) {
-          sendErr(res, `Dimension ${dim} has fewer than 3 facets in question bank`, 500);
-          return;
-        }
-      }
-
-      // 每维度按 2+1+1 策略选 4 题
-      const perDimIds: string[] = [];
-      for (const dim of BIG5_DIMS) {
-        const picked = selectFromFacets(dimFacetMap.get(dim)!, BFI2_FREE_ITEMS_PER_DIM);
-        perDimIds.push(...picked);
-      }
-
-      selectedIds = shuffle(perDimIds);
-      instrumentVersion = BFI2_FREE_INSTRUMENT_VERSION;
-    } else {
-      // ── BFI2（完整版）：全量题目打乱 ────────────────────────────────
-      const all = await Questions.find({
-        isActive: true,
-        $or: [{ gender: gender as Gender }, { gender: 'both' }],
-      })
-        .select('questionId')
-        .lean()
-        .exec();
-      if (all.length === 0) {
-        sendErr(res, 'Question bank is empty', 500);
-        return;
-      }
-      selectedIds = shuffle(all.map((q) => q.questionId));
-      instrumentVersion = BFI2_INSTRUMENT_VERSION;
+    const questionSet = await prepareQuestionSet(gender as Gender, assessmentType);
+    if (!questionSet) {
+      sendErr(res, 'Question bank is empty or missing facet coverage', 500);
+      return;
     }
-
+    const { questionIds, instrumentVersion } = questionSet;
+    const Sessions = getSessionModel();
     const sessionId = randomBytes(16).toString('hex');
     await Sessions.create({
-      sessionId,
-      openId,
-      assessmentType,
-      status: 'in_progress',
+      sessionId, openId, assessmentType, status: 'in_progress',
       userProfile: { gender: gender as Gender, age: ageNum },
-      instrumentVersion,
-      normVersion: activeNormVersion,
-      questionIds: selectedIds,
-      answers: [],
+      instrumentVersion, normVersion: activeNormVersion, questionIds, answers: [],
     });
-
-    const totalBatches = Math.ceil(selectedIds.length / BATCH_SIZE);
-    sendSucc(res, { sessionId, totalQuestions: selectedIds.length, totalBatches });
+    const totalBatches = Math.ceil(questionIds.length / BATCH_SIZE);
+    sendSucc(res, { sessionId, totalQuestions: questionIds.length, totalBatches });
   } catch (err) {
     logger.error('[assessment/start]', err);
     sendErr(res, 'Internal error', 500);
@@ -283,6 +277,28 @@ router.get('/questions/:sessionId', authMiddleware, async (req: MiniappRequest, 
 });
 
 /**
+ * 根据 batchIdx 从题库查询本批题目，按 session 题序排列
+ */
+async function fetchBatchQuestions(
+  questionIds: string[],
+  batchIdx: number,
+): Promise<Array<{ index: number; content: string }>> {
+  const start = batchIdx * BATCH_SIZE;
+  const batchIds = questionIds.slice(start, start + BATCH_SIZE);
+  const Questions = getQuestionModel();
+  const questions = await Questions.find({ questionId: { $in: batchIds } })
+    .select('questionId content -_id')
+    .lean()
+    .exec();
+  return batchIds
+    .map((id, i) => {
+      const q = questions.find((q) => q.questionId === id);
+      return q ? { index: start + i, content: q.content as string } : null;
+    })
+    .filter((x): x is { index: number; content: string } => x !== null);
+}
+
+/**
  * GET /assessment/batch/:sessionId/:batchIndex
  * 返回第 batchIndex 批题目（5题），不含 dimension/modelType（防刷题）
  */
@@ -301,32 +317,17 @@ router.get('/batch/:sessionId/:batchIndex', authMiddleware, async (req: MiniappR
     if (!session) { sendErr(res, 'Session not found', 404); return; }
     if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
-    const start = batchIdx * BATCH_SIZE;
-    const batchIds = session.questionIds.slice(start, start + BATCH_SIZE);
+    const batchStart = batchIdx * BATCH_SIZE;
+    const batchIds = session.questionIds.slice(batchStart, batchStart + BATCH_SIZE);
     if (batchIds.length === 0) { sendErr(res, 'No more batches', 400); return; }
 
-    const Questions = getQuestionModel();
-    const questions = await Questions.find({ questionId: { $in: batchIds } })
-      .select('questionId content -_id')
-      .lean()
-      .exec();
-
-    // 按 session 题序排列，只返回 index + content，不暴露 questionId/dimension
-    const globalStart = batchIdx * BATCH_SIZE;
-    const ordered = batchIds
-      .map((id, i) => {
-        const q = questions.find((q) => q.questionId === id);
-        return q ? { index: globalStart + i, content: q.content } : null;
-      })
-      .filter(Boolean);
-
-    const alreadyAnswered = session.answers.length;
+    const ordered = await fetchBatchQuestions(session.questionIds, batchIdx);
     const totalBatches = Math.ceil(session.questionIds.length / BATCH_SIZE);
 
     sendSucc(res, {
       batchIndex: batchIdx,
       questions: ordered,
-      answeredCount: alreadyAnswered,
+      answeredCount: session.answers.length,
       totalQuestions: session.questionIds.length,
       totalBatches,
       isLastBatch: batchIdx === totalBatches - 1,
@@ -376,160 +377,180 @@ router.post('/batch/:sessionId/:batchIndex', authMiddleware, async (req: Miniapp
   }
 });
 
-/**
- * POST /assessment/complete/:sessionId
- * 完成测评：计算得分、生成报告、存储结果
- */
+interface Big5ScoreResult {
+  rawBig5Mean: Record<string, number>;
+  big5DomainSum: Record<string, number>;
+  bfi2FacetMeans: Record<string, number>;
+  error?: string;
+}
+
+type DomainFacetAccumulator = {
+  domainAdjSum: Partial<Record<Big5Dim, number>>;
+  domainAdjCount: Partial<Record<Big5Dim, number>>;
+  facetAdjSum: Record<string, number>;
+  facetAdjCount: Record<string, number>;
+};
+
+function accumulateScores(
+  sortedAnswers: { index: number; score: number }[],
+  questionIds: string[],
+  dimMap: Map<string, Record<string, unknown>>,
+): DomainFacetAccumulator {
+  const acc: DomainFacetAccumulator = {
+    domainAdjSum: {}, domainAdjCount: {}, facetAdjSum: {}, facetAdjCount: {},
+  };
+  for (const ans of sortedAnswers) {
+    if (ans.index < 0 || ans.index >= questionIds.length) continue;
+    const qid = questionIds[ans.index];
+    const q = qid ? dimMap.get(qid) : undefined;
+    if (!q || q['modelType'] !== 'BIG5' || typeof q['bfiItemNo'] !== 'number') continue;
+    const adj = bfi2AdjustedScore(ans.score, q['bfiItemNo']);
+    const dim = q['dimension'] as Big5Dim;
+    acc.domainAdjSum[dim] = (acc.domainAdjSum[dim] ?? 0) + adj;
+    acc.domainAdjCount[dim] = (acc.domainAdjCount[dim] ?? 0) + 1;
+    const bfiFacet = typeof q['bfiFacet'] === 'string' ? q['bfiFacet'] : undefined;
+    if (bfiFacet) {
+      acc.facetAdjSum[bfiFacet] = (acc.facetAdjSum[bfiFacet] ?? 0) + adj;
+      acc.facetAdjCount[bfiFacet] = (acc.facetAdjCount[bfiFacet] ?? 0) + 1;
+    }
+  }
+  return acc;
+}
+
+function buildMeansFromAccumulator(
+  acc: DomainFacetAccumulator,
+  isFreeVersion: boolean,
+  assessmentType: string,
+): Big5ScoreResult {
+  const expectedPerDomain = isFreeVersion ? BFI2_FREE_ITEMS_PER_DIM : 12;
+  const rawBig5Mean: Record<string, number> = {};
+  const big5DomainSum: Record<string, number> = {};
+  for (const dim of BIG5_DIMS) {
+    const cnt = acc.domainAdjCount[dim] ?? 0;
+    const sum = acc.domainAdjSum[dim] ?? 0;
+    if (cnt !== expectedPerDomain) {
+      logger.error(`[assessment/complete] ${assessmentType} domain ${dim} count ${cnt}, expected ${expectedPerDomain}`);
+      return { rawBig5Mean, big5DomainSum, bfi2FacetMeans: {}, error: 'Assessment data inconsistent (BFI-2)' };
+    }
+    rawBig5Mean[dim] = parseFloat((sum / cnt).toFixed(4));
+    big5DomainSum[dim] = parseFloat(sum.toFixed(4));
+  }
+  const bfi2FacetMeans: Record<string, number> = {};
+  for (const [facet, cnt] of Object.entries(acc.facetAdjCount)) {
+    if (!isFreeVersion && cnt !== 4) {
+      logger.error(`[assessment/complete] BFI-2 facet ${facet} count ${cnt}, expected 4`);
+      return { rawBig5Mean, big5DomainSum, bfi2FacetMeans, error: 'Assessment data inconsistent (BFI-2 facets)' };
+    }
+    if (cnt > 0) bfi2FacetMeans[facet] = parseFloat(((acc.facetAdjSum[facet] ?? 0) / cnt).toFixed(4));
+  }
+  return { rawBig5Mean, big5DomainSum, bfi2FacetMeans };
+}
+
+/** 从答案 Map 计算 BFI-2 domain/facet 均分 */
+async function computeBig5Scores(
+  answerByIndex: Map<number, number>,
+  questionIds: string[],
+  isFreeVersion: boolean,
+  assessmentType: string,
+): Promise<Big5ScoreResult> {
+  const Questions = getQuestionModel();
+  const questionDims = await Questions.find({ questionId: { $in: questionIds } })
+    .select('questionId modelType dimension weight bfiItemNo bfiReverse bfiFacet -_id')
+    .lean()
+    .exec();
+  const dimMap = new Map<string, Record<string, unknown>>(
+    questionDims.map((q) => [q.questionId, q as Record<string, unknown>]),
+  );
+  const sortedAnswers = [...answerByIndex.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([index, score]) => ({ index, score }));
+  const acc = accumulateScores(sortedAnswers, questionIds, dimMap);
+  return buildMeansFromAccumulator(acc, isFreeVersion, assessmentType);
+}
+
+type AssessmentComputedData = {
+  big5Norm: Record<string, number>;
+  topCareers: ICareerMatch[];
+  hardExcluded: ReturnType<typeof matchCareersWithDiagnostics>['hardExcluded'];
+  softAdjusted: ReturnType<typeof matchCareersWithDiagnostics>['softAdjusted'];
+  label: string;
+  freeSummary: string;
+  report: ReturnType<typeof buildBegreatReportSnapshot>;
+  normMeta: { source?: string | null; sampleSize?: number | null } | null;
+};
+
+async function computeAssessmentData(
+  rawBig5Mean: Record<string, number>,
+  gender: Gender,
+  age: number,
+  normVersion: string,
+  isFreeVersion: boolean,
+): Promise<AssessmentComputedData> {
+  const big5Norm = await computeAllNormalizedScores(rawBig5Mean, gender, age, normVersion);
+  const Occupations = getOccupationModel();
+  const occupations = await Occupations.find({ isActive: true }).lean().exec();
+  const { topCareers, hardExcluded, softAdjusted } = matchCareersWithDiagnostics({ big5Norm, age }, occupations, 10);
+  const { label, summary } = buildPersonalityLabel(big5Norm);
+  const report = buildBegreatReportSnapshot({ gender, age, big5Z: big5Norm, personalitySummary: summary, topCareers });
+  const normMeta = await getNormMeta(normVersion);
+  const versionNote = isFreeVersion ? '\n\n（基于20题快速版，精度低于60题完整版）' : '';
+  return { big5Norm, topCareers, hardExcluded, softAdjusted, label, normMeta,
+    freeSummary: `${report.coverLine}\n\n${report.summaryLine}${versionNote}`, report };
+}
+
+function collectAnswerMap(
+  bodyAnswers: { index: number; score: number }[] | undefined,
+  existingAnswers: { index: number; score: number }[],
+  total: number,
+): Map<number, number> {
+  const source = (bodyAnswers && bodyAnswers.length > 0)
+    ? bodyAnswers.filter(
+      (a) => typeof a.index === 'number' && typeof a.score === 'number' &&
+             a.score >= 1 && a.score <= 5 && a.index >= 0 && a.index < total,
+    )
+    : existingAnswers;
+  const map = new Map<number, number>();
+  for (const a of source) map.set(a.index, a.score);
+  return map;
+}
+
+/** POST /assessment/complete/:sessionId — 完成测评：计算得分、生成报告、存储结果 */
 router.post('/complete/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
-
   try {
     const Sessions = getSessionModel();
     const session = await Sessions.findOne({ sessionId, openId: req.userId }).exec();
     if (!session) { sendErr(res, 'Session not found', 404); return; }
     if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
-    // 优先使用 body 中提交的答案（新流程），否则回退到分批写入的答案（旧流程）
-    const bodyAnswers: { index: number; score: number }[] | undefined = req.body?.answers;
-    if (bodyAnswers && bodyAnswers.length > 0) {
-      const total = session.questionIds.length;
-      const valid = bodyAnswers.filter(
-        (a) => typeof a.index === 'number' && typeof a.score === 'number' &&
-               a.score >= 1 && a.score <= 5 && a.index >= 0 && a.index < total
-      );
-      session.answers = valid;
-    }
-
-    const answerByIndex = new Map<number, number>();
-    for (const a of session.answers) answerByIndex.set(a.index, a.score);
+    const answerByIndex = collectAnswerMap(req.body?.answers, session.answers, session.questionIds.length);
     if (answerByIndex.size !== session.questionIds.length) {
       sendErr(res, `Incomplete or invalid: ${answerByIndex.size}/${session.questionIds.length} unique answers`, 400);
       return;
     }
-
-    // 获取所有已答题目的维度信息
-    const Questions = getQuestionModel();
-    const questionDims = await Questions.find({ questionId: { $in: session.questionIds } })
-      .select('questionId modelType dimension weight bfiItemNo bfiReverse bfiFacet -_id')
-      .lean()
-      .exec();
-
-    const dimMap = new Map(questionDims.map((q) => [q.questionId, q]));
-
-    const domainAdjSum: Partial<Record<Big5Dim, number>> = {};
-    const domainAdjCount: Partial<Record<Big5Dim, number>> = {};
-    const facetAdjSum: Record<string, number> = {};
-    const facetAdjCount: Record<string, number> = {};
-
-    const sortedAnswers = [...answerByIndex.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([index, score]) => ({ index, score }));
-
-    for (const ans of sortedAnswers) {
-      if (ans.index < 0 || ans.index >= session.questionIds.length) continue;
-      const qid = session.questionIds[ans.index];
-      const q = qid ? dimMap.get(qid) : undefined;
-      if (!q) continue;
-      if (q.modelType === 'BIG5' && typeof q.bfiItemNo === 'number') {
-        const adj = bfi2AdjustedScore(ans.score, q.bfiItemNo);
-        const dim = q.dimension as Big5Dim;
-        domainAdjSum[dim] = (domainAdjSum[dim] ?? 0) + adj;
-        domainAdjCount[dim] = (domainAdjCount[dim] ?? 0) + 1;
-        if (q.bfiFacet) {
-          facetAdjSum[q.bfiFacet] = (facetAdjSum[q.bfiFacet] ?? 0) + adj;
-          facetAdjCount[q.bfiFacet] = (facetAdjCount[q.bfiFacet] ?? 0) + 1;
-        }
-      }
-    }
-
     const isFreeVersion = session.assessmentType === 'BFI2_FREE';
-    // 完整版：每维度固定 12 题；免费版：每维度 BFI2_FREE_ITEMS_PER_DIM 题
-    const expectedPerDomain = isFreeVersion ? BFI2_FREE_ITEMS_PER_DIM : 12;
-
-    const rawBig5Mean: Record<string, number> = {};
-    const big5DomainSum: Record<string, number> = {};
-    for (const dim of BIG5_DIMS) {
-      const cnt = domainAdjCount[dim] ?? 0;
-      const sum = domainAdjSum[dim] ?? 0;
-      if (cnt !== expectedPerDomain) {
-        logger.error(`[assessment/complete] ${session.assessmentType} domain ${dim} item count ${cnt}, expected ${expectedPerDomain}`);
-        sendErr(res, 'Assessment data inconsistent (BFI-2)', 500);
-        return;
-      }
-      rawBig5Mean[dim] = parseFloat((sum / cnt).toFixed(4));
-      big5DomainSum[dim] = parseFloat(sum.toFixed(4));
-    }
-
-    // 子维度均分：完整版严格校验 4 题/facet；免费版宽松（允许 1-2 题/facet）
-    const bfi2FacetMeans: Record<string, number> = {};
-    for (const [facet, cnt] of Object.entries(facetAdjCount)) {
-      if (!isFreeVersion && cnt !== 4) {
-        logger.error(`[assessment/complete] BFI-2 facet ${facet} count ${cnt}, expected 4`);
-        sendErr(res, 'Assessment data inconsistent (BFI-2 facets)', 500);
-        return;
-      }
-      if (cnt > 0) {
-        bfi2FacetMeans[facet] = parseFloat(((facetAdjSum[facet] ?? 0) / cnt).toFixed(4));
-      }
-    }
-
+    const scoreResult = await computeBig5Scores(
+      answerByIndex, session.questionIds, isFreeVersion, session.assessmentType);
+    if (scoreResult.error) { sendErr(res, scoreResult.error, 500); return; }
+    const { rawBig5Mean, big5DomainSum, bfi2FacetMeans } = scoreResult;
+    const normVersion = session.normVersion ?? '';
     const { gender, age } = session.userProfile;
-    const normVersion = session.normVersion!;
-    const big5Norm = await computeAllNormalizedScores(rawBig5Mean, gender, age, normVersion);
-
-    // 职业匹配（含诊断信息：硬排除、软降权）
-    const Occupations = getOccupationModel();
-    const occupations = await Occupations.find({ isActive: true }).lean().exec();
-    const { topCareers, hardExcluded, softAdjusted } = matchCareersWithDiagnostics(
-      { big5Norm, age },
-      occupations,
-      10,
-    );
-
-    // 性格标签
-    const { label, summary } = buildPersonalityLabel(big5Norm);
-
-    const report = buildBegreatReportSnapshot({
-      gender,
-      age,
-      big5Z: big5Norm,
-      personalitySummary: summary,
-      topCareers,
-    });
-
-    // 常模元信息快照
-    const normMeta = await getNormMeta(normVersion);
-
-    // 免费版在 freeSummary 中注明为快速版
-    const versionNote = isFreeVersion ? '\n\n（基于20题快速版，精度低于60题完整版）' : '';
-    const freeSummary = `${report.coverLine}\n\n${report.summaryLine}${versionNote}`;
+    const { big5Norm, topCareers, hardExcluded, softAdjusted, label, freeSummary, report, normMeta } =
+      await computeAssessmentData(rawBig5Mean, gender, age, normVersion, isFreeVersion);
 
     if (isFreeVersion) {
-      // 快速版：结果不落库，计算完直接删除 session
       await session.deleteOne();
       sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report, topCareers });
       return;
     }
-
     session.result = {
-      big5Scores:    rawBig5Mean,
-      big5DomainSum,
-      bfi2FacetMeans,
-      big5Normalized: big5Norm,
-      topCareers,
-      hardExcluded,
-      softAdjusted,
-      freeSummary,
-      personalityLabel: label,
-      report,
+      big5Scores: rawBig5Mean, big5DomainSum, bfi2FacetMeans, big5Normalized: big5Norm,
+      topCareers, hardExcluded, softAdjusted, freeSummary, personalityLabel: label, report,
       instrumentVersion: session.instrumentVersion ?? BFI2_INSTRUMENT_VERSION,
-      normVersion,
-      normSource:        normMeta?.source ?? null,
-      normSampleSize:    normMeta?.sampleSize ?? null,
+      normVersion, normSource: normMeta?.source ?? null, normSampleSize: normMeta?.sampleSize ?? null,
     };
     session.status = 'completed';
     await session.save();
-
     sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
   } catch (err) {
     logger.error('[assessment/complete]', err);

@@ -28,6 +28,41 @@ function userIdGetterDefault(args: any[]): string {
   }
   return 'sys';
 }
+type UserQueueEntry = { queue: Subject<() => Promise<any>>; tasks: (() => Promise<any>)[] };
+
+function makeQueuedMethod(originalMethod: any, userIdGetter: (args: any[]) => string) {
+  return function (this: any, ...args: any[]) {
+    const userId = userIdGetter(args);
+    let userQueue: UserQueueEntry | undefined = userQueues.get(userId);
+    if (!userQueue) {
+      const queue = new Subject<() => Promise<any>>();
+      userQueue = { queue, tasks: [] };
+      userQueues.set(userId, userQueue);
+      queue.pipe(concatMap((task) => from(task()))).subscribe(); // 订阅执行任务队列
+    }
+    const resolvedQueue = userQueue;
+    if (resolvedQueue.tasks.length >= MAX_QUEUE_SIZE) {
+      resolvedQueue.tasks = [];
+      resolvedQueue.queue.complete(); // 完成当前队列，停止任务处理
+      return Promise.reject(new TsrpcError(`TooBusy Now:${BadCode.TooBusy}`));
+    }
+    return new Promise((resolve, reject) => {
+      const task = async () => {
+        try {
+          const result = await originalMethod.apply(this, args);
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        } finally {
+          resolvedQueue.tasks.shift(); // 从任务队列中移除已完成的任务
+        }
+      };
+      resolvedQueue.tasks.push(task); // 将任务添加到队列
+      resolvedQueue.queue.next(task); // 将任务推入队列
+    });
+  };
+}
+
 /**
  * 被修饰的函数处理同一个key的请求使用队列来处理
  * @param userIdGetter
@@ -36,47 +71,8 @@ function userIdGetterDefault(args: any[]): string {
 export function queueByUser(
   userIdGetter: (args: any[]) => string = userIdGetterDefault
 ) {
-  return function (
-    target: any,
-    propertyKey: string,
-    descriptor: PropertyDescriptor
-  ) {
-    const originalMethod = descriptor.value;
-
-    descriptor.value = function (...args: any[]) {
-      const userId = userIdGetter(args);
-      let userQueue = userQueues.get(userId);
-
-      if (!userQueue) {
-        const queue = new Subject<() => Promise<any>>();
-        userQueue = { queue, tasks: [] };
-        userQueues.set(userId, userQueue);
-        queue.pipe(concatMap((task) => from(task()))).subscribe(); // 订阅执行任务队列
-      }
-
-      if (userQueue!.tasks.length >= MAX_QUEUE_SIZE) {
-        userQueue!.tasks = [];
-        userQueue!.queue.complete(); // 完成当前队列，停止任务处理
-        return Promise.reject(new TsrpcError(`TooBusy Now:${BadCode.TooBusy}`));
-      }
-
-      return new Promise((resolve, reject) => {
-        const task = async () => {
-          try {
-            const result = await originalMethod.apply(this, args);
-            resolve(result);
-          } catch (error) {
-            reject(error);
-          } finally {
-            // 从任务队列中移除已完成的任务
-            userQueue!.tasks.shift();
-          }
-        };
-
-        userQueue!.tasks.push(task); // 将任务添加到队列
-        userQueue!.queue.next(task); // 将任务推入队列
-      });
-    };
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    descriptor.value = makeQueuedMethod(descriptor.value, userIdGetter);
   };
 }
 

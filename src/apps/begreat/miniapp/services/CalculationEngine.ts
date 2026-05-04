@@ -26,7 +26,8 @@ function normCacheKey(modelType: string, dimension: string, gender: string, ageG
  * 加载指定版本的全部常模到内存缓存（每个版本只查一次 DB）
  */
 async function loadNormCache(normVersion: string): Promise<NormCache> {
-  if (normCacheStore.has(normVersion)) return normCacheStore.get(normVersion)!;
+  const cached = normCacheStore.get(normVersion);
+  if (cached) return cached;
 
   const NormModel = getNormModel();
   const docs = await NormModel.find({ normVersion }).lean().exec();

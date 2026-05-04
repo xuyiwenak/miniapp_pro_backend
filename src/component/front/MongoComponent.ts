@@ -26,53 +26,35 @@ import {
   stopAllZoneConnection,
 } from '../../dbservice/model/ZoneDBModel';
 import { BaseMongoComponent } from '../mongo/BaseMongoComponent';
+import { SysCfgComponent } from '../SysCfgComponent';
 
 export class MongoComponent extends BaseMongoComponent implements IBaseComponent {
 
-  async start() {
-    const sysCfgComp = ComponentManager.instance.getComponent(
-      EComName.SysCfgComponent
-    );
-
-    // 先确认 mongo TCP 端口可达，再让 mongoose 尝试连接
-    if (sysCfgComp.db_global?.host) {
-      await this.waitForTcp(sysCfgComp.db_global.host, sysCfgComp.db_global.port ?? 27017);
+  private async connectGlobalDb(sysCfgComp: SysCfgComponent): Promise<void> {
+    const dbGlobal = sysCfgComp.db_global;
+    if (!dbGlobal) return;
+    if (dbGlobal.host) {
+      await this.waitForTcp(dbGlobal.host, dbGlobal.port ?? 27017);
     }
-    if (sysCfgComp.db_global) {
-      await this.connectWithRetry(() =>
-        this.connectDb(sysCfgComp.db_global!, {
-          connectedLog: 'MongoDB connected',
-          errorLog: 'MongoDB connection error:',
-          disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
-          reconnectedLog: 'MongoDB reconnected',
-          onConnected: initializeGlobalModel,
-        }),
-      );
-    }
-
-    const server = sysCfgComp.server.serverId;
-    const serverCfg = sysCfgComp.db_server_map.get(server);
-    assert(
-      serverCfg !== undefined,
-      `Server config not found for serverId: ${server}`
-    );
     await this.connectWithRetry(() =>
-      this.connectDb(serverCfg, {
+      this.connectDb(dbGlobal, {
         connectedLog: 'MongoDB connected',
         errorLog: 'MongoDB connection error:',
         disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
         reconnectedLog: 'MongoDB reconnected',
-        onConnected: initializeServerModel,
+        onConnected: initializeGlobalModel,
       }),
     );
+  }
 
+  private async connectZoneDbs(
+    sysCfgComp: SysCfgComponent,
+    server: string,
+  ): Promise<void> {
     const zoneList = sysCfgComp.server.zoneIdList;
     for (const zone of zoneList) {
       const zoneCfg = sysCfgComp.db_server_map.get(server);
-      assert(
-        zoneCfg !== undefined,
-        `Server config not found for zone: ${zone}`
-      );
+      assert(zoneCfg !== undefined, `Server config not found for zone: ${zone}`);
       await this.connectWithRetry(() =>
         this.connectDb(zoneCfg, {
           connectedLog: `MongoDB zone connected ${zone}`,
@@ -83,6 +65,29 @@ export class MongoComponent extends BaseMongoComponent implements IBaseComponent
         }),
       );
     }
+  }
+
+  async start() {
+    const sysCfgComp = ComponentManager.instance.getComponent(
+      EComName.SysCfgComponent
+    );
+
+    await this.connectGlobalDb(sysCfgComp);
+
+    const server = sysCfgComp.server.serverId;
+    const serverCfg = sysCfgComp.db_server_map.get(server);
+    assert(serverCfg !== undefined, `Server config not found for serverId: ${server}`);
+    await this.connectWithRetry(() =>
+      this.connectDb(serverCfg, {
+        connectedLog: 'MongoDB connected',
+        errorLog: 'MongoDB connection error:',
+        disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
+        reconnectedLog: 'MongoDB reconnected',
+        onConnected: initializeServerModel,
+      }),
+    );
+
+    await this.connectZoneDbs(sysCfgComp, server);
   }
 
   async stop() {

@@ -183,27 +183,23 @@ const MAX_POLL_COUNT = 60;
 export async function pollWorkflowResult(runId: string): Promise<string> {
   for (let i = 0; i < MAX_POLL_COUNT; i++) {
     const statuses = await queryWorkflowStatus(runId);
-    const status = statuses![0];
+    // queryWorkflowStatus throws if data is empty/undefined, so statuses is always defined here
+    const status = (statuses ?? [])[0];
+    if (!status) {
+      throw new Error(`Coze queryStatus returned empty data, run_id=${runId}`);
+    }
 
-    logger.info(
-      'Coze workflow poll',
-      'run_id=',
-      runId,
-      'attempt=',
-      i + 1,
-      'status=',
-      status?.execute_status,
-    );
+    logger.info('Coze workflow poll', 'run_id=', runId, 'attempt=', i + 1, 'status=', status.execute_status);
 
-    if (status!.execute_status === 'Success') {
-      const output = status!.output ?? '{}';
+    if (status.execute_status === 'Success') {
+      const output = status.output ?? '{}';
       logger.info('Coze workflow success, run_id=', runId, 'output=', output);
       return output;
     }
 
-    if (status!.execute_status === 'Fail') {
-      const errMsg = status!.error_message || 'Unknown workflow error';
-      logger.error('Coze workflow failed, run_id=', runId, 'error=', errMsg, 'output=', status!.output ?? '');
+    if (status.execute_status === 'Fail') {
+      const errMsg = status.error_message ?? 'Unknown workflow error';
+      logger.error('Coze workflow failed, run_id=', runId, 'error=', errMsg, 'output=', status.output ?? '');
       throw new Error(`Coze workflow failed: ${errMsg}`);
     }
 
@@ -218,12 +214,16 @@ export async function pollWorkflowResult(runId: string): Promise<string> {
  */
 export async function queryWorkflowOutputOnce(runId: string): Promise<string | null> {
   const statuses = await queryWorkflowStatus(runId);
-  const status = statuses![0];
+  // queryWorkflowStatus throws if data is empty/undefined, so statuses is always defined here
+  const status = (statuses ?? [])[0];
+  if (!status) {
+    throw new Error(`Coze queryStatus returned empty data, run_id=${runId}`);
+  }
   if (status.execute_status === 'Success') {
     return status.output ?? '{}';
   }
   if (status.execute_status === 'Fail') {
-    const errMsg = status.error_message || 'Unknown workflow error';
+    const errMsg = status.error_message ?? 'Unknown workflow error';
     throw new Error(`Coze workflow failed: ${errMsg}`);
   }
   return null;

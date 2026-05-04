@@ -32,7 +32,7 @@ async function main() {
 
   await startRegisteredComponents();
 
-  await startBegreatServer(args.miniappApiPort!);
+  await startBegreatServer(args.miniappApiPort ?? 41002);
 }
 
 main().catch((err) => {

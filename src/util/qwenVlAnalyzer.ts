@@ -93,23 +93,16 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
-export async function analyzeArtwork(imageUrl: string, desc: string, tags: string): Promise<string> {
-  const cfg = getQwenVlConfig();
+function buildAnalyzePostData(cfg: QwenVlConfig, imageUrl: string, desc: string, tags: string): Buffer {
   const model = cfg.model ?? DEFAULT_MODEL;
-  const baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-
-  logger.info('QwenVL analyze start model=', model, 'imageUrl length=', imageUrl.length);
-
   const contextLines = [
     desc && `创作者描述：${desc}`,
     tags && `作品标签：${tags}`,
   ].filter(Boolean);
-
   const userText = contextLines.length
     ? `请为这幅作品生成疗愈分析报告。\n\n创作背景信息：\n${contextLines.join('\n')}`
     : '请为这幅作品生成疗愈分析报告。';
-
-  const postData = Buffer.from(JSON.stringify({
+  return Buffer.from(JSON.stringify({
     model,
     max_tokens: MAX_OUTPUT_TOKENS,
     messages: [
@@ -123,24 +116,15 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
       },
     ],
   }));
+}
 
-  const fullUrl = new URL(`${baseUrl}/chat/completions`);
+function sendQwenVlRequest(cfg: QwenVlConfig, postData: Buffer, fullUrl: URL): Promise<string> {
   const isHttps = fullUrl.protocol === 'https:';
   const mod = isHttps ? https : (http as unknown as typeof https);
-
-  const rawBody = await new Promise<string>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     let settled = false;
-    const tryResolve = (val: string) => {
-      if (settled) return;
-      settled = true;
-      resolve(val);
-    };
-    const tryReject = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    };
-
+    const tryResolve = (val: string) => { if (!settled) { settled = true; resolve(val); } };
+    const tryReject = (err: Error) => { if (!settled) { settled = true; reject(err); } };
     const req = mod.request(
       {
         hostname: fullUrl.hostname,
@@ -161,15 +145,14 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
       },
     );
     req.on('error', (e: Error) => tryReject(e));
-    req.on('timeout', () => {
-      req.destroy();
-      tryReject(new Error(`QwenVL request timeout after ${REQUEST_TIMEOUT_MS}ms`));
-    });
+    req.on('timeout', () => { req.destroy(); tryReject(new Error(`QwenVL request timeout after ${REQUEST_TIMEOUT_MS}ms`)); });
     req.setTimeout(REQUEST_TIMEOUT_MS);
     req.write(postData);
     req.end();
   });
+}
 
+function parseAnalyzeResponse(rawBody: string): string {
   let resp: DashScopeResponse;
   try {
     resp = JSON.parse(rawBody) as DashScopeResponse;
@@ -177,18 +160,13 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
     logger.error('QwenVL response JSON parse failed, raw length=', rawBody.length, 'preview=', rawBody.slice(0, 300));
     throw e;
   }
-
   if (resp.error) {
     throw new Error(`QwenVL API error: ${resp.error.code ?? ''} ${resp.error.message ?? ''}`);
   }
-
   const content = resp.choices?.[0]?.message?.content;
   if (!content) throw new Error('QwenVL returned empty content');
-
   logger.info('QwenVL analyze success content length=', content.length);
   const jsonStr = extractJson(content);
-
-  // 检测模型判定为非艺术作品的情况
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(jsonStr) as Record<string, unknown>;
@@ -198,6 +176,15 @@ export async function analyzeArtwork(imageUrl: string, desc: string, tags: strin
   if (parsed.error === NOT_ARTWORK_ERROR_CODE) {
     throw new NotArtworkError(String(parsed.reason ?? ''));
   }
-
   return jsonStr;
+}
+
+export async function analyzeArtwork(imageUrl: string, desc: string, tags: string): Promise<string> {
+  const cfg = getQwenVlConfig();
+  const baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+  logger.info('QwenVL analyze start model=', cfg.model ?? DEFAULT_MODEL, 'imageUrl length=', imageUrl.length);
+  const postData = buildAnalyzePostData(cfg, imageUrl, desc, tags);
+  const fullUrl = new URL(`${baseUrl}/chat/completions`);
+  const rawBody = await sendQwenVlRequest(cfg, postData, fullUrl);
+  return parseAnalyzeResponse(rawBody);
 }

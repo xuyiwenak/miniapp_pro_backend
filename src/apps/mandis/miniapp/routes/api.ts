@@ -1,6 +1,5 @@
 import path from 'path';
 import { Router, Response, type NextFunction } from 'express';
-// @ts-ignore 类型通过运行时依赖提供
 import multer from 'multer';
 import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
@@ -9,6 +8,16 @@ import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader
 import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { checkImage } from '../../../../util/wxContentSecurity';
 import { gameLogger as logger } from '../../../../util/logger';
+
+/** Shape of the file object multer attaches to the request */
+interface UploadedFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
+/** MiniappRequest extended with optional multer file */
+type MulterMiniappRequest = MiniappRequest & { file?: UploadedFile };
 
 const OSS_PREFIX = 'oss://';
 /** 通用作品等上传单文件上限 */
@@ -62,7 +71,8 @@ const DEFAULT_PERSONAL = {
 };
 
 router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).lean().exec();
@@ -100,7 +110,8 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
 
 /** 创建问题反馈 */
 router.post('/feedback', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   const body = (req.body?.data ?? req.body) as { title?: string; content?: string };
   const rawTitle = (body.title ?? '').trim();
   const rawContent = (body.content ?? '').trim();
@@ -132,7 +143,8 @@ router.post('/feedback', authMiddleware, async (req: MiniappRequest, res: Respon
 
 /** 获取当前用户的历史反馈列表 */
 router.get('/feedback', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const Feedback = getFeedbackModel();
     const list = await Feedback.find({ userId }).sort({ createdAt: -1 }).lean().exec();
@@ -151,45 +163,39 @@ router.get('/feedback', authMiddleware, async (req: MiniappRequest, res: Respons
   }
 });
 
-/** 更新反馈的处理状态与回复（后台使用） */
-router.patch('/feedback/:id', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
-  const feedbackId = req.params.id;
-  // 兼容两种前端请求格式：{ data: {...} } 或直接 {...}
-  const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
-
-  if (!feedbackId) {
-    sendErr(res, 'Missing id', 400);
-    return;
-  }
-
+/** 从请求 body 中构建反馈更新对象，返回 null 表示参数非法 */
+function buildFeedbackUpdate(
+  body: { status?: string; reply?: string },
+): Record<string, unknown> | null {
   const update: Record<string, unknown> = {};
   if (body.status) {
-    if (!['pending', 'processing', 'resolved'].includes(body.status)) {
-      sendErr(res, 'Invalid status', 400);
-      return;
-    }
+    if (!['pending', 'processing', 'resolved'].includes(body.status)) return null;
     update.status = body.status;
   }
-  if (typeof body.reply === 'string') {
-    update.reply = body.reply;
-  }
+  if (typeof body.reply === 'string') update.reply = body.reply;
+  return update;
+}
 
-  if (Object.keys(update).length === 0) {
-    sendErr(res, 'Nothing to update', 400);
-    return;
-  }
+/** 更新反馈的处理状态与回复（后台使用） */
+router.patch('/feedback/:id', authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  const feedbackId = req.params.id;
+  if (!feedbackId) { sendErr(res, 'Missing id', 400); return; }
+
+  // 兼容两种前端请求格式：{ data: {...} } 或直接 {...}
+  const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
+  const update = buildFeedbackUpdate(body);
+  if (update === null) { sendErr(res, 'Invalid status', 400); return; }
+  if (Object.keys(update).length === 0) { sendErr(res, 'Nothing to update', 400); return; }
 
   try {
     const Feedback = getFeedbackModel();
-    // 只允许更新“当前登录用户自己的反馈”，避免越权修改他人工单
+    // 只允许更新”当前登录用户自己的反馈”，避免越权修改他人工单
     const doc = await Feedback.findOneAndUpdate({ _id: feedbackId, userId }, { $set: update }, { new: true })
       .lean()
       .exec();
-    if (!doc) {
-      sendErr(res, 'Feedback not found', 404);
-      return;
-    }
+    if (!doc) { sendErr(res, 'Feedback not found', 404); return; }
     sendSucc(res, {
       id: String(doc._id),
       status: doc.status,
@@ -209,7 +215,8 @@ export const ART_TAGS = [
 
 /** 获取 onboarding 状态（onboardingStep + artTags + mbti + name + image） */
 router.get('/onboarding', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).select('name image mbti artTags onboardingStep').lean().exec();
@@ -231,7 +238,8 @@ router.get('/onboarding', authMiddleware, async (req: MiniappRequest, res: Respo
 
 /** 更新 onboarding 进度：每个节点调一次，只传本节点的字段 */
 router.patch('/onboarding', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   // 小程序历史版本同时存在两种 payload 结构，这里做统一兜底
   const body = req.body?.data ?? req.body;
   if (!body || typeof body !== 'object') { sendErr(res, 'Invalid body', 400); return; }
@@ -269,9 +277,9 @@ router.post(
   authMiddleware,
   upload.single('file'),
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId!;
-    const anyReq = req as any;
-    const file = anyReq.file as any;
+    const userId = req.userId;
+    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+    const file = (req as MulterMiniappRequest).file;
 
     if (!file || !file.buffer) {
       sendErr(res, 'Missing file', 400);
@@ -316,9 +324,9 @@ router.post(
   authMiddleware,
   handleAvatarUpload,
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId!;
-    const anyReq = req as any;
-    const file = anyReq.file as any;
+    const userId = req.userId;
+    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+    const file = (req as MulterMiniappRequest).file;
 
     if (!file || !file.buffer) {
       sendErr(res, 'Missing file', 400);
@@ -356,82 +364,90 @@ router.post(
   },
 );
 
-router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
-  // 与其他接口保持一致：支持 body.data 包装格式
-  const body = req.body?.data ?? req.body;
-  if (!body || typeof body !== 'object') {
-    sendErr(res, 'Invalid body', 400);
-    return;
+type PersonalInfoBody = {
+  image?: string;
+  wechatAvatarUrl?: string;
+  name?: string;
+  star?: string;
+  mbti?: string;
+  gender?: number;
+  birth?: string;
+  address?: string[];
+  brief?: string;
+  photos?: { url: string; name: string; type: string }[];
+};
+
+type PersonalInfoDoc = {
+  image?: string;
+  wechatAvatarUrl?: string;
+  name?: string;
+  star?: string;
+  mbti?: string;
+  gender: number;
+  birth?: string;
+  address?: string[];
+  brief?: string;
+  photos?: { url: string; name: string; type: string }[];
+};
+
+function buildPersonalInfoUpdate(
+  userId: string,
+  bodyRecord: PersonalInfoBody,
+  existing: Record<string, unknown> | null,
+  autoName: string,
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {
+    userId,
+    image: bodyRecord.image ?? (existing?.image as string | undefined) ?? DEFAULT_PERSONAL.image,
+    name: autoName,
+    star: bodyRecord.star ?? (existing?.star as string | undefined) ?? DEFAULT_PERSONAL.star,
+    mbti: typeof bodyRecord.mbti === 'string' ? bodyRecord.mbti : (existing?.mbti as string | undefined),
+    gender: bodyRecord.gender ?? DEFAULT_PERSONAL.gender,
+    birth: bodyRecord.birth ?? DEFAULT_PERSONAL.birth,
+    address: Array.isArray(bodyRecord.address) ? bodyRecord.address : DEFAULT_PERSONAL.address,
+    brief: bodyRecord.brief ?? DEFAULT_PERSONAL.brief,
+    photos: Array.isArray(bodyRecord.photos) ? bodyRecord.photos : DEFAULT_PERSONAL.photos,
+  };
+  if (Object.prototype.hasOwnProperty.call(bodyRecord, 'wechatAvatarUrl')) {
+    update.wechatAvatarUrl = typeof bodyRecord.wechatAvatarUrl === 'string' ? bodyRecord.wechatAvatarUrl.trim() : '';
   }
+  return update;
+}
+
+function buildPersonalInfoResponse(docRow: PersonalInfoDoc, userId: string): Record<string, unknown> {
+  return {
+    image: docRow.image ?? DEFAULT_PERSONAL.image,
+    wechatAvatarUrl: docRow.wechatAvatarUrl ?? '',
+    name: docRow.name ?? `用户_${String(userId).slice(0, 8)}`,
+    star: docRow.star ?? '',
+    mbti: docRow.mbti ?? '',
+    gender: docRow.gender ?? DEFAULT_PERSONAL.gender,
+    birth: docRow.birth ?? DEFAULT_PERSONAL.birth,
+    address: Array.isArray(docRow.address) ? docRow.address : DEFAULT_PERSONAL.address,
+    brief: docRow.brief ?? DEFAULT_PERSONAL.brief,
+    photos: Array.isArray(docRow.photos) ? docRow.photos : DEFAULT_PERSONAL.photos,
+  };
+}
+
+router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  const body = req.body?.data ?? req.body;
+  if (!body || typeof body !== 'object') { sendErr(res, 'Invalid body', 400); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
-    const existing = await PersonalInfo.findOne({ userId }).lean().exec();
-    // 用户没传 name 时，沿用历史昵称；都没有则自动生成一个兜底昵称
-    const autoName =
+    const existing = await PersonalInfo.findOne({ userId }).lean().exec() as Record<string, unknown> | null;
+    const existingName = typeof existing?.name === 'string' ? existing.name.trim() : '';
+    const autoName: string =
       (body.name as string | undefined)?.trim() ||
-      (existing?.name && existing.name.trim()) ||
+      existingName ||
       `用户_${String(userId).slice(0, 8)}`;
-    const bodyRecord = body as {
-      image?: string;
-      wechatAvatarUrl?: string;
-      name?: string;
-      star?: string;
-      mbti?: string;
-      gender?: number;
-      birth?: string;
-      address?: string[];
-      brief?: string;
-      photos?: { url: string; name: string; type: string }[];
-    };
-    const update: Record<string, unknown> = {
-      userId,
-      image: bodyRecord.image ?? existing?.image ?? DEFAULT_PERSONAL.image,
-      name: autoName,
-      star: bodyRecord.star ?? existing?.star ?? DEFAULT_PERSONAL.star,
-      mbti: typeof bodyRecord.mbti === 'string' ? bodyRecord.mbti : existing?.mbti,
-      gender: bodyRecord.gender ?? DEFAULT_PERSONAL.gender,
-      birth: bodyRecord.birth ?? DEFAULT_PERSONAL.birth,
-      address: Array.isArray(bodyRecord.address) ? bodyRecord.address : DEFAULT_PERSONAL.address,
-      brief: bodyRecord.brief ?? DEFAULT_PERSONAL.brief,
-      photos: Array.isArray(bodyRecord.photos) ? bodyRecord.photos : DEFAULT_PERSONAL.photos,
-    };
-    if (Object.prototype.hasOwnProperty.call(bodyRecord, 'wechatAvatarUrl')) {
-      const w = typeof bodyRecord.wechatAvatarUrl === 'string' ? bodyRecord.wechatAvatarUrl.trim() : '';
-      update.wechatAvatarUrl = w;
-    }
+    const bodyRecord = body as PersonalInfoBody;
+    const update = buildPersonalInfoUpdate(userId, bodyRecord, existing, autoName);
     const doc = await PersonalInfo.findOneAndUpdate(
-      { userId },
-      { $set: update },
-      { new: true, upsert: true, runValidators: true },
-    )
-      .lean()
-      .exec();
-    const docRow = doc as {
-      image?: string;
-      wechatAvatarUrl?: string;
-      name?: string;
-      star?: string;
-      mbti?: string;
-      gender: number;
-      birth?: string;
-      address?: string[];
-      brief?: string;
-      photos?: { url: string; name: string; type: string }[];
-    };
-    const info = {
-      image: docRow.image ?? DEFAULT_PERSONAL.image,
-      wechatAvatarUrl: docRow.wechatAvatarUrl ?? '',
-      name: docRow.name ?? `用户_${String(userId).slice(0, 8)}`,
-      star: docRow.star ?? '',
-      mbti: docRow.mbti ?? '',
-      gender: docRow.gender ?? DEFAULT_PERSONAL.gender,
-      birth: docRow.birth ?? DEFAULT_PERSONAL.birth,
-      address: Array.isArray(docRow.address) ? docRow.address : DEFAULT_PERSONAL.address,
-      brief: docRow.brief ?? DEFAULT_PERSONAL.brief,
-      photos: Array.isArray(docRow.photos) ? docRow.photos : DEFAULT_PERSONAL.photos,
-    };
-    sendSucc(res, { data: info });
+      { userId }, { $set: update }, { new: true, upsert: true, runValidators: true },
+    ).lean().exec();
+    sendSucc(res, { data: buildPersonalInfoResponse(doc as PersonalInfoDoc, userId) });
   } catch (err) {
     logger.error('api:savePersonalInfo error', { userId, error: (err as Error).message });
     sendErr(res, 'Save personal info failed', 500);

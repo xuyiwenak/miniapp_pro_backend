@@ -5,8 +5,53 @@ import { getSessionModel, getPaymentModel } from '../../dbservice/BegreatDBModel
 import { gameLogger as logger } from '../../../../util/logger';
 import { loadReportTemplate } from '../services/reportTemplate';
 import { getRuntimeConfig } from '../../config/BegreatRuntimeConfig';
+import type { IAssessmentResult } from '../../entity/session.entity';
 
 const router = Router();
+
+type RiskBands = ReturnType<typeof loadReportTemplate>['careers']['ai_impact']['risk_bands'];
+
+/** 构建 Tier-1 付费报告响应数据 */
+function buildPaidReportPayload(result: IAssessmentResult) {
+  const top5 = result.topCareers.slice(0, 5);
+  const bottom5 = result.topCareers.length > 5
+    ? [...result.topCareers.slice(5)].reverse().slice(0, 5)
+    : [];
+  const hardExcluded = (result.hardExcluded?.length
+    ? result.hardExcluded
+    : (result.excludedCareers ?? [])).slice(0, 5);
+  return {
+    isPaid: true, isFreeVersion: false,
+    personalityLabel: result.personalityLabel, freeSummary: result.freeSummary,
+    report: result.report ?? null, big5Normalized: result.big5Normalized,
+    bfi2FacetMeans: result.bfi2FacetMeans, topCareers: top5, bottomCareers: bottom5,
+    hardExcluded, softAdjusted: (result.softAdjusted ?? []).slice(0, 5),
+    competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
+    facetInsights: buildFacetInsights(result.bfi2FacetMeans ?? {}),
+    normMeta: {
+      version: result.normVersion ?? null,
+      source: result.normSource ?? null,
+      sampleSize: result.normSampleSize ?? null,
+    },
+  };
+}
+
+/** 构建 Tier-0 免费层响应数据 */
+function buildFreeReportPayload(result: IAssessmentResult, bands: RiskBands) {
+  const allCareers = result.topCareers;
+  const highCount = allCareers.filter((c) => c.aiRisk !== undefined && c.aiRisk > bands.medium.max).length;
+  return {
+    isPaid: false, isFreeVersion: false,
+    personalityLabel: result.personalityLabel, freeSummary: result.freeSummary,
+    big5Normalized: result.big5Normalized,
+    competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
+    topCareers: allCareers.slice(0, 3).map((c) => ({
+      code: c.code, title: c.title, matchScore: c.matchScore,
+      aiRisk: buildFreeAiRisk(c.aiRisk, bands),
+    })),
+    aiRiskSummary: { total: allCareers.length, highCount },
+  };
+}
 
 /**
  * GET /report/:sessionId
@@ -27,92 +72,33 @@ router.get('/:sessionId', authMiddleware, async (req: MiniappRequest, res: Respo
       return;
     }
 
-    const paymentEnabled = getRuntimeConfig().payment_enabled;
-
-    const isPaid        = paymentEnabled ? session.status === 'paid' : true;
-    const isFreeVersion = session.assessmentType === 'BFI2_FREE';
-
-    // 日志：管理员赠送的报告
     if (session.grantedByAdmin) {
       logger.info(`[report/get] Admin granted: ${sessionId}, reason: ${session.grantReason || 'N/A'}`);
     }
-    const { result } = session;
-    const reportPayload = result.report ?? null;
-    const tpl   = loadReportTemplate();
-    const bands = tpl.careers.ai_impact.risk_bands;
-    const allCareers = result.topCareers;
-    const highCount = allCareers.filter(
-      (c) => c.aiRisk !== undefined && c.aiRisk > bands.medium.max
-    ).length;
 
-    // ── BFI2_FREE: 始终返回简洁免费版，与支付状态无关 ──────────────────
+    const { result } = session;
+    const isFreeVersion = session.assessmentType === 'BFI2_FREE';
+
     if (isFreeVersion) {
       sendSucc(res, {
-        isPaid:        false,
-        isFreeVersion: true,
-        assessmentType:   session.assessmentType,
-        personalityLabel: result.personalityLabel,
-        freeSummary:      result.freeSummary,
+        isPaid: false, isFreeVersion: true, assessmentType: session.assessmentType,
+        personalityLabel: result.personalityLabel, freeSummary: result.freeSummary,
         topCareers: result.topCareers.slice(0, 3).map((c) => ({
-          code:        c.code,
-          title:       c.title,
-          matchScore:  c.matchScore,
-          description: c.description || '',
+          code: c.code, title: c.title, matchScore: c.matchScore, description: c.description || '',
         })),
       });
       return;
     }
 
+    const paymentEnabled = getRuntimeConfig().payment_enabled;
+    const isPaid = paymentEnabled ? session.status === 'paid' : true;
+    const tpl = loadReportTemplate();
+    const bands = tpl.careers.ai_impact.risk_bands;
+
     if (isPaid) {
-      // ── Tier-1: 完整报告（付费或管理员赠送） ──────────────────────────
-      const all = result.topCareers;                      // 按匹配度降序，最多 20 条
-      const top5 = all.slice(0, 5);
-      // bottomCareers：取排名末尾 5 条，从最差到次差排列（跳过已在 top5 中的职业）
-      const bottom5 = all.length > 5
-        ? [...all.slice(5)].reverse().slice(0, 5)
-        : [];
-
-      // hardExcluded：优先取新字段，兼容旧数据（excludedCareers），最多返回 5 条
-      const hardExcluded = (result.hardExcluded?.length
-        ? result.hardExcluded
-        : (result.excludedCareers ?? [])).slice(0, 5);
-      const softAdjusted = (result.softAdjusted ?? []).slice(0, 5);
-
-      sendSucc(res, {
-        isPaid:         true,
-        isFreeVersion:  false,
-        personalityLabel:   result.personalityLabel,
-        freeSummary:        result.freeSummary,
-        report:             reportPayload,
-        big5Normalized:     result.big5Normalized,
-        bfi2FacetMeans:     result.bfi2FacetMeans,
-        topCareers:         top5,
-        bottomCareers:      bottom5,
-        hardExcluded,
-        softAdjusted,
-        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
-        facetInsights:      buildFacetInsights(result.bfi2FacetMeans ?? {}),
-        normMeta: {
-          version:    result.normVersion    ?? null,
-          source:     result.normSource     ?? null,
-          sampleSize: result.normSampleSize ?? null,
-        },
-      });
+      sendSucc(res, buildPaidReportPayload(result));
     } else {
-      // ── Tier-0: BFI2 免费层（未付费） ────────────────────────────────
-      sendSucc(res, {
-        isPaid:        false,
-        isFreeVersion: false,
-        personalityLabel:   result.personalityLabel,
-        freeSummary:        result.freeSummary,
-        big5Normalized:     result.big5Normalized,
-        competencyAnalysis: buildCompetencyAnalysis(result.big5Normalized),
-        topCareers: result.topCareers.slice(0, 3).map((c) => {
-          const aiRisk = buildFreeAiRisk(c.aiRisk, bands);
-          return { code: c.code, title: c.title, matchScore: c.matchScore, aiRisk };
-        }),
-        aiRiskSummary: { total: allCareers.length, highCount },
-      });
+      sendSucc(res, buildFreeReportPayload(result, bands));
     }
   } catch (err) {
     logger.error('[report/get]', err);

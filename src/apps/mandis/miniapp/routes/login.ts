@@ -91,20 +91,42 @@ router.get('/postCodeVerify', async (req: Request, res: Response) => {
   sendSucc(res, { token });
 });
 
+async function fetchWxCode2Session(code: string, appId: string, appSecret: string): Promise<string | null> {
+  const url =
+    `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}` +
+    `&secret=${encodeURIComponent(appSecret)}` +
+    `&js_code=${encodeURIComponent(code)}` +
+    '&grant_type=authorization_code';
+  try {
+    const resp = await new Promise<{ openid?: string; errcode?: number; errmsg?: string }>((resolve, reject) => {
+      https.get(url, (wxRes) => {
+        const chunks: Buffer[] = [];
+        wxRes.on('data', (d) => chunks.push(d));
+        wxRes.on('end', () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(e); }
+        });
+      }).on('error', (e) => reject(e));
+    });
+    if (!resp || !resp.openid) {
+      logger.warn('wxLogin jscode2session failed', { errcode: resp?.errcode, errmsg: resp?.errmsg });
+      return null;
+    }
+    return resp.openid;
+  } catch {
+    return null;
+  }
+}
+
 /** 微信小程序登录：使用 wx.login code 换取 openId，再走 PlayerComponent.loginByOpenId */
 router.post('/wxLogin', async (req: Request, res: Response) => {
   const payload = req.body?.data ?? req.body;
   const code = (payload?.code as string | undefined)?.trim();
-  if (!code) {
-    sendErr(res, 'Missing code', 400);
-    return;
-  }
+  if (!code) { sendErr(res, 'Missing code', 400); return; }
 
   const sysCfgComp = ComponentManager.instance.getComponent(
     EComName.SysCfgComponent,
   ) as { server_auth_config?: { wx_miniapp?: { appId?: string; appSecret?: string } } } | null;
   const wxCfg = sysCfgComp?.server_auth_config?.wx_miniapp;
-
   const appId = wxCfg?.appId;
   const appSecret = wxCfg?.appSecret;
 
@@ -113,52 +135,12 @@ router.post('/wxLogin', async (req: Request, res: Response) => {
     return;
   }
 
-  const jscode2sessionUrl =
-    `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}` +
-    `&secret=${encodeURIComponent(appSecret)}` +
-    `&js_code=${encodeURIComponent(code)}` +
-    '&grant_type=authorization_code';
-
-  function fetchCode2Session(): Promise<{ openid?: string; errcode?: number; errmsg?: string }> {
-    return new Promise((resolve, reject) => {
-      https
-        .get(jscode2sessionUrl, (wxRes) => {
-          const chunks: Buffer[] = [];
-          wxRes.on('data', (d) => chunks.push(d));
-          wxRes.on('end', () => {
-            try {
-              const json = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-              resolve(json);
-            } catch (err) {
-              reject(err);
-            }
-          });
-        })
-        .on('error', (err) => reject(err));
-    });
-  }
-
-  let openid: string | undefined;
-  try {
-    const wxResp = await fetchCode2Session();
-    if (!wxResp || !wxResp.openid) {
-      logger.warn('wxLogin jscode2session failed', { errcode: wxResp?.errcode, errmsg: wxResp?.errmsg });
-      sendErr(res, 'WeChat login failed', 401);
-      return;
-    }
-    openid = wxResp.openid;
-  } catch (err) {
-    logger.error('wxLogin jscode2session error', { code, error: (err as Error).message });
-    sendErr(res, 'WeChat login error', 500);
-    return;
-  }
+  const openid = await fetchWxCode2Session(code, appId, appSecret);
+  if (!openid) { sendErr(res, 'WeChat login failed', 401); return; }
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
-  if (!playerComp) {
-    sendErr(res, 'Server not ready', 503);
-    return;
-  }
+  if (!playerComp) { sendErr(res, 'Server not ready', 503); return; }
 
   const existed = await playerComp.findByOpenId(openid);
   if (existed.ok) {
@@ -167,19 +149,16 @@ router.post('/wxLogin', async (req: Request, res: Response) => {
     return;
   }
 
-  // 未绑定：直接按 openId 自动注册并登录（与原先「创建新账号」路径一致）
   const ret = await playerComp.loginByOpenId(openid);
-  if (!ret.ok) {
-    sendErr(res, ret.error, 500);
-    return;
-  }
+  if (!ret.ok) { sendErr(res, ret.error, 500); return; }
   const token = await issueToken(ret.data.userId);
   sendSucc(res, { token, userId: ret.data.userId, isNewUser: true });
 });
 
 /** 已登录用户解绑微信（要求账号存在密码，否则解绑后无法登录） */
 router.post('/unbindWechat', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
   if (!playerComp) {
@@ -208,7 +187,8 @@ router.post('/unbindWechat', authMiddleware, async (req: MiniappRequest, res: Re
 
 /** 绑定手机号：前端传微信 getPhoneNumber 返回的 code */
 router.post('/bindPhone', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   const payload = req.body?.data ?? req.body;
   const code = (payload?.code as string | undefined)?.trim();
   if (!code) {

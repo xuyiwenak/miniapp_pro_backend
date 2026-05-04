@@ -57,8 +57,34 @@ router.get('/config', adminAuth, (_req: Request, res: Response) => {
 // 读取 tpl/seed_occupation.json，按 code 做 upsert（已存在则更新，不存在则新增）
 // 支持 ?reset=true 先清空再写入（谨慎使用）
 
+async function upsertOccupationRecords(
+  records: unknown[],
+  reset: boolean,
+): Promise<{ upserted: number; errors: string[] }> {
+  const Occupations = getOccupationModel();
+  if (reset) {
+    await Occupations.deleteMany({});
+    logger.info('[admin/occupations/seed] cleared all occupations before seed');
+  }
+
+  let upserted = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < records.length; i++) {
+    const raw = records[i] as Record<string, unknown>;
+    if (!raw['code'] || !raw['title']) {
+      errors.push(`第 ${i + 1} 条：缺少 code 或 title`);
+      continue;
+    }
+    await Occupations.updateOne({ code: raw['code'] }, { $set: raw }, { upsert: true });
+    upserted++;
+  }
+
+  return { upserted, errors };
+}
+
 router.post('/occupations/seed', adminAuth, async (req: Request, res: Response) => {
-  const seedPath = path.resolve(__dirname, '../../../../../../tpl/seed_occupation.json');
+  const seedPath = path.resolve(process.cwd(), 'tpl/seed_occupation.json');
 
   if (!fs.existsSync(seedPath)) {
     res.status(404).json({ success: false, message: 'seed_occupation.json 不存在' });
@@ -76,30 +102,8 @@ router.post('/occupations/seed', adminAuth, async (req: Request, res: Response) 
   }
 
   try {
-    const Occupations = getOccupationModel();
     const reset = String(req.query['reset']).toLowerCase() === 'true';
-    if (reset) {
-      await Occupations.deleteMany({});
-      logger.info('[admin/occupations/seed] cleared all occupations before seed');
-    }
-
-    let upserted = 0;
-    const errors: string[] = [];
-
-    for (let i = 0; i < records.length; i++) {
-      const raw = records[i] as Record<string, unknown>;
-      if (!raw['code'] || !raw['title']) {
-        errors.push(`第 ${i + 1} 条：缺少 code 或 title`);
-        continue;
-      }
-      await Occupations.updateOne(
-        { code: raw['code'] },
-        { $set: raw },
-        { upsert: true }
-      );
-      upserted++;
-    }
-
+    const { upserted, errors } = await upsertOccupationRecords(records, reset);
     logger.info(`[admin/occupations/seed] upserted ${upserted} occupations`);
     res.json({ success: true, upserted, errors });
   } catch (err) {
@@ -110,7 +114,7 @@ router.post('/occupations/seed', adminAuth, async (req: Request, res: Response) 
 
 // GET /admin/occupations/seed — 预览 seed 文件（不写库，方便校验）
 router.get('/occupations/seed', adminAuth, async (_req: Request, res: Response) => {
-  const seedPath = path.resolve(__dirname, '../../../../../../tpl/seed_occupation.json');
+  const seedPath = path.resolve(process.cwd(), 'tpl/seed_occupation.json');
   if (!fs.existsSync(seedPath)) {
     res.status(404).json({ success: false, message: 'seed_occupation.json 不存在' });
     return;

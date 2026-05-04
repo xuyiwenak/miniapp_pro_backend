@@ -74,7 +74,10 @@ export class BullComponent implements IBaseComponent {
     const sysCfgComp = ComponentManager.instance.getComponent(
       EComName.SysCfgComponent
     );
-    const redisOptions = sysCfgComp.redis_global!;
+    const redisOptions = sysCfgComp.redis_global;
+    if (!redisOptions) {
+      throw new Error('BullComponent: redis_global config is missing');
+    }
     this.queue = new Bull(this.queue.name, {
       redis: {
         host: redisOptions.host,

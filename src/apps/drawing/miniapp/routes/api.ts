@@ -1,12 +1,21 @@
 import path from 'path';
 import { Router, Response } from 'express';
-// @ts-ignore 类型通过运行时依赖提供
 import multer from 'multer';
 import { sendSucc, sendErr } from '../../../../shared/miniapp/middleware/response';
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { getFeedbackModel, getPersonalInfoModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader';
 import { checkImage } from '../../../../util/wxContentSecurity';
+
+/** Shape of the file object multer attaches to the request */
+interface UploadedFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
+/** MiniappRequest extended with optional multer file */
+type MulterMiniappRequest = MiniappRequest & { file?: UploadedFile };
 
 const OSS_PREFIX = 'oss://';
 
@@ -35,7 +44,8 @@ const DEFAULT_PERSONAL = {
 };
 
 router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).lean().exec();
@@ -70,7 +80,8 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
 
 /** 创建问题反馈 */
 router.post('/feedback', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   const body = (req.body?.data ?? req.body) as { title?: string; content?: string };
   const rawTitle = (body.title ?? '').trim();
   const rawContent = (body.content ?? '').trim();
@@ -101,7 +112,8 @@ router.post('/feedback', authMiddleware, async (req: MiniappRequest, res: Respon
 
 /** 获取当前用户的历史反馈列表 */
 router.get('/feedback', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const Feedback = getFeedbackModel();
     const list = await Feedback.find({ userId }).sort({ createdAt: -1 }).lean().exec();
@@ -119,45 +131,39 @@ router.get('/feedback', authMiddleware, async (req: MiniappRequest, res: Respons
   }
 });
 
-/** 更新反馈的处理状态与回复（后台使用） */
-router.patch('/feedback/:id', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
-  const feedbackId = req.params.id;
-  // 兼容两种前端请求格式：{ data: {...} } 或直接 {...}
-  const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
-
-  if (!feedbackId) {
-    sendErr(res, 'Missing id', 400);
-    return;
-  }
-
+/** 从请求 body 中构建反馈更新对象，返回 null 表示参数非法 */
+function buildFeedbackUpdate(
+  body: { status?: string; reply?: string },
+): Record<string, unknown> | null {
   const update: Record<string, unknown> = {};
   if (body.status) {
-    if (!['pending', 'processing', 'resolved'].includes(body.status)) {
-      sendErr(res, 'Invalid status', 400);
-      return;
-    }
+    if (!['pending', 'processing', 'resolved'].includes(body.status)) return null;
     update.status = body.status;
   }
-  if (typeof body.reply === 'string') {
-    update.reply = body.reply;
-  }
+  if (typeof body.reply === 'string') update.reply = body.reply;
+  return update;
+}
 
-  if (Object.keys(update).length === 0) {
-    sendErr(res, 'Nothing to update', 400);
-    return;
-  }
+/** 更新反馈的处理状态与回复（后台使用） */
+router.patch('/feedback/:id', authMiddleware, async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  const feedbackId = req.params.id;
+  if (!feedbackId) { sendErr(res, 'Missing id', 400); return; }
+
+  // 兼容两种前端请求格式：{ data: {...} } 或直接 {...}
+  const body = (req.body?.data ?? req.body) as { status?: string; reply?: string };
+  const update = buildFeedbackUpdate(body);
+  if (update === null) { sendErr(res, 'Invalid status', 400); return; }
+  if (Object.keys(update).length === 0) { sendErr(res, 'Nothing to update', 400); return; }
 
   try {
     const Feedback = getFeedbackModel();
-    // 只允许更新“当前登录用户自己的反馈”，避免越权修改他人工单
+    // 只允许更新”当前登录用户自己的反馈”，避免越权修改他人工单
     const doc = await Feedback.findOneAndUpdate({ _id: feedbackId, userId }, { $set: update }, { new: true })
       .lean()
       .exec();
-    if (!doc) {
-      sendErr(res, 'Feedback not found', 404);
-      return;
-    }
+    if (!doc) { sendErr(res, 'Feedback not found', 404); return; }
     sendSucc(res, {
       id: String(doc._id),
       status: doc.status,
@@ -176,7 +182,8 @@ export const ART_TAGS = [
 
 /** 获取 onboarding 状态（onboardingStep + artTags + mbti + name + image） */
 router.get('/onboarding', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
     const doc = await PersonalInfo.findOne({ userId }).select('name image mbti artTags onboardingStep').lean().exec();
@@ -197,7 +204,8 @@ router.get('/onboarding', authMiddleware, async (req: MiniappRequest, res: Respo
 
 /** 更新 onboarding 进度：每个节点调一次，只传本节点的字段 */
 router.patch('/onboarding', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   // 小程序历史版本同时存在两种 payload 结构，这里做统一兜底
   const body = req.body?.data ?? req.body;
   if (!body || typeof body !== 'object') { sendErr(res, 'Invalid body', 400); return; }
@@ -234,9 +242,9 @@ router.post(
   authMiddleware,
   upload.single('file'),
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId!;
-    const anyReq = req as any;
-    const file = anyReq.file as any;
+    const userId = req.userId;
+    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+    const file = (req as MulterMiniappRequest).file;
 
     if (!file || !file.buffer) {
       sendErr(res, 'Missing file', 400);
@@ -279,9 +287,9 @@ router.post(
   authMiddleware,
   upload.single('file'),
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId!;
-    const anyReq = req as any;
-    const file = anyReq.file as any;
+    const userId = req.userId;
+    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+    const file = (req as MulterMiniappRequest).file;
 
     if (!file || !file.buffer) {
       sendErr(res, 'Missing file', 400);
@@ -313,14 +321,32 @@ router.post(
   },
 );
 
+type PersonalDoc = {
+  image?: string; name?: string; star?: string; mbti?: string;
+  gender?: number; birth?: string; address?: string[]; brief?: string;
+  photos?: { url: string; name: string; type: string }[];
+};
+
+function buildPersonalInfoResponse(doc: PersonalDoc, userId: string): Record<string, unknown> {
+  return {
+    image: doc.image ?? DEFAULT_PERSONAL.image,
+    name: doc.name ?? `用户_${String(userId).slice(0, 8)}`,
+    star: doc.star ?? '',
+    mbti: doc.mbti ?? '',
+    gender: doc.gender ?? DEFAULT_PERSONAL.gender,
+    birth: doc.birth ?? DEFAULT_PERSONAL.birth,
+    address: Array.isArray(doc.address) ? doc.address : DEFAULT_PERSONAL.address,
+    brief: doc.brief ?? DEFAULT_PERSONAL.brief,
+    photos: Array.isArray(doc.photos) ? doc.photos : DEFAULT_PERSONAL.photos,
+  };
+}
+
 router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const userId = req.userId!;
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   // 与其他接口保持一致：支持 body.data 包装格式
   const body = req.body?.data ?? req.body;
-  if (!body || typeof body !== 'object') {
-    sendErr(res, 'Invalid body', 400);
-    return;
-  }
+  if (!body || typeof body !== 'object') { sendErr(res, 'Invalid body', 400); return; }
   try {
     const PersonalInfo = getPersonalInfoModel();
     const existing = await PersonalInfo.findOne({ userId }).lean().exec();
@@ -345,20 +371,8 @@ router.post('/savePersonalInfo', authMiddleware, async (req: MiniappRequest, res
       { userId },
       { $set: update },
       { new: true, upsert: true, runValidators: true },
-    )
-      .lean()
-      .exec();
-    const info = {
-      image: doc!.image ?? DEFAULT_PERSONAL.image,
-      name: doc!.name ?? `用户_${String(userId).slice(0, 8)}`,
-      star: doc!.star ?? '',
-      mbti: doc!.mbti ?? '',
-      gender: doc!.gender ?? DEFAULT_PERSONAL.gender,
-      birth: doc!.birth ?? DEFAULT_PERSONAL.birth,
-      address: Array.isArray(doc!.address) ? doc!.address : DEFAULT_PERSONAL.address,
-      brief: doc!.brief ?? DEFAULT_PERSONAL.brief,
-      photos: Array.isArray(doc!.photos) ? doc!.photos : DEFAULT_PERSONAL.photos,
-    };
+    ).lean().exec();
+    const info = buildPersonalInfoResponse((doc ?? {}) as PersonalDoc, userId);
     sendSucc(res, { data: info });
   } catch {
     sendErr(res, 'Save personal info failed', 500);
