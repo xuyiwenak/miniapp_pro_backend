@@ -19,8 +19,7 @@
   },
   "lint-staged": {
     "src/**/*.ts": [
-      "eslint --max-warnings 0 --fix",
-      "git add"
+      "eslint --max-warnings 0 --fix"
     ]
   },
   "devDependencies": {
