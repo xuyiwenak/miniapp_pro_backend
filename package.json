@@ -44,12 +44,16 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcrypt": "^6.0.0",
     "bull": "^4.16.5",
     "cos-nodejs-sdk-v5": "^2.14.7",
     "cron": "^3.1.7",
     "express": "^4.21.2",
     "ioredis": "^5.10.0",
     "json-to-zod": "^1.1.2",
+    "jsonwebtoken": "^9.0.3",
     "log4js": "^6.9.1",
     "mongoose": "^8.7.2",
     "multer": "^1.4.5-lts.1",

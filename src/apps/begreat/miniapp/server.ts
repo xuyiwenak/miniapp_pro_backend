@@ -6,12 +6,13 @@ import {
   setupNotFoundHandler,
   startMiniappHttpServer,
 } from '../../../shared/miniapp/server';
-import loginRoutes      from './routes/login';
-import assessmentRoutes from './routes/assessment';
-import reportRoutes     from './routes/report';
-import paymentRoutes    from './routes/payment';
-import inviteRoutes     from './routes/invite';
-import adminRoutes      from './routes/admin';
+import loginRoutes        from './routes/login';
+import assessmentRoutes   from './routes/assessment';
+import reportRoutes       from './routes/report';
+import paymentRoutes      from './routes/payment';
+import inviteRoutes       from './routes/invite';
+import adminRoutes        from './routes/admin';
+import begreatAdminRoutes from './routes/begreatAdmin';
 import { initRuntimeConfig } from '../config/BegreatRuntimeConfig';
 
 export function createBegreatApp(): express.Express {
@@ -29,12 +30,13 @@ export function createBegreatApp(): express.Express {
     },
   });
 
-  app.use('/login',      loginRoutes);
-  app.use('/assessment', assessmentRoutes);
-  app.use('/report',     reportRoutes);
-  app.use('/payment',    paymentRoutes);
-  app.use('/invite',     inviteRoutes);
-  app.use('/admin',      adminRoutes);
+  app.use('/login',          loginRoutes);
+  app.use('/assessment',     assessmentRoutes);
+  app.use('/report',         reportRoutes);
+  app.use('/payment',        paymentRoutes);
+  app.use('/invite',         inviteRoutes);
+  app.use('/admin',          adminRoutes);
+  app.use('/begreat-admin',  begreatAdminRoutes);
 
   setupNotFoundHandler(app);
 

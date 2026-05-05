@@ -1,5 +1,5 @@
 {
   "_note": "热加载配置，修改后调用 POST /admin/reload-config 立即生效，无需重启容器。",
   "price_fen": 1,
-  "payment_enabled": true
+  "payment_enabled": false
 }

@@ -63,3 +63,7 @@ nginx/ssl/*.pem
 
 # Runtime data (MongoDB, Redis snapshots, uploads, etc.)
 data/
+
+# 本地数据分析文件（生成的 CSV/Excel 报告）
+docs/local_*.csv
+docs/local_*.xlsx

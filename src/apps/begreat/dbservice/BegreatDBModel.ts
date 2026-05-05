@@ -6,6 +6,7 @@ import { INormEntry, NormSchema } from '../entity/norm.entity';
 import { IPaymentRecord, PaymentSchema } from '../entity/payment.entity';
 import { IInviteCode, InviteCodeSchema } from '../entity/inviteCode.entity';
 import { IInviteReward, InviteRewardSchema } from '../entity/inviteReward.entity';
+import { IAdmin, AdminSchema } from '../entity/admin.entity';
 
 class BegreatModelManager {
   private questionModel!:     Model<IQuestion>;
@@ -15,6 +16,7 @@ class BegreatModelManager {
   private paymentModel!:      Model<IPaymentRecord>;
   private inviteCodeModel!:   Model<IInviteCode>;
   private inviteRewardModel!: Model<IInviteReward>;
+  private adminModel!:        Model<IAdmin>;
 
   constructor(connection: Connection) {
     this.questionModel     = connection.model<IQuestion>('Question', QuestionSchema);
@@ -24,6 +26,7 @@ class BegreatModelManager {
     this.paymentModel      = connection.model<IPaymentRecord>('PaymentRecord', PaymentSchema, 'paymentrecords');
     this.inviteCodeModel   = connection.model<IInviteCode>('InviteCode', InviteCodeSchema);
     this.inviteRewardModel = connection.model<IInviteReward>('InviteReward', InviteRewardSchema);
+    this.adminModel        = connection.model<IAdmin>('Admin', AdminSchema, 'admins');
 
     this.questionModel.createIndexes().catch(() => {});
     this.occupationModel.createIndexes().catch(() => {});
@@ -32,6 +35,7 @@ class BegreatModelManager {
     this.paymentModel.createIndexes().catch(() => {});
     this.inviteCodeModel.createIndexes().catch(() => {});
     this.inviteRewardModel.createIndexes().catch(() => {});
+    this.adminModel.createIndexes().catch(() => {});
   }
 
   getQuestionModel()     { return this.questionModel; }
@@ -41,6 +45,7 @@ class BegreatModelManager {
   getPaymentModel()      { return this.paymentModel; }
   getInviteCodeModel()   { return this.inviteCodeModel; }
   getInviteRewardModel() { return this.inviteRewardModel; }
+  getAdminModel()        { return this.adminModel; }
 
   async stopConnection(conn: Connection) {
     return conn.destroy();
@@ -70,6 +75,7 @@ export function getNormModel()         { return getBegreatModelManager().getNorm
 export function getPaymentModel()      { return getBegreatModelManager().getPaymentModel(); }
 export function getInviteCodeModel()   { return getBegreatModelManager().getInviteCodeModel(); }
 export function getInviteRewardModel() { return getBegreatModelManager().getInviteRewardModel(); }
+export function getAdminModel()        { return getBegreatModelManager().getAdminModel(); }
 
 export async function stopBegreatConnection() {
   if (manager && _connection) {
