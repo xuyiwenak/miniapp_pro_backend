@@ -3,9 +3,9 @@ import type { TsrpcConfig } from "tsrpc-cli";
 export default <TsrpcConfig>{
   proto: [
     {
-      ptlDir: "src/apps/drawing/protocols",
-      output: "src/apps/drawing/protocols/serviceProto.ts",
-      apiDir: "src/apps/drawing/api",
+      ptlDir: "src/apps/mandis/protocols",
+      output: "src/apps/mandis/protocols/serviceProto.ts",
+      apiDir: "src/apps/mandis/api",
       docDir: "docs/app1",
     },
   ],
@@ -15,7 +15,7 @@ export default <TsrpcConfig>{
     autoSync: true,
     autoApi: false,
     watch: "src",
-    entry: "src/apps/drawing/front.ts",
+    entry: "src/apps/mandis/front.ts",
   },
   build: {
     autoProto: true,

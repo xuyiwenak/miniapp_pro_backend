@@ -13,7 +13,7 @@ import { Logger, WsConnection, WsServer } from 'tsrpc';
 import {
   serviceProto as serviceProto_Public,
   ServiceType as ServiceType_Public,
-} from '../apps/drawing/protocols/serviceProto';
+} from '../apps/mandis/protocols/serviceProto';
 import { NetworkUtil } from './NetworkUtil';
 import { ServerState } from './ServerDef';
 import { ServerGlobals } from './ServerGlobal';
@@ -110,7 +110,7 @@ export class WebsocketGameServer {
     this.reportServerState();
 
     await this.server.autoImplementApi(
-      path.resolve(__dirname, '../apps/drawing/api'),
+      path.resolve(__dirname, '../apps/mandis/api'),
     );
   }
 
