@@ -3,19 +3,18 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Usage:
-#   ./start_docker.sh                          # 重启全部三个 app
+#   ./start_docker.sh                          # 重启全部 app
 #   ./start_docker.sh begreat_app              # 只重启 begreat_app（快）
-#   ./start_docker.sh drawing_app mandis_app   # 重启指定多个
+#   ./start_docker.sh begreat_app mandis_app   # 重启指定多个
 #   ./start_docker.sh --no-cache begreat_app   # 强制重新编译 + 重启
 #
 # 常用命令速查：
 #   ./start_docker.sh begreat_app              # 只重启 begreat_app（快）
 #   ./start_docker.sh --no-cache begreat_app   # 强制重新编译 + 重启
-#   ./start_docker.sh                          # 重启全部三个
+#   ./start_docker.sh                          # 重启全部 app
 
 # ── 服务名 → 容器名映射（与 docker-compose.yml 保持一致）────────────────────
 declare -A CONTAINER_NAMES=(
-  [drawing_app]="miniapp-drawing"
   [begreat_app]="miniapp-begreat"
   [mandis_app]="miniapp-mandis"
 )
@@ -29,10 +28,10 @@ for arg in "$@"; do
     --no-cache) NO_CACHE="--no-cache" ;;
     -h|--help)
       echo "用法："
-      echo "  ./start_docker.sh                          # 重启全部三个"
+      echo "  ./start_docker.sh                          # 重启全部 app"
       echo "  ./start_docker.sh begreat_app              # 只重启 begreat_app（快）"
       echo "  ./start_docker.sh --no-cache begreat_app   # 强制重新编译 + 重启"
-      echo "  ./start_docker.sh drawing_app mandis_app   # 重启指定多个"
+      echo "  ./start_docker.sh begreat_app mandis_app   # 重启指定多个"
       exit 0 ;;
     *)
       if [[ -z "${CONTAINER_NAMES[$arg]+_}" ]]; then
@@ -44,7 +43,7 @@ for arg in "$@"; do
 done
 
 if [[ ${#SERVICES[@]} -eq 0 ]]; then
-  SERVICES=(drawing_app begreat_app mandis_app)
+  SERVICES=(begreat_app mandis_app)
 fi
 
 echo "--- 目标服务: ${SERVICES[*]} ---"
@@ -77,8 +76,8 @@ done
 
 # ── 构建镜像 ──────────────────────────────────────────────────────────────────
 echo "--- 构建新镜像 ${NO_CACHE:+(--no-cache)} ---"
-# 三个 app 共用同一镜像，build drawing_app 即可刷新所有
-docker compose build $NO_CACHE drawing_app
+# 两个 app 共用同一镜像，build begreat_app 即可刷新所有
+docker compose build $NO_CACHE begreat_app
 
 # ── 启动容器（--force-recreate 确保旧容器一定被替换）────────────────────────
 echo "--- 启动容器 ---"
