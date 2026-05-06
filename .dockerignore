@@ -1,0 +1,53 @@
+# 开发依赖和构建产物(Docker 内部会重新安装)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git 版本控制
+.git/
+.gitignore
+.gitattributes
+
+# 运行时数据(挂载卷提供)
+data/
+logs/
+*.log
+
+# 测试和开发工具
+test/
+tests/
+*.test.ts
+*.spec.ts
+.vscode/
+.idea/
+
+# 文档
+README.md
+CLAUDE.md
+CODING_GUIDELINES.md
+MINIPROGRAM_CODING_GUIDELINES.md
+docs/
+*.md
+
+# 配置文件(部分在容器内不需要)
+.env*
+.npmrc
+.eslintrc*
+.prettierrc*
+tsconfig.test.json
+
+# Docker 相关(避免递归)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Nginx 配置(不需要打包进镜像)
+nginx/
+
+# 其他无关文件
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

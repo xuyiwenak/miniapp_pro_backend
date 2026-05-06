@@ -3,9 +3,9 @@
 # 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
 # 配置目录挂载：./src/apps/{app}/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致）
 #
-# 构建：只有 drawing_app 带 build:，begreat_app 复用同一镜像，`docker compose build drawing_app` 即可。
+# 构建：只有 begreat_app 带 build:，mandis_app 复用同一镜像，`docker compose build begreat_app` 即可。
 # mongo / redis / nginx 使用 pull_policy: if_not_present，本地已有镜像时 compose pull / up 不会反复从仓库拉取。
-# drawing_app.build.pull: false 避免每次构建时强制拉取基础镜像（需更新时临时改为 true 或加 --pull）。
+# begreat_app.build.pull: false 避免每次构建时强制拉取基础镜像（需更新时临时改为 true 或加 --pull）。
 
 services:
   mongo:
@@ -54,53 +54,12 @@ services:
       retries: 5
       start_period: 5s
 
-  drawing_app:
+  begreat_app:
     build:
       context: .
       dockerfile: Dockerfile
       pull: false
-    image: art-backend:latest          # 两个容器共用同一镜像，build 只执行一次
-    container_name: miniapp-drawing
-    restart: unless-stopped
-    command: ["node", "dist/apps/drawing/front.js"]
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      SYSCONFIG_ROOT: /app/config
-      ENV: production
-      environment: production
-      SERVER_ID: drawing_1
-      id: drawing_1
-      GAME_TYPE: front
-      gameType: front
-      HTTP_PORT: 40001
-      httpPort: 40001
-      MINIAPP_PORT: 40002
-      miniappApiPort: 40002
-      WS_PORT: 40000
-      port: 40000
-      connectionTickTimeout: 30000
-      MONGO_URI: mongodb://root:password@mongo:27017
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      COMPOSE_PROJECT_DIR: /workspace
-    ports:
-      - "40000:40000"
-      - "40001:40001"
-      - "40002:40002"
-    volumes:
-      - ./src/apps/drawing/sysconfig:/app/config:ro
-      - ./static:/app/static
-      - ./logs/drawing:/app/logs
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${PWD}:/workspace:ro
-
-  begreat_app:
-    image: art-backend:latest          # 复用 drawing_app 构建的镜像，无需重复 build
+    image: art-backend:latest          # 构建镜像，mandis_app 复用此镜像
     container_name: miniapp-begreat
     restart: unless-stopped
     command: ["node", "dist/apps/begreat/front.js"]
@@ -132,7 +91,7 @@ services:
       - ./logs/begreat:/app/logs
 
   mandis_app:
-    image: art-backend:latest          # 复用 drawing_app 构建的镜像，无需重复 build
+    image: art-backend:latest          # 复用 begreat_app 构建的镜像，无需重复 build
     container_name: miniapp-mandis
     restart: unless-stopped
     command: ["node", "dist/apps/mandis/front.js"]
@@ -175,7 +134,6 @@ services:
     container_name: miniapp-nginx
     restart: unless-stopped
     depends_on:
-      - drawing_app
       - begreat_app
       - mandis_app
     ports:

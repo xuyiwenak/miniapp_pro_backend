@@ -7,11 +7,13 @@ WORKDIR /app
 # 设置 npm 国内镜像源（阿里云），大幅提升安装速度
 RUN npm config set registry https://registry.npmmirror.com
 
-# 拷贝依赖定义
+# 拷贝依赖定义（只拷贝 package 文件，最大化缓存利用）
 COPY package*.json ./
 
-# 有 lock 文件用 npm ci，否则用 npm install
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# 使用 BuildKit 缓存挂载加速依赖安装
+# --mount=type=cache 会在多次构建间复用 npm 缓存，避免重复下载
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # 拷贝源码并构建
 COPY src ./src
@@ -21,10 +23,11 @@ COPY tsrpc.config.ts ./
 COPY json_to_schema.mjs ./
 # 管理后台静态页面（运行时由 Express 直接服务）
 COPY admin-panel ./admin-panel
+
 RUN npm run build \
-  && test -f dist/apps/drawing/sysconfig/production/log_config.json \
   && test -f dist/apps/begreat/sysconfig/production/log_config.json \
   && test -f dist/apps/mandis/sysconfig/production/log_config.json \
+  && test -f dist/apps/begreat/front.js \
   && test -f dist/apps/mandis/front.js
 
 # 移除开发依赖，仅保留生产环境需要的包
@@ -49,9 +52,9 @@ COPY --from=builder /app /app
 # 挂载卷
 VOLUME ["/app/static", "/app/logs"]
 
-# 暴露两个 app 的所有端口（compose 按需映射即可）
-EXPOSE 40000 40001 40002 41001 41002
+# 暴露所有 app 的端口（compose 按需映射即可）
+EXPOSE 41001 41002 42000 42001 42002
 
-# 默认启动 drawing；begreat 容器在 compose 里用 command 覆盖
+# 默认启动 begreat；mandis 容器在 compose 里用 command 覆盖
 ENV SYSCONFIG_ROOT=/app/config
-CMD ["node", "dist/apps/drawing/front.js"]
+CMD ["node", "dist/apps/begreat/front.js"]
