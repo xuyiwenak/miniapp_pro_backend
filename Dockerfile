@@ -43,8 +43,13 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
+# 设置 Alpine 国内镜像源（阿里云），大幅提升 apk 安装速度
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
 # 安装 docker CLI，用于系统监控 API 和容器管理
-RUN apk add --no-cache docker-cli
+# 使用 BuildKit 缓存挂载加速包下载
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add --no-cache docker-cli
 
 # 从 builder 阶段拷贝构建产物（含 dist/ 和 node_modules/）
 COPY --from=builder /app /app

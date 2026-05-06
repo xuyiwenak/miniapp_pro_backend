@@ -36,15 +36,29 @@
 ### 2. 使用 BuildKit 缓存挂载
 
 ```dockerfile
+# npm 包缓存
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# apk 包缓存
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add --no-cache docker-cli
 ```
 
 **预期效果**:
 - 首次构建: npm install ~300 秒
 - 后续构建 (依赖未变): ~10 秒 (97% 减少)
 
-### 3. 优化层顺序
+### 3. 使用 Alpine 国内镜像源
+
+```dockerfile
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+```
+
+**预期效果**:
+- apk add docker-cli: 从 150s → ~5s (97% 减少)
+
+### 4. 优化层顺序
 
 依赖安装层在源码拷贝层之前,确保代码改动不会触发依赖重装。
 
@@ -72,9 +86,15 @@ docker compose up -d
 
 | 场景 | 原时间 | 优化后 | 提升 |
 |------|--------|--------|------|
-| **完全重建** (清空缓存) | 1100s | ~350s | 68% ↓ |
-| **代码修改** (依赖不变) | 1100s | ~80s | 93% ↓ |
-| **依赖修改** | 1100s | ~320s | 71% ↓ |
+| **完全重建** (清空缓存) | 1100s | ~200s | 82% ↓ |
+| **代码修改** (依赖不变) | 1100s | ~40s | 96% ↓ |
+| **依赖修改** | 1100s | ~180s | 84% ↓ |
+
+**优化明细:**
+- Context 传输: 373MB → 20MB (减少 150s)
+- npm install (缓存): 300s → 10s (减少 290s)
+- apk add docker-cli: 150s → 5s (减少 145s)
+- TypeScript 编译: ~20s (不变)
 
 ---
 
