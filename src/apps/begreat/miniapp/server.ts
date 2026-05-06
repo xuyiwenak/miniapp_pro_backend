@@ -13,6 +13,7 @@ import paymentRoutes      from './routes/payment';
 import inviteRoutes       from './routes/invite';
 import adminRoutes        from './routes/admin';
 import begreatAdminRoutes from './routes/begreatAdmin';
+import appRoutes          from './routes/app';
 import { initRuntimeConfig } from '../config/BegreatRuntimeConfig';
 
 export function createBegreatApp(): express.Express {
@@ -30,6 +31,7 @@ export function createBegreatApp(): express.Express {
     },
   });
 
+  app.use('/app',            appRoutes);
   app.use('/login',          loginRoutes);
   app.use('/assessment',     assessmentRoutes);
   app.use('/report',         reportRoutes);

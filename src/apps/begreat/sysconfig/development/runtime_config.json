@@ -1,5 +1,11 @@
 {
   "_note": "热加载配置，修改后调用 POST /admin/reload-config 立即生效，无需重启容器。",
   "price_fen": 1,
-  "payment_enabled": false
+  "payment_enabled": false,
+  "oss_images": {
+    "_note": "OSS 图片签名 URL（10年有效期）",
+    "share_home": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/begreat/share/share-home.png?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093387843&Signature=VGJHcKaInz3DRLV%2FlhDwHBiR%2BZg%3D",
+    "share_home_timeline": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/begreat/share/share-home-timeline.png?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093387843&Signature=OtNFteiJgQFAGJ2n0dC0iNC%2BR1A%3D",
+    "wxacode": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/begreat/share/wxacode.jpg?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093387843&Signature=u0lHuqZ%2FFYeleLdI1%2BurR%2FYB8ps%3D"
+  }
 }

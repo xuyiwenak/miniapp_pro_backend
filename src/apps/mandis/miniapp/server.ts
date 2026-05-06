@@ -14,6 +14,7 @@ import workRoutes from './routes/work';
 import healingRoutes from './routes/healing';
 import ossRoutes from './routes/oss';
 import adminRoutes from './routes/admin/index';
+import appRoutes from './routes/app';
 import { gameLogger } from '../../../util/logger';
 
 const staticDir = path.join(process.cwd(), 'static');
@@ -38,6 +39,7 @@ export function createMiniappApp(): express.Express {
   app.use('/static', express.static(staticDir));
   app.use('/admin-panel', express.static(adminPanelDir));
 
+  app.use('/app', appRoutes);
   app.use('/login', loginRoutes);
   app.use('/home', homeRoutes);
   app.use('/api', apiRoutes);

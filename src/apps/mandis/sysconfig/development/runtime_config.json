@@ -1,0 +1,13 @@
+{
+  "_note": "热加载配置（mandis 小程序暂无热加载功能，修改后需重启）",
+  "oss_images": {
+    "_note": "OSS 图片签名 URL（10年有效期）",
+    "background": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/background.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=0UFU32APlX33mQby5FdauJy7N%2BQ%3D",
+    "words_welcome": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/words_welcome.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=10D3T71sCC6BDnMHleooVroMOW4%3D",
+    "words_upload": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/words_upload.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=CDd5gheyDU48ZUb5FuuV7Tn%2Fz6I%3D",
+    "icon_upload": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-upload.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=%2BfA6M2ZwUruerVsedSMnFH49JhA%3D",
+    "icon_original": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-original.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=UiV7NROZPQEW3ZSArKKfm%2FkGaZY%3D",
+    "icon_image": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-image.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=wYF6%2BVkbXFit3D%2BR1UOMVHJR7AU%3D",
+    "icon_safe": "https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-safe.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=AkiqWKnh7WkfIuZGAAxJCz%2BFwW0%3D"
+  }
+}
