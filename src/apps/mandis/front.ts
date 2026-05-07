@@ -14,6 +14,9 @@ import { websocketGameServer } from '../../common/WebsocketGameServer';
 
 import { MongoComponent } from '../../component/front/MongoComponent';
 import { PlayerComponent } from '../../component/PlayerComponent';
+import { BiAnalyticsComponent } from '../../component/BiAnalyticsComponent';
+import { BiAggregator } from '../../component/BiAggregator';
+import { BiAggregationJob } from '../../jobs/BiAggregationJob';
 import {
   registerCoreComponents,
   setupProcessLifecycle,
@@ -34,47 +37,13 @@ const swaggerFile = (() => { try { return require('../../../docs/app1/openapi.js
 // Entry function
 async function main() {
   syncEnvForSysConfig();
-
-  const httpPort = envNumber('httpPort', 'HTTP_PORT') ?? 40001;
-  const args: ServerGlobals = {
-    id: envFirst('id', 'SERVER_ID') ?? 'front_1',
-    internalIP: envFirst('internalIP', 'INTERNAL_IP'),
-    publicIP: envFirst('publicIP', 'PUBLIC_IP'),
-    gameType: envFirst('gameType', 'GAME_TYPE') ?? 'front',
-    group: envNumber('group', 'GROUP'),
-    environment: envFirst('environment', 'ENV') ?? 'development',
-    connectionTickTimeout:
-      envNumber('connectionTickTimeout', 'CONNECTION_TICK_TIMEOUT') ?? 30000,
-    port: envNumber('port', 'WS_PORT') ?? 40000,
-    httpPort,
-    miniappApiPort: envNumber('miniappApiPort', 'MINIAPP_PORT'),
-    serverProvide: envFirst('serverProvide', 'SERVER_PROVIDE') ?? '',
-  };
-  args.miniappApiPort = getMiniappPort(args);
+  const args = buildServerGlobals();
   logger.debug('ServerGlobals----->', args);
   registerCoreComponents(args);
-
-  /*-----------------------------com begin--------------------------------------*/
-
-  // 数据库相关组件：负责初始化 Mongo 连接和各区模型
-  const mongoComp: MongoComponent = new MongoComponent();
-  ComponentManager.instance.register('MongoComponent', mongoComp);
-
-  // 玩家组件：依赖 SysCfgComponent 和按区初始化后的 Player Model
-  const playerComp: PlayerComponent = new PlayerComponent();
-  ComponentManager.instance.register('PlayerComponent', playerComp);
-
-  /*-----------------------------com end--------------------------------------*/
-
+  const biAggregationJob = registerBusinessComponents(args);
   await startRegisteredComponents();
-
-  // 启动 HTTP API Server（基于 ServiceType）
-  await initHttpServer(args);
-  await startHttpServer();
-
-  // 小程序 REST + WebSocket 服务（端口逻辑与 httpServer 共享）
-  await startMiniappServer(args.miniappApiPort);
-
+  startBiAggregationJob(args, biAggregationJob);
+  await startApiAndMiniappServers(args);
   swaggui();
   await websocketGameServer.init(args);
   await websocketGameServer.start();
@@ -105,4 +74,53 @@ function swaggui() {
       logger.info('Swagger UI running on http://localhost:42999/api-docs');
     });
   }
+}
+
+function buildServerGlobals(): ServerGlobals {
+  const httpPort = envNumber('httpPort', 'HTTP_PORT') ?? 40001;
+  const args: ServerGlobals = {
+    id: envFirst('id', 'SERVER_ID') ?? 'front_1',
+    internalIP: envFirst('internalIP', 'INTERNAL_IP'),
+    publicIP: envFirst('publicIP', 'PUBLIC_IP'),
+    gameType: envFirst('gameType', 'GAME_TYPE') ?? 'front',
+    group: envNumber('group', 'GROUP'),
+    environment: envFirst('environment', 'ENV') ?? 'development',
+    connectionTickTimeout: envNumber('connectionTickTimeout', 'CONNECTION_TICK_TIMEOUT') ?? 30000,
+    port: envNumber('port', 'WS_PORT') ?? 40000,
+    httpPort,
+    miniappApiPort: envNumber('miniappApiPort', 'MINIAPP_PORT'),
+    serverProvide: envFirst('serverProvide', 'SERVER_PROVIDE') ?? '',
+  };
+  args.miniappApiPort = getMiniappPort(args);
+  return args;
+}
+
+function registerBusinessComponents(args: ServerGlobals): BiAggregationJob {
+  const mongoComp: MongoComponent = new MongoComponent();
+  ComponentManager.instance.register('MongoComponent', mongoComp);
+  const playerComp: PlayerComponent = new PlayerComponent();
+  ComponentManager.instance.register('PlayerComponent', playerComp);
+  const biAnalyticsComp: BiAnalyticsComponent = new BiAnalyticsComponent();
+  biAnalyticsComp.init({
+    enabled: args.environment !== 'test',
+    appName: 'mandis',
+    appVersion: '1.0.0',
+    platform: 'api',
+  });
+  ComponentManager.instance.register('BiAnalytics', biAnalyticsComp);
+  const biAggregator = new BiAggregator();
+  biAggregator.init({});
+  return new BiAggregationJob(biAggregator);
+}
+
+function startBiAggregationJob(args: ServerGlobals, biAggregationJob: BiAggregationJob): void {
+  if (args.environment !== 'test') {
+    biAggregationJob.start();
+  }
+}
+
+async function startApiAndMiniappServers(args: ServerGlobals): Promise<void> {
+  await initHttpServer(args);
+  await startHttpServer();
+  await startMiniappServer(args.miniappApiPort);
 }

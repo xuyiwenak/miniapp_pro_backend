@@ -2,12 +2,37 @@ import https from 'https';
 import { ComponentManager, EComName } from '../common/BaseComponent';
 import { getAccessToken } from './wxAccessToken';
 import { gameLogger as logger } from './logger';
+import { loadSysConfigJson } from './load_json';
 
 type SecurityResult = {
   safe: boolean;
   label?: string;
   errcode?: number;
 };
+
+const WX_IMG_SEC_MAX_BYTES = 750 * 1024;
+const WX_IMG_SEC_SUPPORTED_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+]);
+
+const DEFAULT_WX_IMG_SEC_MAX_BYTES = WX_IMG_SEC_MAX_BYTES;
+
+type RuntimeSecurityConfig = {
+  wx_img_sec_max_bytes?: number;
+};
+
+function getWxImgSecMaxBytes(): number {
+  const [data] = loadSysConfigJson('runtime_config.json');
+  const cfg = (data as RuntimeSecurityConfig | undefined) ?? {};
+  const value = Number(cfg.wx_img_sec_max_bytes);
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_WX_IMG_SEC_MAX_BYTES;
+  }
+  return Math.floor(value);
+}
 
 function isContentSecurityEnabled(): boolean {
   try {
@@ -94,26 +119,13 @@ export async function checkText(content: string, openId?: string, scene: number 
  * 图片限制：文件大小 < 750KB，分辨率不超过 2000px，支持 PNG/JPEG/JPG/GIF
  */
 export async function checkImage(buffer: Buffer, contentType: string): Promise<SecurityResult> {
-  if (!isContentSecurityEnabled()) {
-    return { safe: true };
-  }
+  const precheckResult = validateImageSecurityInput(buffer, contentType);
+  if (precheckResult) return precheckResult;
 
   try {
     const token = await getAccessToken();
     const url = `https://api.weixin.qq.com/wxa/img_sec_check?access_token=${token}`;
-
-    const boundary = '----WxSecBoundary' + Date.now();
-    const fieldName = 'media';
-    const filename = 'image.' + (contentType.includes('png') ? 'png' : 'jpg');
-
-    const header = Buffer.from(
-      `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
-        `Content-Type: ${contentType}\r\n\r\n`,
-    );
-    const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([header, buffer, footer]);
-
+    const { body, boundary } = buildImageMultipartBody(buffer, contentType);
     const raw = await httpsPost(url, body, {
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
       'Content-Length': String(body.length),
@@ -123,6 +135,11 @@ export async function checkImage(buffer: Buffer, contentType: string): Promise<S
     if (json.errcode === 87014) {
       return { safe: false, label: 'risky', errcode: 87014 };
     }
+    // 45002 / 40006: 文件体积或媒体尺寸超限，不再记录为 warning，避免日志噪音
+    if (json.errcode === 45002 || json.errcode === 40006) {
+      logger.info('img_sec_check skipped by wechat limit:', json.errcode, json.errmsg);
+      return { safe: true, errcode: json.errcode, label: 'skipped_wechat_limit' };
+    }
     if (json.errcode !== 0) {
       logger.warn('img_sec_check error:', json.errcode, json.errmsg);
     }
@@ -131,4 +148,36 @@ export async function checkImage(buffer: Buffer, contentType: string): Promise<S
     logger.error('checkImage exception:', (err as Error).message);
     return { safe: true };
   }
+}
+
+function validateImageSecurityInput(buffer: Buffer, contentType: string): SecurityResult | null {
+  if (!isContentSecurityEnabled()) {
+    return { safe: true };
+  }
+  const maxBytes = getWxImgSecMaxBytes();
+  const normalizedType = contentType.toLowerCase();
+  if (!WX_IMG_SEC_SUPPORTED_TYPES.has(normalizedType)) {
+    logger.info('img_sec_check skipped: unsupported content type', normalizedType);
+    return { safe: true, label: 'skipped_unsupported_type' };
+  }
+  if (buffer.length > maxBytes) {
+    logger.info('img_sec_check skipped: content size out of limit', buffer.length, 'max=', maxBytes);
+    return { safe: true, label: 'skipped_size_limit', errcode: 45002 };
+  }
+  return null;
+}
+
+function buildImageMultipartBody(buffer: Buffer, contentType: string): { body: Buffer; boundary: string } {
+  const boundary = '----WxSecBoundary' + Date.now();
+  const filename = 'image.' + (contentType.includes('png') ? 'png' : 'jpg');
+  const header = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="media"; filename="${filename}"\r\n` +
+      `Content-Type: ${contentType}\r\n\r\n`,
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return {
+    boundary,
+    body: Buffer.concat([header, buffer, footer]),
+  };
 }

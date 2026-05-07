@@ -1,6 +1,9 @@
 import { ComponentManager } from '../../common/BaseComponent';
 import { ServerGlobals } from '../../common/ServerGlobal';
 import { BegreatMongoComponent } from './component/BegreatMongoComponent';
+import { BiAnalyticsComponent } from '../../component/BiAnalyticsComponent';
+import { BiAggregator } from '../../component/BiAggregator';
+import { BiAggregationJob } from '../../jobs/BiAggregationJob';
 import {
   registerCoreComponents,
   setupProcessLifecycle,
@@ -30,7 +33,27 @@ async function main() {
   const mongoComp = new BegreatMongoComponent();
   ComponentManager.instance.register('BegreatMongoComponent', mongoComp);
 
+  // BI 分析组件：事件追踪和数据收集
+  const biAnalyticsComp = new BiAnalyticsComponent();
+  biAnalyticsComp.init({
+    enabled: args.environment !== 'test',
+    appName: 'begreat',
+    appVersion: '1.0.0',
+    platform: 'api',
+  });
+  ComponentManager.instance.register('BiAnalytics', biAnalyticsComp);
+
+  // BI 聚合引擎和定时任务
+  const biAggregator = new BiAggregator();
+  biAggregator.init({});
+  const biAggregationJob = new BiAggregationJob(biAggregator);
+
   await startRegisteredComponents();
+
+  // 启动 BI 聚合定时任务（非测试环境）
+  if (args.environment !== 'test') {
+    biAggregationJob.start();
+  }
 
   await startBegreatServer(args.miniappApiPort ?? 41002);
 }

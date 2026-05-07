@@ -33,8 +33,8 @@
         "pattern": "%[ [%d{yyyy-MM-dd hh:mm:ss.SSS O}] [%p] [%f:%l] %] -- %m"
       }
     },
-    "coze_debug": {
-      "filename": "logs/coze_debug.log",
+    "report_debug": {
+      "filename": "logs/report_debug.log",
       "type": "dateFile",
       "numBackups": 7,
       "encoding": "utf8",
@@ -63,8 +63,8 @@
       "enableCallStack": true,
       "level": "debug"
     },
-    "coze_debug": {
-      "appenders": ["coze_debug", "console"],
+    "report_debug": {
+      "appenders": ["report_debug", "console"],
       "enableCallStack": false,
       "level": "debug"
     }

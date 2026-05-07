@@ -7,7 +7,7 @@ import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { notifyHealingUpdate } from '../ws/chatServer';
 import { analyzeArtwork, NotArtworkError } from '../../../../util/qwenVlAnalyzer';
 import { resolveImageUrl } from '../../../../util/imageUploader';
-import { gameLogger as logger, cozeDebugLogger } from '../../../../util/logger';
+import { gameLogger as logger, reportDebugLogger } from '../../../../util/logger';
 import type { IWork, IHealingData, IHealingScores, IHealingVad } from '../../../../entity/work.entity';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../component/PlayerComponent';
@@ -281,10 +281,13 @@ function unwrapCozeOutput(raw: string): Record<string, unknown> {
   for (let depth = 0; depth < MAX_UNWRAP_DEPTH && obj !== null && typeof obj === 'object'; depth++) {
     const o = obj as Record<string, unknown>;
     // ── [DEBUG] 每层解包结果 ───────────────────────────────────────
-    logger.info(`[coze-debug] unwrap depth=${depth} keys:`, Object.keys(o));
+    logger.info(`[report-debug] unwrap depth=${depth} keys:`, Object.keys(o));
     const next = o.Output ?? o.output;
     if (next === null || next === undefined) {
-      cozeDebugLogger.info('[coze-debug] unwrap final object:', JSON.stringify(o).slice(0, COZE_OUTPUT_TRUNCATE_LENGTH));
+      reportDebugLogger.info('[report-debug] unwrap final object summary:', {
+        keys: Object.keys(o),
+        size: JSON.stringify(o).length,
+      });
       return o as Record<string, unknown>;
     }
     obj = typeof next === 'string' ? JSON.parse(next) : next;
@@ -451,19 +454,23 @@ function buildHealingUpdatePayload(parsed: ParsedHealingReport): Record<string, 
 }
 
 async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
-  cozeDebugLogger.info('[coze-debug] outputRaw (full):', outputRaw);
+  reportDebugLogger.info('[report-debug] output received:', {
+    runId,
+    length: outputRaw.length,
+    snippet: outputRaw.slice(0, COZE_OUTPUT_TRUNCATE_LENGTH),
+  });
   const Work = getWorkModel();
   const work = (await Work.findOne({ 'healing.cozeRunId': runId }).lean().exec()) as IWork | null;
   if (!work) { logger.warn('Coze webhook: no work for cozeRunId=', runId); return; }
   if (work.healing?.status === 'success') { logger.info('Coze webhook idempotent skip, workId=', work.workId); return; }
   const parsed = parseCozeOutput(outputRaw);
-  cozeDebugLogger.info('[coze-debug] parseCozeOutput result:', {
+  reportDebugLogger.info('[report-debug] parse result summary:', {
     scores: parsed.scores,
     summary: parsed.summary?.slice(0, 100),
-    colorAnalysis: parsed.colorAnalysis?.slice(0, 100),
-    compositionReport: parsed.compositionReport?.slice(0, 100),
+    colorAnalysisLength: parsed.colorAnalysis?.length ?? 0,
+    compositionReportLength: parsed.compositionReport?.length ?? 0,
     lineAnalysis: parsed.lineAnalysis,
-    suggestion: parsed.suggestion?.slice(0, 100),
+    suggestionLength: parsed.suggestion?.length ?? 0,
     keyColors: parsed.keyColors,
   });
   const { workId } = work;
@@ -478,7 +485,7 @@ async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
   const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
   const desc = work.desc ?? '';
   const tags = (work.tags ?? []).join(',');
-  const output = await analyzeArtwork(imageUrl, desc, tags);
+  const output = await analyzeArtwork(imageUrl, desc, tags, work.workId);
   await applyHealingSuccessFromRunId(jobId, output);
 }
 

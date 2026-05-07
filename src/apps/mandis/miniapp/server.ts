@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { sharedHttpOptions } from '../httpServer';
 import { setupChatWs } from './ws/chatServer';
 import { authMiddleware } from '../../../shared/miniapp/middleware/auth';
+import { biTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
 import { setupCommonMiniappApp, setupNotFoundHandler } from '../../../shared/miniapp/server';
 import loginRoutes from './routes/login';
 import homeRoutes from './routes/home';
@@ -15,6 +16,7 @@ import healingRoutes from './routes/healing';
 import ossRoutes from './routes/oss';
 import adminRoutes from './routes/admin/index';
 import appRoutes from './routes/app';
+import biRoutes from './routes/bi';
 import { gameLogger } from '../../../util/logger';
 
 const staticDir = path.join(process.cwd(), 'static');
@@ -39,6 +41,9 @@ export function createMiniappApp(): express.Express {
   app.use('/static', express.static(staticDir));
   app.use('/admin-panel', express.static(adminPanelDir));
 
+  // BI 追踪中间件：记录所有 API 请求
+  app.use(biTrackingMiddleware);
+
   app.use('/app', appRoutes);
   app.use('/login', loginRoutes);
   app.use('/home', homeRoutes);
@@ -48,6 +53,9 @@ export function createMiniappApp(): express.Express {
   app.use('/dataCenter', dataCenterRoutes);
   app.use('/healing', healingRoutes);
   app.use('/admin', adminRoutes);
+
+  // BI 查询 API（admin JWT 鉴权）
+  app.use('/api/bi', biRoutes);
 
   setupNotFoundHandler(app);
 

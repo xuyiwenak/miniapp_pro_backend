@@ -44,5 +44,5 @@ import { readSysconfigJsonFileUtf8 } from './sysconfig_path';
 export const serverLogger = log4js.getLogger('server');
 export const gameLogger = log4js.getLogger('game');
 export const propHistoryCsvLogger = log4js.getLogger('prop_history_csv');
-export const cozeDebugLogger = log4js.getLogger('coze_debug');
+export const reportDebugLogger = log4js.getLogger('report_debug');
 export const paymentLogger = log4js.getLogger('payment');

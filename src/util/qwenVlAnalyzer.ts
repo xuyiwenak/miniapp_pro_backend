@@ -2,6 +2,7 @@ import https from 'https';
 import http from 'http';
 import { ComponentManager, EComName } from '../common/BaseComponent';
 import { gameLogger as logger } from './logger';
+import { BiAnalyticsComponent } from '../component/BiAnalyticsComponent';
 
 export interface QwenVlConfig {
   apiKey: string;
@@ -13,6 +14,25 @@ const DEFAULT_MODEL = 'qwen-vl-plus';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_TOKENS = 2048;
+
+// Qwen VL 定价（人民币 / 1000 tokens）
+// 参考：https://help.aliyun.com/zh/model-studio/developer-reference/vl-plus-api
+const QWEN_VL_PLUS_INPUT_PRICE = 0.008; // ¥0.008 / 1k tokens
+const QWEN_VL_PLUS_OUTPUT_PRICE = 0.008; // ¥0.008 / 1k tokens
+
+/**
+ * 计算 Qwen VL API 调用成本（人民币）
+ * @param model 模型名称
+ * @param promptTokens 输入 tokens
+ * @param completionTokens 输出 tokens
+ * @returns 成本（人民币）
+ */
+function calculateQwenCost(model: string, promptTokens: number, completionTokens: number): number {
+  // 目前仅支持 qwen-vl-plus 定价，其他模型使用相同价格
+  const inputCost = (promptTokens / 1000) * QWEN_VL_PLUS_INPUT_PRICE;
+  const outputCost = (completionTokens / 1000) * QWEN_VL_PLUS_OUTPUT_PRICE;
+  return inputCost + outputCost;
+}
 
 /** 图片不是手工艺术作品时，模型返回的 error 字段值 */
 export const NOT_ARTWORK_ERROR_CODE = 'NOT_ARTWORK';
@@ -81,6 +101,11 @@ export function getQwenVlConfig(): QwenVlConfig {
 
 interface DashScopeResponse {
   choices?: Array<{ message?: { content?: string } }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
   error?: { message?: string; code?: string };
 }
 
@@ -152,39 +177,233 @@ function sendQwenVlRequest(cfg: QwenVlConfig, postData: Buffer, fullUrl: URL): P
   });
 }
 
-function parseAnalyzeResponse(rawBody: string): string {
-  let resp: DashScopeResponse;
-  try {
-    resp = JSON.parse(rawBody) as DashScopeResponse;
-  } catch (e) {
-    logger.error('QwenVL response JSON parse failed, raw length=', rawBody.length, 'preview=', rawBody.slice(0, 300));
-    throw e;
-  }
-  if (resp.error) {
-    throw new Error(`QwenVL API error: ${resp.error.code ?? ''} ${resp.error.message ?? ''}`);
-  }
+function parseAnalyzeResponse(
+  rawBody: string,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string
+): string {
+  const resp = parseDashScopeResponse(rawBody, durationMs, model, imageUrl, workId);
+  ensureNoApiError(resp, durationMs, model, imageUrl, workId);
   const content = resp.choices?.[0]?.message?.content;
-  if (!content) throw new Error('QwenVL returned empty content');
+  if (!content) return handleEmptyQwenContent(resp, durationMs, model, imageUrl, workId);
   logger.info('QwenVL analyze success content length=', content.length);
+  const usage = buildAndLogUsage(resp, durationMs, model);
+  return handleAnalyzeJson(content, usage, durationMs, model, imageUrl, workId);
+}
+
+type AnalyzeUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cost: number;
+};
+
+function handleEmptyQwenContent(
+  resp: DashScopeResponse,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string,
+): never {
+  trackQwenAnalyzeFailure(resp, durationMs, model, workId, imageUrl, 'EMPTY_CONTENT', 'QwenVL returned empty content');
+  throw new Error('QwenVL returned empty content');
+}
+
+function buildAndLogUsage(resp: DashScopeResponse, durationMs: number, model: string): AnalyzeUsage {
+  const promptTokens = resp.usage?.prompt_tokens ?? 0;
+  const completionTokens = resp.usage?.completion_tokens ?? 0;
+  const totalTokens = resp.usage?.total_tokens ?? 0;
+  const cost = calculateQwenCost(model, promptTokens, completionTokens);
+  logger.info('qwen.token.usage', { promptTokens, completionTokens, totalTokens, cost: cost.toFixed(6), durationMs });
+  return { promptTokens, completionTokens, totalTokens, cost };
+}
+
+function handleAnalyzeJson(
+  content: string,
+  usage: AnalyzeUsage,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string,
+): string {
   const jsonStr = extractJson(content);
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(jsonStr) as Record<string, unknown>;
-  } catch {
-    return jsonStr;
-  }
-  if (parsed.error === NOT_ARTWORK_ERROR_CODE) {
+  const parsed = tryParseJson(jsonStr);
+  if (parsed?.error === NOT_ARTWORK_ERROR_CODE) {
+    trackQwenAnalyzeFailureByUsage(
+      usage.promptTokens,
+      usage.completionTokens,
+      usage.totalTokens,
+      durationMs,
+      model,
+      usage.cost,
+      workId,
+      imageUrl,
+      NOT_ARTWORK_ERROR_CODE,
+      String(parsed.reason ?? ''),
+    );
     throw new NotArtworkError(String(parsed.reason ?? ''));
   }
+  trackQwenAnalyzeSuccess(
+    usage.promptTokens,
+    usage.completionTokens,
+    usage.totalTokens,
+    durationMs,
+    model,
+    usage.cost,
+    workId,
+    imageUrl,
+  );
   return jsonStr;
 }
 
-export async function analyzeArtwork(imageUrl: string, desc: string, tags: string): Promise<string> {
+function tryParseJson(jsonStr: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(jsonStr) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function parseDashScopeResponse(
+  rawBody: string,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string,
+): DashScopeResponse {
+  try {
+    return JSON.parse(rawBody) as DashScopeResponse;
+  } catch (e) {
+    logger.error('QwenVL response JSON parse failed, raw length=', rawBody.length, 'preview=', rawBody.slice(0, 300));
+    trackQwenAnalyzeFailureByUsage(0, 0, 0, durationMs, model, 0, workId, imageUrl, 'JSON_PARSE_ERROR', (e as Error).message);
+    throw e;
+  }
+}
+
+function ensureNoApiError(
+  resp: DashScopeResponse,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string,
+): void {
+  if (!resp.error) return;
+  const promptTokens = resp.usage?.prompt_tokens ?? 0;
+  const completionTokens = resp.usage?.completion_tokens ?? 0;
+  const totalTokens = resp.usage?.total_tokens ?? 0;
+  const cost = calculateQwenCost(model, promptTokens, completionTokens);
+  trackQwenAnalyzeFailureByUsage(
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    durationMs,
+    model,
+    cost,
+    workId,
+    imageUrl,
+    resp.error.code ?? 'API_ERROR',
+    resp.error.message ?? 'Unknown error',
+  );
+  throw new Error(`QwenVL API error: ${resp.error.code ?? ''} ${resp.error.message ?? ''}`);
+}
+
+function trackQwenAnalyzeFailure(
+  resp: DashScopeResponse,
+  durationMs: number,
+  model: string,
+  workId: string | undefined,
+  imageUrl: string,
+  errorCode: string,
+  errorMessage: string,
+): void {
+  const promptTokens = resp.usage?.prompt_tokens ?? 0;
+  const completionTokens = resp.usage?.completion_tokens ?? 0;
+  const totalTokens = resp.usage?.total_tokens ?? 0;
+  const cost = calculateQwenCost(model, promptTokens, completionTokens);
+  trackQwenAnalyzeFailureByUsage(
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    durationMs,
+    model,
+    cost,
+    workId,
+    imageUrl,
+    errorCode,
+    errorMessage,
+  );
+}
+
+function trackQwenAnalyzeFailureByUsage(
+  promptTokens: number,
+  completionTokens: number,
+  totalTokens: number,
+  durationMs: number,
+  model: string,
+  cost: number,
+  workId: string | undefined,
+  imageUrl: string,
+  errorCode: string,
+  errorMessage: string,
+): void {
+  const biAnalytics = ComponentManager.instance.getComponentByKey<BiAnalyticsComponent>('BiAnalytics');
+  if (!biAnalytics) return;
+  biAnalytics.trackQwenAnalyze({
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    durationMs,
+    model,
+    cost,
+    status: 'failed',
+    errorCode,
+    errorMessage,
+    workId,
+    imageUrl,
+  });
+}
+
+function trackQwenAnalyzeSuccess(
+  promptTokens: number,
+  completionTokens: number,
+  totalTokens: number,
+  durationMs: number,
+  model: string,
+  cost: number,
+  workId: string | undefined,
+  imageUrl: string,
+): void {
+  const biAnalytics = ComponentManager.instance.getComponentByKey<BiAnalyticsComponent>('BiAnalytics');
+  if (!biAnalytics) return;
+  biAnalytics.trackQwenAnalyze({
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    durationMs,
+    model,
+    cost,
+    status: 'success',
+    workId,
+    imageUrl,
+  });
+}
+
+export async function analyzeArtwork(
+  imageUrl: string,
+  desc: string,
+  tags: string,
+  workId?: string
+): Promise<string> {
   const cfg = getQwenVlConfig();
+  const model = cfg.model ?? DEFAULT_MODEL;
   const baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-  logger.info('QwenVL analyze start model=', cfg.model ?? DEFAULT_MODEL, 'imageUrl length=', imageUrl.length);
+  logger.info('QwenVL analyze start model=', model, 'imageUrl length=', imageUrl.length);
+  const requestStartAt = Date.now();
   const postData = buildAnalyzePostData(cfg, imageUrl, desc, tags);
   const fullUrl = new URL(`${baseUrl}/chat/completions`);
   const rawBody = await sendQwenVlRequest(cfg, postData, fullUrl);
-  return parseAnalyzeResponse(rawBody);
+  const durationMs = Date.now() - requestStartAt;
+  return parseAnalyzeResponse(rawBody, durationMs, model, imageUrl, workId);
 }

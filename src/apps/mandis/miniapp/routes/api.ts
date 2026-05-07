@@ -8,6 +8,9 @@ import { uploadToStorage, resolveImageUrl } from '../../../../util/imageUploader
 import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { checkImage } from '../../../../util/wxContentSecurity';
 import { gameLogger as logger } from '../../../../util/logger';
+import { getImageMeta } from '../../../../util/imageMeta';
+import { ComponentManager } from '../../../../common/BaseComponent';
+import { BiAnalyticsComponent } from '../../../../component/BiAnalyticsComponent';
 
 /** Shape of the file object multer attaches to the request */
 interface UploadedFile {
@@ -18,6 +21,12 @@ interface UploadedFile {
 
 /** MiniappRequest extended with optional multer file */
 type MulterMiniappRequest = MiniappRequest & { file?: UploadedFile };
+type UploadRouteConfig = {
+  objectPrefix: string;
+  unsafeMessage: string;
+  uploadFailedMessage: string;
+  biErrorCode: string;
+};
 
 const OSS_PREFIX = 'oss://';
 /** 通用作品等上传单文件上限 */
@@ -277,44 +286,13 @@ router.post(
   authMiddleware,
   upload.single('file'),
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId;
-    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
-    const file = (req as MulterMiniappRequest).file;
-
-    if (!file || !file.buffer) {
-      sendErr(res, 'Missing file', 400);
-      return;
-    }
-    if (!file.mimetype.startsWith('image/')) {
-      sendErr(res, 'Only image files are allowed', 400);
-      return;
-    }
-
-    // 上传前先走内容安全审核，避免违规图片入库
-    const imgCheck = await checkImage(file.buffer, file.mimetype);
-    if (!imgCheck.safe) {
-      sendErr(res, '图片疑似违规，请更换后重试', 400);
-      return;
-    }
-
-    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1e9);
     const { worksObjectPrefix } = getOssUploadPrefixes();
-    const key = `${worksObjectPrefix}/${userId}/${timestamp}-${random}${safeExt}`;
-
-    try {
-      const url = await uploadToStorage(file.buffer, key, file.mimetype);
-      const payload: { url: string; cdnUrl?: string } = { url };
-      if (url.startsWith(OSS_PREFIX)) {
-        payload.cdnUrl = resolveImageUrl(url);
-      }
-      sendSucc(res, payload);
-    } catch (err) {
-      logger.error('api:upload error', { userId, key, error: (err as Error).message });
-      sendErr(res, 'Upload failed', 500);
-    }
+    await handleImageUploadRequest(req, res, {
+      objectPrefix: worksObjectPrefix,
+      unsafeMessage: '图片疑似违规，请更换后重试',
+      uploadFailedMessage: 'Upload failed',
+      biErrorCode: 'UPLOAD_FAILED',
+    });
   },
 );
 
@@ -324,45 +302,103 @@ router.post(
   authMiddleware,
   handleAvatarUpload,
   async (req: MiniappRequest, res: Response) => {
-    const userId = req.userId;
-    if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
-    const file = (req as MulterMiniappRequest).file;
-
-    if (!file || !file.buffer) {
-      sendErr(res, 'Missing file', 400);
-      return;
-    }
-    if (!file.mimetype.startsWith('image/')) {
-      sendErr(res, 'Only image files are allowed', 400);
-      return;
-    }
-
-    const imgCheck = await checkImage(file.buffer, file.mimetype);
-    if (!imgCheck.safe) {
-      sendErr(res, '头像图片疑似违规，请更换后重试', 400);
-      return;
-    }
-
-    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1e9);
     const { avatarObjectPrefix } = getOssUploadPrefixes();
-    const key = `${avatarObjectPrefix}/${userId}/${timestamp}-${random}${safeExt}`;
-
-    try {
-      const url = await uploadToStorage(file.buffer, key, file.mimetype);
-      const payload: { url: string; cdnUrl?: string } = { url };
-      if (url.startsWith(OSS_PREFIX)) {
-        payload.cdnUrl = resolveImageUrl(url);
-      }
-      sendSucc(res, payload);
-    } catch (err) {
-      logger.error('api:uploadAvatar error', { userId, key, error: (err as Error).message });
-      sendErr(res, 'Upload avatar failed', 500);
-    }
+    await handleImageUploadRequest(req, res, {
+      objectPrefix: avatarObjectPrefix,
+      unsafeMessage: '头像图片疑似违规，请更换后重试',
+      uploadFailedMessage: 'Upload avatar failed',
+      biErrorCode: 'AVATAR_UPLOAD_FAILED',
+    });
   },
 );
+
+async function handleImageUploadRequest(
+  req: MiniappRequest,
+  res: Response,
+  config: UploadRouteConfig,
+): Promise<void> {
+  const requestStartAt = Date.now();
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  const file = (req as MulterMiniappRequest).file;
+  if (!file || !file.buffer) { sendErr(res, 'Missing file', 400); return; }
+  if (!file.mimetype.startsWith('image/')) { sendErr(res, 'Only image files are allowed', 400); return; }
+
+  const meta = getImageMeta(file.buffer, file.mimetype);
+  const bytes = file.buffer.length;
+  const imgCheck = await checkImage(file.buffer, file.mimetype);
+  if (!imgCheck.safe) { sendErr(res, config.unsafeMessage, 400); return; }
+
+  const key = buildUploadObjectKey(config.objectPrefix, userId, file.originalname);
+  try {
+    const url = await uploadToStorage(file.buffer, key, file.mimetype);
+    const durationMs = Date.now() - requestStartAt;
+    logUploadStats(userId, bytes, file.mimetype, meta.width, meta.height, durationMs);
+    trackUploadResult(req, userId, file.mimetype, bytes, meta, durationMs, 'success');
+    sendSucc(res, buildUploadResponsePayload(url));
+  } catch (err) {
+    const durationMs = Date.now() - requestStartAt;
+    logger.error('api:upload error', { userId, key, error: (err as Error).message });
+    trackUploadResult(req, userId, file.mimetype, bytes, meta, durationMs, 'failed', config.biErrorCode, (err as Error).message);
+    sendErr(res, config.uploadFailedMessage, 500);
+  }
+}
+
+function buildUploadObjectKey(objectPrefix: string, userId: string, originalName: string): string {
+  const ext = path.extname(originalName || '').toLowerCase() || '.jpg';
+  const safeExt = ext.replace(/[^a-z0-9.]/gi, '') || '.jpg';
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1e9);
+  return `${objectPrefix}/${userId}/${timestamp}-${random}${safeExt}`;
+}
+
+function buildUploadResponsePayload(url: string): { url: string; cdnUrl?: string } {
+  const payload: { url: string; cdnUrl?: string } = { url };
+  if (url.startsWith(OSS_PREFIX)) payload.cdnUrl = resolveImageUrl(url);
+  return payload;
+}
+
+function logUploadStats(
+  userId: string,
+  bytes: number,
+  contentType: string,
+  width: number | undefined,
+  height: number | undefined,
+  durationMs: number,
+): void {
+  logger.info('api.upload.stats', {
+    userId,
+    bytes,
+    contentType,
+    width: width ?? null,
+    height: height ?? null,
+    durationMs,
+  });
+}
+
+function trackUploadResult(
+  req: MiniappRequest,
+  userId: string,
+  contentType: string,
+  bytes: number,
+  meta: { width?: number; height?: number },
+  durationMs: number,
+  status: 'success' | 'failed',
+  errorCode?: string,
+  errorMessage?: string,
+): void {
+  const biAnalytics = ComponentManager.instance.getComponentByKey<BiAnalyticsComponent>('BiAnalytics');
+  if (!biAnalytics) return;
+  biAnalytics.trackUploadFile(
+    { bytes, contentType, width: meta.width, height: meta.height, durationMs, status, errorCode, errorMessage },
+    {
+      userId,
+      requestId: req.headers['x-request-id'] as string | undefined,
+      ipAddress: BiAnalyticsComponent.anonymizeIp(req.ip ?? '0.0.0.0'),
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+    },
+  );
+}
 
 type PersonalInfoBody = {
   image?: string;

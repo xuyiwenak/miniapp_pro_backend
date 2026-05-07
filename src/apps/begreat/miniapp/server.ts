@@ -6,6 +6,7 @@ import {
   setupNotFoundHandler,
   startMiniappHttpServer,
 } from '../../../shared/miniapp/server';
+import { biTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
 import loginRoutes        from './routes/login';
 import assessmentRoutes   from './routes/assessment';
 import reportRoutes       from './routes/report';
@@ -30,6 +31,9 @@ export function createBegreatApp(): express.Express {
       methods: 'GET, POST, OPTIONS',
     },
   });
+
+  // BI 追踪中间件：记录所有 API 请求
+  app.use(biTrackingMiddleware);
 
   app.use('/app',            appRoutes);
   app.use('/login',          loginRoutes);
