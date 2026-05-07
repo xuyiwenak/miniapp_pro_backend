@@ -94,7 +94,11 @@ router.get('/containers', (_req: AdminRequest, res: Response) => {
 /** POST /admin/system/restart — 重启容器（仅超级管理员） */
 router.post('/restart', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const { name } = req.body as { name?: string };
-  const allowed = ['miniapp-backend', 'miniapp-nginx', 'miniapp-mongo', 'miniapp-redis'];
+  // 允许重启的容器白名单（与 docker-compose container_name 一致）
+  const allowed = [
+    'miniapp-mandis', 'miniapp-begreat', 'miniapp-drawing',
+    'miniapp-nginx', 'miniapp-mongo', 'miniapp-redis',
+  ];
   if (!name || !allowed.includes(name)) {
     sendErr(res, 'Invalid container name', 400);
     return;
