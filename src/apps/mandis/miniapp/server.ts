@@ -20,8 +20,6 @@ import biRoutes from './routes/bi';
 import { gameLogger } from '../../../util/logger';
 
 const staticDir = path.join(process.cwd(), 'static');
-// __dirname = dist/miniapp/  →  ../../  = project root
-const adminPanelDir = path.join(__dirname, '../../admin-panel');
 
 export function createMiniappApp(): express.Express {
   const app = express();
@@ -39,7 +37,6 @@ export function createMiniappApp(): express.Express {
   });
 
   app.use('/static', express.static(staticDir));
-  app.use('/admin-panel', express.static(adminPanelDir));
 
   // BI 追踪中间件：记录所有 API 请求
   app.use(biTrackingMiddleware);

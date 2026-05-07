@@ -148,6 +148,8 @@ services:
       - ./static:/usr/share/nginx/html/static:ro
       # 前端 SPA（art_web build 产物）：先在宿主机 build 后放到 art_web_dist/ 目录
       - ./art_web_dist:/usr/share/nginx/html/app:ro
+      # Commander 管理后台（commander build 产物）
+      - ../commander/dist:/usr/share/nginx/html/commander:ro
 
 networks:
   default:
