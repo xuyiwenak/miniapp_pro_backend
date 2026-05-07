@@ -122,5 +122,5 @@ function startBiAggregationJob(args: ServerGlobals, biAggregationJob: BiAggregat
 async function startApiAndMiniappServers(args: ServerGlobals): Promise<void> {
   await initHttpServer(args);
   await startHttpServer();
-  await startMiniappServer(args.miniappApiPort);
+  await startMiniappServer(args.miniappApiPort ?? 42002);
 }
