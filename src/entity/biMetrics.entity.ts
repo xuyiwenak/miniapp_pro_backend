@@ -1,4 +1,4 @@
-import { Schema, model } from 'mongoose';
+import { Schema } from 'mongoose';
 import { AppName, EventType } from './biEvent.entity';
 
 // 小时级聚合指标接口
@@ -150,8 +150,5 @@ BiMetricsDailySchema.index({ appName: 1, periodStart: 1, eventType: 1 }, { uniqu
 const ONE_YEAR_IN_SECONDS = 365 * 24 * 60 * 60;
 BiMetricsHourlySchema.index({ createdAt: 1 }, { expireAfterSeconds: ONE_YEAR_IN_SECONDS });
 
-export const BiMetricsHourly = model<IBiMetricsHourly>(
-  'BiMetricsHourly',
-  BiMetricsHourlySchema
-);
-export const BiMetricsDaily = model<IBiMetricsDaily>('BiMetricsDaily', BiMetricsDailySchema);
+// Schemas are exported for connection-based registration (see BiDBModel)
+export { BiMetricsHourlySchema, BiMetricsDailySchema };

@@ -25,6 +25,7 @@ import {
   initializeZoneModel,
   stopAllZoneConnection,
 } from '../../dbservice/model/ZoneDBModel';
+import { initializeBiModels } from '../../dbservice/model/BiDBModel';
 import { BaseMongoComponent } from '../mongo/BaseMongoComponent';
 import { SysCfgComponent } from '../SysCfgComponent';
 
@@ -83,7 +84,10 @@ export class MongoComponent extends BaseMongoComponent implements IBaseComponent
         errorLog: 'MongoDB connection error:',
         disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
         reconnectedLog: 'MongoDB reconnected',
-        onConnected: initializeServerModel,
+        onConnected: (connection) => {
+        initializeServerModel(connection);
+        initializeBiModels(connection);
+      },
       }),
     );
 

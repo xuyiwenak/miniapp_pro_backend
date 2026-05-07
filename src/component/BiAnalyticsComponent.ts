@@ -1,18 +1,18 @@
 import { v4 as uuidv4 } from 'uuid';
 import { IBaseComponent } from '../common/BaseComponent';
 import {
-  BiEvent,
-  IBiEvent,
-  EventType,
-  Platform,
-  AppName,
-  IEventContext,
-  EventData,
-  IUploadFileData,
-  IQwenAnalyzeData,
-  IApiRequestData,
-  IClientEventData,
+  type IBiEvent,
+  type EventType,
+  type Platform,
+  type AppName,
+  type IEventContext,
+  type EventData,
+  type IUploadFileData,
+  type IQwenAnalyzeData,
+  type IApiRequestData,
+  type IClientEventData,
 } from '../entity/biEvent.entity';
+import { getBiModelManager } from '../dbservice/model/BiDBModel';
 import { gameLogger } from '../util/logger';
 
 // 追踪配置选项
@@ -173,7 +173,7 @@ export class BiAnalyticsComponent implements IBaseComponent {
       const batch = this.eventQueue.splice(0, this.BATCH_SIZE);
       const events = batch.map((params) => this.buildEvent(params));
 
-      await BiEvent.insertMany(events, { ordered: false });
+      await getBiModelManager().getBiEventModel().insertMany(events, { ordered: false });
 
       gameLogger.debug('BiAnalytics events inserted', {
         count: events.length,

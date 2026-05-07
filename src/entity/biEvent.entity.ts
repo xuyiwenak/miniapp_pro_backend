@@ -1,4 +1,4 @@
-import { Schema, model } from 'mongoose';
+import { Schema } from 'mongoose';
 
 // 事件类型常量
 export const EVENT_TYPE_UPLOAD_FILE = 'upload_file';
@@ -152,4 +152,6 @@ BiEventSchema.index({ 'data.status': 1, timestamp: -1 });
 const NINETY_DAYS_IN_SECONDS = 90 * 24 * 60 * 60;
 BiEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: NINETY_DAYS_IN_SECONDS });
 
-export const BiEvent = model<IBiEvent>('BiEvent', BiEventSchema);
+// Schema is exported for connection-based registration (see BiDBModel)
+// Model access: use getBiEventModel() / getBiMetricsHourlyModel() / getBiMetricsDailyModel()
+export { BiEventSchema };
