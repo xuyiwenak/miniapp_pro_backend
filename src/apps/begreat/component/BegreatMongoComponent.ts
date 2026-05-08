@@ -1,5 +1,6 @@
 import { ComponentManager, EComName, IBaseComponent } from '../../../common/BaseComponent';
 import { BaseMongoComponent } from '../../../component/mongo/BaseMongoComponent';
+import { initializeBiModels } from '../../../dbservice/model/BiDBModel';
 import { initializeBegreatModels, stopBegreatConnection } from '../dbservice/BegreatDBModel';
 
 export class BegreatMongoComponent extends BaseMongoComponent implements IBaseComponent {
@@ -18,6 +19,7 @@ export class BegreatMongoComponent extends BaseMongoComponent implements IBaseCo
         reconnectedLog: '[Begreat] MongoDB reconnected',
         onConnected: (connection) => {
           initializeBegreatModels(connection);
+          initializeBiModels(connection);
         },
       }),
     );
