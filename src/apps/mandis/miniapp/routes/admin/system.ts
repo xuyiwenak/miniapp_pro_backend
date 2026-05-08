@@ -237,7 +237,7 @@ router.post('/app/stop', requireSuperAdmin, (req: AdminRequest, res: Response) =
   });
 });
 
-/** GET /admin/system/app/logs — 使用 docker logs（无需 compose） */
+/** GET /admin/system/app/logs — docker logs + 文件日志兜底 */
 router.get('/app/logs', (req: AdminRequest, res: Response) => {
   const app = (req.query.app as string) || '';
   if (!(VALID_APPS as readonly string[]).includes(app)) {
@@ -246,16 +246,30 @@ router.get('/app/logs', (req: AdminRequest, res: Response) => {
   }
   const tail = Math.min(Math.max(parseInt(String(req.query.tail || '100'), 10) || 100, 10), 2000);
   const cname = APP_CONTAINER[app as AppName];
-  // 直接用 docker logs，不依赖 compose
-  const cmd = `docker logs --tail=${tail} "${cname}" 2>&1`;
 
-  exec(cmd, { timeout: 15000 }, (err, stdout) => {
-    if (err) {
-      sendSucc(res, { lines: [], error: (err.message || '').slice(0, 1000) });
+  // Step 1: 尝试 docker logs
+  exec(`docker logs --tail=${tail} "${cname}" 2>&1`, { timeout: 15000 }, (err, stdout) => {
+    const dockerLines = (stdout || '').split('\n').filter((l) => l.trim() !== '');
+
+    // 如果 docker logs 有内容，直接返回
+    if (!err && dockerLines.length > 0) {
+      sendSucc(res, { lines: dockerLines, tail, source: 'docker' });
       return;
     }
-    const lines = stdout.split('\n').filter((l) => l.trim() !== '');
-    sendSucc(res, { lines, tail });
+
+    // Step 2: fallback — 读取文件日志（mandis 写文件而非 stdout）
+    const logDir = path.join(process.cwd(), 'logs');
+    const today = new Date().toISOString().split('T')[0];
+    const logFile = path.join(logDir, `game.${today}.log`);
+
+    exec(`tail -n ${tail} "${logFile}" 2>/dev/null`, { timeout: 5000 }, (_err2, fileStdout) => {
+      const fileLines = (fileStdout || '').split('\n').filter((l) => l.trim() !== '');
+      if (fileLines.length > 0) {
+        sendSucc(res, { lines: fileLines, tail, source: 'file', file: logFile });
+      } else {
+        sendSucc(res, { lines: [], tail, source: 'none' });
+      }
+    });
   });
 });
 
