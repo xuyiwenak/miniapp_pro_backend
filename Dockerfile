@@ -47,7 +47,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 # 安装 docker CLI，用于系统监控 API 和容器管理
 # 使用 BuildKit 缓存挂载加速包下载
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk add --no-cache docker-cli
+    apk add --no-cache docker-cli docker-cli-compose
 
 # 从 builder 阶段拷贝构建产物（含 dist/ 和 node_modules/）
 COPY --from=builder /app /app

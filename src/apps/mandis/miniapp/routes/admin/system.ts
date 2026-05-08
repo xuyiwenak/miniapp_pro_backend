@@ -8,22 +8,17 @@ import { requireSuperAdmin, type AdminRequest } from '../../middleware/adminAuth
 import { getHealDailyLimit, setHealDailyLimit } from '../../../../../auth/RedisTokenStore';
 import { gameLogger as logger } from '../../../../../util/logger';
 
-// ── App → Docker Compose 映射（与 docker-compose.yml container_name / service 一致）────
+// ── App → Docker 映射 ────
 
 const VALID_APPS = ['mandis', 'begreat'] as const;
 type AppName = typeof VALID_APPS[number];
 
 const APP_SERVICE: Record<AppName, string> = {
-  mandis: 'mandis_app',
-  begreat: 'begreat_app',
+  mandis: 'mandis_app', begreat: 'begreat_app',
 };
-
 const APP_CONTAINER: Record<AppName, string> = {
-  mandis: 'miniapp-mandis',
-  begreat: 'miniapp-begreat',
+  mandis: 'miniapp-mandis', begreat: 'miniapp-begreat',
 };
-
-/** Nginx 配置目录（相对于 COMPOSE_PROJECT_DIR） */
 const NGINX_CONF_DIR = 'nginx/conf.d';
 
 // ── helpers ──
@@ -84,6 +79,11 @@ function composeCmd(projectDir: string, subCmd: string): string {
   return `docker compose -f "${composeFile}" --project-directory "${projectDir}" ${subCmd}`;
 }
 
+/** 动态获取 nginx 容器名（可能带前缀如 bf2ad4a566ef_miniapp-nginx） */
+function nginxContainerName(): string {
+  return '$(docker ps --filter "name=nginx" --format "{{.Names}}" 2>/dev/null | head -1 || echo "miniapp-nginx")';
+}
+
 function forceKillContainerCmd(cname: string): string {
   return [
     `pid=$(docker inspect --format '{{.State.Pid}}' "${cname}" 2>/dev/null || echo 0)`,
@@ -103,7 +103,7 @@ function forceKillContainerCmd(cname: string): string {
 
 const router = Router();
 
-/** GET /admin/system/metrics — CPU / 内存 / 运行时间 */
+/** GET /admin/system/metrics */
 router.get('/metrics', async (_req: AdminRequest, res: Response) => {
   try {
     const cpuUsage = await sampleCpuUsage();
@@ -112,24 +112,17 @@ router.get('/metrics', async (_req: AdminRequest, res: Response) => {
     const usedMem = totalMem - freeMem;
     sendSucc(res, {
       cpu: {
-        usage: cpuUsage,
-        cores: os.cpus().length,
-        model: os.cpus()[0]?.model ?? 'Unknown',
-        loadAvg: os.loadavg(),
+        usage: cpuUsage, cores: os.cpus().length,
+        model: os.cpus()[0]?.model ?? 'Unknown', loadAvg: os.loadavg(),
       },
       memory: {
-        total: totalMem,
-        used: usedMem,
-        free: freeMem,
+        total: totalMem, used: usedMem, free: freeMem,
         usagePercent: Math.round((usedMem / totalMem) * 1000) / 10,
       },
       system: {
-        uptime: os.uptime(),
-        uptimeStr: formatUptime(os.uptime()),
-        nodeUptime: process.uptime(),
-        nodeUptimeStr: formatUptime(process.uptime()),
-        platform: os.platform(),
-        hostname: os.hostname(),
+        uptime: os.uptime(), uptimeStr: formatUptime(os.uptime()),
+        nodeUptime: process.uptime(), nodeUptimeStr: formatUptime(process.uptime()),
+        platform: os.platform(), hostname: os.hostname(),
       },
     });
   } catch (e) {
@@ -138,30 +131,25 @@ router.get('/metrics', async (_req: AdminRequest, res: Response) => {
   }
 });
 
-/** GET /admin/system/containers — Docker 容器列表 */
+/** GET /admin/system/containers */
 router.get('/containers', (_req: AdminRequest, res: Response) => {
   exec('docker ps -a --format "{{json .}}"', { timeout: 10000 }, (err, stdout) => {
     if (err) {
       sendSucc(res, { containers: [], error: 'Docker unavailable: ' + err.message });
       return;
     }
-    const containers = stdout
-      .trim()
-      .split('\n')
-      .filter(Boolean)
+    const containers = stdout.trim().split('\n').filter(Boolean)
       .map((line) => { try { return JSON.parse(line); } catch { return null; } })
       .filter(Boolean);
     sendSucc(res, { containers });
   });
 });
 
-/** POST /admin/system/restart — 重启容器（仅超级管理员） */
+/** POST /admin/system/restart — 单容器重启 */
 router.post('/restart', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const { name } = req.body as { name?: string };
-  const allowed = [
-    'miniapp-mandis', 'miniapp-begreat', 'miniapp-drawing',
-    'miniapp-nginx', 'miniapp-mongo', 'miniapp-redis',
-  ];
+  const allowed = ['miniapp-mandis', 'miniapp-begreat', 'miniapp-drawing',
+    'miniapp-nginx', 'miniapp-mongo', 'miniapp-redis'];
   if (!name || !allowed.includes(name)) {
     sendErr(res, 'Invalid container name', 400);
     return;
@@ -176,19 +164,19 @@ router.post('/restart', requireSuperAdmin, (req: AdminRequest, res: Response) =>
 // 服务器控制台 API
 // ──────────────────────────────────────────────────────────────────────────────
 
-/** POST /admin/system/app/restart — 普通重启 */
+/** POST /admin/system/app/restart — 普通重启（使用 docker compose） */
 router.post('/app/restart', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const app = parseApp(req.body as Record<string, unknown>, res);
   if (!app) return;
   const projectDir = resolveProject(res);
   if (!projectDir) return;
-
   const svc = APP_SERVICE[app];
   const cname = APP_CONTAINER[app];
+
   const cmd = [
     forceKillContainerCmd(cname),
     composeCmd(projectDir, `up -d --force-recreate --no-deps ${svc}`),
-    composeCmd(projectDir, 'exec -T nginx nginx -s reload || true'),
+    `docker exec ${nginxContainerName()} nginx -s reload 2>/dev/null || true`,
   ].join('\n');
 
   logger.info(`admin:system:app/restart ${app}`, { svc, cname });
@@ -202,22 +190,22 @@ router.post('/app/restart', requireSuperAdmin, (req: AdminRequest, res: Response
   });
 });
 
-/** POST /admin/system/app/build-restart — 编译代码并重启 */
+/** POST /admin/system/app/build-restart — 编译重启（使用 docker compose） */
 router.post('/app/build-restart', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const app = parseApp(req.body as Record<string, unknown>, res);
   if (!app) return;
   const noCache = (req.body as { noCache?: boolean }).noCache === true;
   const projectDir = resolveProject(res);
   if (!projectDir) return;
-
   const svc = APP_SERVICE[app];
   const cname = APP_CONTAINER[app];
   const noCacheFlag = noCache ? '--no-cache' : '';
+
   const cmd = [
     forceKillContainerCmd(cname),
     composeCmd(projectDir, `build ${noCacheFlag} begreat_app`),
     composeCmd(projectDir, `up -d --force-recreate --no-deps ${svc}`),
-    composeCmd(projectDir, 'exec -T nginx nginx -s reload || true'),
+    `docker exec ${nginxContainerName()} nginx -s reload 2>/dev/null || true`,
   ].join('\n');
 
   logger.info(`admin:system:app/build-restart ${app} noCache=${noCache}`, { svc, cname });
@@ -231,7 +219,7 @@ router.post('/app/build-restart', requireSuperAdmin, (req: AdminRequest, res: Re
   });
 });
 
-/** POST /admin/system/app/stop — 停止 app 容器 */
+/** POST /admin/system/app/stop — 停止容器（使用原生 docker 命令，无需 compose） */
 router.post('/app/stop', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const app = parseApp(req.body as Record<string, unknown>, res);
   if (!app) return;
@@ -249,37 +237,37 @@ router.post('/app/stop', requireSuperAdmin, (req: AdminRequest, res: Response) =
   });
 });
 
-/** GET /admin/system/app/logs — 获取 docker compose 日志 */
+/** GET /admin/system/app/logs — 使用 docker logs（无需 compose） */
 router.get('/app/logs', (req: AdminRequest, res: Response) => {
   const app = (req.query.app as string) || '';
   if (!(VALID_APPS as readonly string[]).includes(app)) {
     sendErr(res, `Invalid app: must be one of ${VALID_APPS.join(', ')}`, 400);
     return;
   }
-  const tail = Math.min(Math.max(parseInt(String(req.query.tail || '100'), 10) || 100, 10), 1000);
-  const projectDir = resolveProject(res);
-  if (!projectDir) return;
+  const tail = Math.min(Math.max(parseInt(String(req.query.tail || '100'), 10) || 100, 10), 2000);
+  const cname = APP_CONTAINER[app as AppName];
+  // 直接用 docker logs，不依赖 compose
+  const cmd = `docker logs --tail=${tail} "${cname}" 2>&1`;
 
-  const svc = APP_SERVICE[app as AppName];
-  const cmd = composeCmd(projectDir, `logs --tail=${tail} ${svc}`);
-  exec(cmd, { timeout: 15000, cwd: projectDir }, (err, stdout, stderr) => {
+  exec(cmd, { timeout: 15000 }, (err, stdout) => {
     if (err) {
-      sendSucc(res, { lines: [], error: (stderr || err.message).slice(0, 1000) });
+      sendSucc(res, { lines: [], error: (err.message || '').slice(0, 1000) });
       return;
     }
-    sendSucc(res, { lines: stdout.split('\n').filter(Boolean), tail });
+    const lines = stdout.split('\n').filter((l) => l.trim() !== '');
+    sendSucc(res, { lines, tail });
   });
 });
 
-/** GET /admin/system/app/status — 获取容器运行状态 */
+/** GET /admin/system/app/status — 使用 docker ps（无需 compose） */
 router.get('/app/status', (_req: AdminRequest, res: Response) => {
-  const projectDir = resolveProject(res);
-  if (!projectDir) return;
-  const svcList = Object.values(APP_SERVICE).join(' ');
-  const cmd = composeCmd(projectDir, `ps ${svcList}`);
-  exec(cmd, { timeout: 10000, cwd: projectDir }, (err, stdout, stderr) => {
+  const svcList = Object.values(APP_SERVICE).join('|');
+  // 直接用 docker ps 过滤
+  const cmd = `docker ps -a --filter "name=${svcList}" --format "table {{.Names}}\\t{{.Image}}\\t{{.State}}\\t{{.Status}}\\t{{.Ports}}" 2>&1`;
+
+  exec(cmd, { timeout: 10000 }, (err, stdout) => {
     if (err) {
-      sendSucc(res, { lines: [], error: (stderr || err.message).slice(0, 1000) });
+      sendSucc(res, { lines: [], error: (err.message || '').slice(0, 1000) });
       return;
     }
     sendSucc(res, { lines: stdout.split('\n').filter(Boolean) });
@@ -290,109 +278,66 @@ router.get('/app/status', (_req: AdminRequest, res: Response) => {
 // Nginx 配置管理 API
 // ──────────────────────────────────────────────────────────────────────────────
 
-/** GET /admin/system/nginx-config — 列出所有配置文件或读取单个文件内容 */
+/** GET /admin/system/nginx-config — 列出或读取配置文件 */
 router.get('/nginx-config', (req: AdminRequest, res: Response) => {
   const projectDir = resolveProject(res);
   if (!projectDir) return;
-
   const confDir = path.join(projectDir, NGINX_CONF_DIR);
   if (!fs.existsSync(confDir)) {
     sendErr(res, `Nginx conf dir not found: ${confDir}`, 503);
     return;
   }
-
   const file = req.query.file as string | undefined;
-
   if (file) {
-    // 读取单个文件
-    const safeName = path.basename(file); // 防目录穿越
+    const safeName = path.basename(file);
     const filePath = path.join(confDir, safeName);
-    if (!fs.existsSync(filePath)) {
-      sendErr(res, `File not found: ${safeName}`, 404);
-      return;
-    }
+    if (!fs.existsSync(filePath)) { sendErr(res, `File not found: ${safeName}`, 404); return; }
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      sendSucc(res, { file: safeName, content });
-    } catch (e) {
-      sendErr(res, `Failed to read ${safeName}: ${(e as Error).message}`, 500);
-    }
+      sendSucc(res, { file: safeName, content: fs.readFileSync(filePath, 'utf-8') });
+    } catch (e) { sendErr(res, `Failed to read: ${(e as Error).message}`, 500); }
   } else {
-    // 列出所有 .conf 文件
     try {
-      const files = fs.readdirSync(confDir)
-        .filter((f) => f.endsWith('.conf'))
-        .sort();
+      const files = fs.readdirSync(confDir).filter((f) => f.endsWith('.conf')).sort();
       sendSucc(res, { files, dir: confDir });
-    } catch (e) {
-      sendErr(res, `Failed to list conf dir: ${(e as Error).message}`, 500);
-    }
+    } catch (e) { sendErr(res, `Failed to list: ${(e as Error).message}`, 500); }
   }
 });
 
-/** PUT /admin/system/nginx-config — 保存单个配置文件（仅超级管理员） */
+/** PUT /admin/system/nginx-config — 保存配置文件 */
 router.put('/nginx-config', requireSuperAdmin, (req: AdminRequest, res: Response) => {
   const projectDir = resolveProject(res);
   if (!projectDir) return;
-
   const { file, content } = req.body as { file?: string; content?: string };
-  if (!file || typeof content !== 'string') {
-    sendErr(res, 'Missing file or content', 400);
-    return;
-  }
-
+  if (!file || typeof content !== 'string') { sendErr(res, 'Missing file or content', 400); return; }
   const safeName = path.basename(file);
-  if (!safeName.endsWith('.conf')) {
-    sendErr(res, 'Only .conf files allowed', 400);
-    return;
-  }
-
-  const confDir = path.join(projectDir, NGINX_CONF_DIR);
-  const filePath = path.join(confDir, safeName);
-
-  // 先备份
+  if (!safeName.endsWith('.conf')) { sendErr(res, 'Only .conf files allowed', 400); return; }
+  const filePath = path.join(projectDir, NGINX_CONF_DIR, safeName);
   const backupPath = filePath + '.bak.' + Date.now();
   try {
-    if (fs.existsSync(filePath)) {
-      fs.copyFileSync(filePath, backupPath);
-    }
+    if (fs.existsSync(filePath)) fs.copyFileSync(filePath, backupPath);
     fs.writeFileSync(filePath, content, 'utf-8');
-    logger.info(`admin:system:nginx-config saved ${safeName}`, { backup: backupPath });
+    logger.info(`admin:system:nginx-config saved ${safeName}`);
     sendSucc(res, { file: safeName, saved: true, backup: path.basename(backupPath) });
   } catch (e) {
-    logger.error(`admin:system:nginx-config save ${safeName} failed`, { error: (e as Error).message });
-    sendErr(res, `Failed to save ${safeName}: ${(e as Error).message}`, 500);
+    sendErr(res, `Failed: ${(e as Error).message}`, 500);
   }
 });
 
-/** POST /admin/system/nginx-test — 测试 Nginx 配置语法 */
+/** POST /admin/system/nginx-test — 使用 docker exec（无需 compose） */
 router.post('/nginx-test', requireSuperAdmin, (_req: AdminRequest, res: Response) => {
-  const projectDir = resolveProject(res);
-  if (!projectDir) return;
-
-  const cmd = composeCmd(projectDir, 'exec -T nginx nginx -t');
-  exec(cmd, { timeout: 15000, cwd: projectDir }, (err, stdout, stderr) => {
-    // nginx -t 即使成功也可能输出到 stderr
+  const cmd = `docker exec ${nginxContainerName()} nginx -t 2>&1`;
+  exec(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
     const output = (stdout + '\n' + stderr).trim();
-    if (err) {
-      sendSucc(res, { valid: false, output });
-      return;
-    }
+    if (err) { sendSucc(res, { valid: false, output }); return; }
     sendSucc(res, { valid: true, output });
   });
 });
 
-/** POST /admin/system/nginx-reload — 重载 Nginx 配置 */
+/** POST /admin/system/nginx-reload — 使用 docker exec（无需 compose） */
 router.post('/nginx-reload', requireSuperAdmin, (_req: AdminRequest, res: Response) => {
-  const projectDir = resolveProject(res);
-  if (!projectDir) return;
-
-  const cmd = composeCmd(projectDir, 'exec -T nginx nginx -s reload');
-  exec(cmd, { timeout: 15000, cwd: projectDir }, (err, stdout, stderr) => {
-    if (err) {
-      sendErr(res, (stderr || err.message).slice(0, 2000), 500);
-      return;
-    }
+  const cmd = `docker exec ${nginxContainerName()} nginx -s reload 2>&1`;
+  exec(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
+    if (err) { sendErr(res, (stderr || err.message).slice(0, 2000), 500); return; }
     sendSucc(res, { output: (stdout + '\n' + stderr).trim() || 'Nginx reloaded' });
   });
 });
@@ -400,39 +345,23 @@ router.post('/nginx-reload', requireSuperAdmin, (_req: AdminRequest, res: Respon
 /** POST /admin/system/prune — 清理悬空镜像 */
 router.post('/prune', requireSuperAdmin, (_req: AdminRequest, res: Response) => {
   exec('docker image prune -f', { timeout: 30000 }, (err, stdout, stderr) => {
-    if (err) {
-      sendErr(res, (stderr || err.message).slice(0, 2000), 500);
-      return;
-    }
+    if (err) { sendErr(res, (stderr || err.message).slice(0, 2000), 500); return; }
     sendSucc(res, { output: (stdout + '\n' + stderr).trim() || 'Pruned' });
   });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 已有端点（保留）
+// 旧端点保留
 // ──────────────────────────────────────────────────────────────────────────────
 
 router.post('/deploy', requireSuperAdmin, (_req: AdminRequest, res: Response) => {
   const projectDir = process.env.COMPOSE_PROJECT_DIR?.trim();
-  if (!projectDir) {
-    sendErr(res, 'COMPOSE_PROJECT_DIR not configured. Mount project dir and set env var.', 503);
-    return;
-  }
+  if (!projectDir) { sendErr(res, 'COMPOSE_PROJECT_DIR not configured', 503); return; }
   const composeFile = path.join(projectDir, 'docker-compose.yml');
-  if (!fs.existsSync(composeFile)) {
-    sendErr(res, `docker-compose.yml not found at ${composeFile}`, 503);
-    return;
-  }
-  const cmd = [
-    `docker compose -f "${composeFile}" --project-directory "${projectDir}"`,
-    'up -d --no-deps --build backend_app',
-    '&& docker image prune --force',
-  ].join(' ');
+  if (!fs.existsSync(composeFile)) { sendErr(res, 'docker-compose.yml not found', 503); return; }
+  const cmd = `docker compose -f "${composeFile}" --project-directory "${projectDir}" up -d --no-deps --build backend_app && docker image prune --force`;
   exec(cmd, { timeout: 300000, cwd: projectDir }, (err, stdout, stderr) => {
-    if (err) {
-      sendErr(res, (stderr || err.message).slice(0, 2000), 500);
-      return;
-    }
+    if (err) { sendErr(res, (stderr || err.message).slice(0, 2000), 500); return; }
     sendSucc(res, { output: (stdout + '\n' + stderr).trim().slice(0, 5000) });
   });
 });
@@ -441,10 +370,7 @@ router.get('/logs', (_req: AdminRequest, res: Response) => {
   const logDir = path.join(process.cwd(), 'logs');
   const today = new Date().toISOString().split('T')[0];
   const logFile = path.join(logDir, `game.${today}.log`);
-  if (!fs.existsSync(logFile)) {
-    sendSucc(res, { lines: [], file: logFile });
-    return;
-  }
+  if (!fs.existsSync(logFile)) { sendSucc(res, { lines: [], file: logFile }); return; }
   exec(`tail -n 100 "${logFile}"`, { timeout: 5000 }, (err, stdout) => {
     if (err) { sendSucc(res, { lines: [], error: err.message }); return; }
     sendSucc(res, { lines: stdout.split('\n').filter(Boolean), file: logFile });
@@ -452,28 +378,17 @@ router.get('/logs', (_req: AdminRequest, res: Response) => {
 });
 
 router.get('/config', async (_req: AdminRequest, res: Response) => {
-  try {
-    const healDailyLimit = await getHealDailyLimit();
-    sendSucc(res, { healDailyLimit });
-  } catch (e) {
-    logger.error('admin:system:getConfig error', { error: (e as Error).message });
-    sendErr(res, String(e), 500);
-  }
+  try { sendSucc(res, { healDailyLimit: await getHealDailyLimit() }); }
+  catch (e) { sendErr(res, String(e), 500); }
 });
 
 router.patch('/config', requireSuperAdmin, async (req: AdminRequest, res: Response) => {
   const { healDailyLimit } = req.body as { healDailyLimit?: unknown };
   if (typeof healDailyLimit !== 'number' || !Number.isInteger(healDailyLimit) || healDailyLimit < 0) {
-    sendErr(res, 'healDailyLimit must be a non-negative integer', 400);
-    return;
+    sendErr(res, 'healDailyLimit must be a non-negative integer', 400); return;
   }
-  try {
-    await setHealDailyLimit(healDailyLimit);
-    sendSucc(res, { healDailyLimit });
-  } catch (e) {
-    logger.error('admin:system:updateConfig error', { healDailyLimit, error: (e as Error).message });
-    sendErr(res, String(e), 500);
-  }
+  try { await setHealDailyLimit(healDailyLimit); sendSucc(res, { healDailyLimit }); }
+  catch (e) { sendErr(res, String(e), 500); }
 });
 
 export default router;
