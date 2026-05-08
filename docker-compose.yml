@@ -116,6 +116,7 @@ services:
       WS_PORT: 42000
       port: 42000
       connectionTickTimeout: 30000
+      COMPOSE_PROJECT_DIR: /workspace
       MONGO_URI: mongodb://root:password@mongo:27017
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -124,6 +125,8 @@ services:
       - "42001:42001"
       - "42002:42002"
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/workspace/miniapp_pro_backend:/workspace:ro
       - ./src/apps/mandis/sysconfig:/app/config:ro
       - ./static:/app/static
       - ./logs/mandis:/app/logs
