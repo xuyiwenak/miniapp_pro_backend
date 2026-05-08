@@ -237,38 +237,65 @@ router.post('/app/stop', requireSuperAdmin, (req: AdminRequest, res: Response) =
   });
 });
 
-/** GET /admin/system/app/logs — docker logs + 文件日志兜底 */
+/** GET /admin/system/app/log-files — 列出可用日志文件 */
+router.get('/app/log-files', (_req: AdminRequest, res: Response) => {
+  const logDir = path.join(process.cwd(), 'logs');
+  try {
+    if (!fs.existsSync(logDir)) { sendSucc(res, { files: [] }); return; }
+    const raw = fs.readdirSync(logDir).filter((f) => f.endsWith('.log'));
+    // 解析: {type}.{YYYY-MM-DD}.log
+    const files = raw.map((name) => {
+      const base = name.replace('.log', '');
+      const lastDot = base.lastIndexOf('.');
+      const type = lastDot > 0 ? base.substring(0, lastDot) : base;
+      const date = lastDot > 0 ? base.substring(lastDot + 1) : '';
+      const stat = fs.statSync(path.join(logDir, name));
+      return { name, type, date, size: stat.size, mtime: stat.mtime.toISOString() };
+    }).sort((a, b) => b.mtime.localeCompare(a.mtime)); // 最新在前
+    sendSucc(res, { files });
+  } catch (e) { sendErr(res, String(e), 500); }
+});
+
+/** GET /admin/system/app/logs — 支持指定文件或 docker logs */
 router.get('/app/logs', (req: AdminRequest, res: Response) => {
   const app = (req.query.app as string) || '';
   if (!(VALID_APPS as readonly string[]).includes(app)) {
     sendErr(res, `Invalid app: must be one of ${VALID_APPS.join(', ')}`, 400);
     return;
   }
-  const tail = Math.min(Math.max(parseInt(String(req.query.tail || '100'), 10) || 100, 10), 2000);
-  const cname = APP_CONTAINER[app as AppName];
+  const tail = Math.min(Math.max(parseInt(String(req.query.tail || '200'), 10) || 200, 50), 5000);
+  const reqFile = (req.query.file as string) || ''; // 指定文件名，如 game.2026-05-08.log
+
+  // 如果指定了文件，直接读文件
+  if (reqFile && reqFile.endsWith('.log')) {
+    const safeName = path.basename(reqFile);
+    const logFile = path.join(process.cwd(), 'logs', safeName);
+    exec(`tail -n ${tail} "${logFile}" 2>/dev/null`, { timeout: 10000 }, (err, stdout) => {
+      const lines = (stdout || '').split('\n').filter((l) => l.trim() !== '');
+      if (err || lines.length === 0) {
+        sendSucc(res, { lines: [], tail, file: safeName, error: 'File empty or not found' });
+      } else {
+        sendSucc(res, { lines, tail, file: safeName });
+      }
+    });
+    return;
+  }
 
   // Step 1: 尝试 docker logs
+  const cname = APP_CONTAINER[app as AppName];
   exec(`docker logs --tail=${tail} "${cname}" 2>&1`, { timeout: 15000 }, (err, stdout) => {
     const dockerLines = (stdout || '').split('\n').filter((l) => l.trim() !== '');
-
-    // 如果 docker logs 有内容，直接返回
     if (!err && dockerLines.length > 0) {
       sendSucc(res, { lines: dockerLines, tail, source: 'docker' });
       return;
     }
-
-    // Step 2: fallback — 读取文件日志（mandis 写文件而非 stdout）
+    // Step 2: fallback — 今天的 game 日志
     const logDir = path.join(process.cwd(), 'logs');
     const today = new Date().toISOString().split('T')[0];
     const logFile = path.join(logDir, `game.${today}.log`);
-
     exec(`tail -n ${tail} "${logFile}" 2>/dev/null`, { timeout: 5000 }, (_err2, fileStdout) => {
       const fileLines = (fileStdout || '').split('\n').filter((l) => l.trim() !== '');
-      if (fileLines.length > 0) {
-        sendSucc(res, { lines: fileLines, tail, source: 'file', file: logFile });
-      } else {
-        sendSucc(res, { lines: [], tail, source: 'none' });
-      }
+      sendSucc(res, { lines: fileLines, tail, source: 'file', file: path.basename(logFile) });
     });
   });
 });
