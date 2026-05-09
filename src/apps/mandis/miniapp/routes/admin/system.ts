@@ -5,7 +5,7 @@ import { getHealDailyLimit, setHealDailyLimit } from '../../../../../auth/RedisT
 import type { Response }      from 'express';
 
 // 公共系统路由（metrics / containers / 容器控制 / nginx / 日志）
-const router = createSystemRouter(requireSuperAdmin);
+const router = createSystemRouter(requireSuperAdmin, 'mandis');
 
 // ── mandis 专属：heal 限额配置 ───────────────────────────────────────────────
 

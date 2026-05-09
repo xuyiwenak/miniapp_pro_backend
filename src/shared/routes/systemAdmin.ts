@@ -8,6 +8,9 @@ import os from 'os';
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { z } from 'zod';
+import Redis from 'ioredis';
+import { ComponentManager, EComName } from '../../common/BaseComponent';
 import { sendSucc, sendErr } from '../miniapp/middleware/response';
 import { gameLogger as logger } from '../../util/logger';
 
@@ -23,9 +26,78 @@ const APP_SERVICE: Record<AppName, string> = {
   begreat: 'begreat_app',
 };
 const APP_CONTAINER: Record<AppName, string> = {
-  mandis: 'miniapp-mandis',
-  begreat: 'miniapp-begreat',
+  mandis: 'art-mandis',
+  begreat: 'art-begreat',
 };
+
+// ── Runtime 配置 ──────────────────────────────────────────────────────────────
+
+const RuntimeConfigSchema = z.object({
+  appName:                  z.enum(VALID_APPS),
+  label:                    z.string().min(1),
+  systemApiBase:            z.string().startsWith('/'),
+  dockerContainerName:      z.string().min(1),
+  logAutoRefreshIntervalMs: z.number().int().positive(),
+  containerRefreshDelayMs:  z.number().int().nonnegative(),
+  defaultLogTail:           z.number().int().min(50).max(5000),
+});
+
+type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>;
+
+const RUNTIME_CONFIG_DEFAULTS: Record<AppName, RuntimeConfig> = {
+  mandis: {
+    appName: 'mandis',
+    label: 'Mandis 艺术工作室',
+    systemApiBase: '/api/mandis-admin/system',
+    dockerContainerName: 'art-mandis',
+    logAutoRefreshIntervalMs: 10000,
+    containerRefreshDelayMs: 3000,
+    defaultLogTail: 200,
+  },
+  begreat: {
+    appName: 'begreat',
+    label: 'BeGreat 职业测评',
+    systemApiBase: '/begreat-admin/system',
+    dockerContainerName: 'art-begreat',
+    logAutoRefreshIntervalMs: 10000,
+    containerRefreshDelayMs: 3000,
+    defaultLogTail: 200,
+  },
+};
+
+const REDIS_KEY_PREFIX = 'commander:runtime-config';
+
+let redisClient: Redis | null = null;
+
+function getRedis(): Redis {
+  if (redisClient) return redisClient;
+  const sysCfg = ComponentManager.instance.getComponent(EComName.SysCfgComponent);
+  const cfg = sysCfg.redis_global;
+  if (!cfg) throw new Error('redis_global config is missing');
+  redisClient = new Redis({
+    host: cfg.host,
+    port: cfg.port,
+    db: cfg.db ?? 0,
+    username: cfg.user,
+    password: cfg.password,
+  });
+  return redisClient;
+}
+
+async function readRuntimeConfig(appName: AppName): Promise<RuntimeConfig> {
+  try {
+    const raw = await getRedis().get(`${REDIS_KEY_PREFIX}:${appName}`);
+    if (raw) {
+      const parsed = RuntimeConfigSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+    }
+  } catch { /* fall through */ }
+  return RUNTIME_CONFIG_DEFAULTS[appName];
+}
+
+async function writeRuntimeConfig(config: RuntimeConfig): Promise<void> {
+  await getRedis().set(`${REDIS_KEY_PREFIX}:${config.appName}`, JSON.stringify(config));
+}
 
 // ── 纯函数工具 ───────────────────────────────────────────────────────────────
 
@@ -110,10 +182,40 @@ const noOp: RequestHandler = (_req, _res, next) => next();
 
 /**
  * @param requirePrivileged 写操作附加鉴权中间件（mandis 传 requireSuperAdmin，begreat 传默认 noOp）
+ * @param appName 当前 app 名称，用于读写 runtime 配置
  */
 // eslint-disable-next-line max-lines-per-function
-export function createSystemRouter(requirePrivileged: RequestHandler = noOp): Router {
+export function createSystemRouter(requirePrivileged: RequestHandler = noOp, appName: AppName = 'begreat'): Router {
   const router = Router();
+
+  // GET .../runtime-config（公开，无需鉴权）
+  router.get('/runtime-config', async (_req: Request, res: Response) => {
+    try {
+      sendSucc(res, await readRuntimeConfig(appName));
+    } catch (e) {
+      sendErr(res, String(e), 500);
+    }
+  });
+
+  // PUT .../runtime-config（需要鉴权）
+  router.put('/runtime-config', requirePrivileged, async (req: Request, res: Response) => {
+    const parsed = RuntimeConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendErr(res, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '), 400);
+      return;
+    }
+    if (parsed.data.appName !== appName) {
+      sendErr(res, `appName mismatch: expected ${appName}`, 400);
+      return;
+    }
+    try {
+      await writeRuntimeConfig(parsed.data);
+      logger.info(`system:runtime-config saved for ${appName}`);
+      sendSucc(res, parsed.data);
+    } catch (e) {
+      sendErr(res, String(e), 500);
+    }
+  });
 
   // GET .../metrics
   router.get('/metrics', async (_req: Request, res: Response) => {
