@@ -1,5 +1,4 @@
-import { Router, Response } from 'express';
-import type { AdminRequest } from '../../middleware/adminAuth';
+import { Router, type Request, type Response } from 'express';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { getFeedbackModel } from '../../../../../dbservice/model/GlobalInfoDBModel';
 import { gameLogger as logger } from '../../../../../util/logger';
@@ -7,7 +6,7 @@ import { gameLogger as logger } from '../../../../../util/logger';
 const router = Router();
 
 /** GET /admin/feedback — 分页查询所有反馈，支持状态过滤 */
-router.get('/', async (req: AdminRequest, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
   const status = req.query.status as string | undefined;
@@ -34,7 +33,7 @@ router.get('/', async (req: AdminRequest, res: Response) => {
 });
 
 /** PATCH /admin/feedback/:id — 更新反馈状态和回复内容 */
-router.patch('/:id', async (req: AdminRequest, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, reply } = req.body ?? {};
 

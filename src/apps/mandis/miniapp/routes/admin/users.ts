@@ -1,5 +1,4 @@
-import { Router, type Response } from 'express';
-import { requireSuperAdmin, type AdminRequest } from '../../middleware/adminAuth';
+import { Router, type Request, type Response } from 'express';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { ComponentManager } from '../../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../../component/PlayerComponent';
@@ -11,12 +10,12 @@ import { gameLogger as logger } from '../../../../../util/logger';
 const router = Router();
 
 /** GET /admin/users — 分页查询用户列表，支持账号/昵称搜索和角色过滤 */
-router.get('/', async (req: AdminRequest, res: Response) => {
-  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+router.get('/', async (req: Request, res: Response) => {
+  const page  = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
-  const search = (req.query.search as string | undefined)?.trim();
+  const search     = (req.query.search as string | undefined)?.trim();
   const levelParam = req.query.level as string | undefined;
-  const level = levelParam ? parseInt(levelParam) : undefined;
+  const level      = levelParam ? parseInt(levelParam) : undefined;
 
   try {
     const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
@@ -27,13 +26,11 @@ router.get('/', async (req: AdminRequest, res: Response) => {
     const query: Record<string, unknown> = {};
     if (search) {
       query.$or = [
-        { account: { $regex: search, $options: 'i' } },
+        { account:  { $regex: search, $options: 'i' } },
         { nickname: { $regex: search, $options: 'i' } },
       ];
     }
-    if (level !== undefined && !isNaN(level)) {
-      query.level = level;
-    }
+    if (level !== undefined && !isNaN(level)) query.level = level;
 
     const [total, list] = await Promise.all([
       Player.countDocuments(query),
@@ -58,7 +55,7 @@ router.get('/', async (req: AdminRequest, res: Response) => {
 });
 
 /** GET /admin/users/:userId — 查询指定用户详情 */
-router.get('/:userId', async (req: AdminRequest, res: Response) => {
+router.get('/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
   try {
     const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
@@ -76,17 +73,13 @@ router.get('/:userId', async (req: AdminRequest, res: Response) => {
   }
 });
 
-/** PATCH /admin/users/:userId/level — 修改用户角色（仅超级管理员） */
-router.patch('/:userId/level', requireSuperAdmin, async (req: AdminRequest, res: Response) => {
+/** PATCH /admin/users/:userId/level — 修改小程序用户角色 */
+router.patch('/:userId/level', async (req: Request, res: Response) => {
   const { userId } = req.params;
   const level = parseInt(req.body?.level);
 
   if (!level || ![AccountLevel.SuperAdmin, AccountLevel.Admin, AccountLevel.User].includes(level)) {
     sendErr(res, 'Invalid level', 400);
-    return;
-  }
-  if (userId === req.userId) {
-    sendErr(res, 'Cannot change your own level', 400);
     return;
   }
 
@@ -107,7 +100,7 @@ router.patch('/:userId/level', requireSuperAdmin, async (req: AdminRequest, res:
 });
 
 /** PATCH /admin/users/:userId/heal-usage — 手动设置用户今日分析用量 */
-router.patch('/:userId/heal-usage', async (req: AdminRequest, res: Response) => {
+router.patch('/:userId/heal-usage', async (req: Request, res: Response) => {
   const { userId } = req.params;
   const { usage } = req.body as { usage?: unknown };
   if (typeof usage !== 'number' || !Number.isInteger(usage) || usage < 0) {
@@ -123,10 +116,9 @@ router.patch('/:userId/heal-usage', async (req: AdminRequest, res: Response) => 
   }
 });
 
-/** DELETE /admin/users/:userId — 删除用户（仅超级管理员） */
-router.delete('/:userId', requireSuperAdmin, async (req: AdminRequest, res: Response) => {
+/** DELETE /admin/users/:userId — 删除小程序用户 */
+router.delete('/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
-  if (userId === req.userId) { sendErr(res, 'Cannot delete yourself', 400); return; }
 
   try {
     const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');

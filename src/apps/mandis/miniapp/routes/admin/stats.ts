@@ -1,5 +1,4 @@
-import { Router, Response } from 'express';
-import type { AdminRequest } from '../../middleware/adminAuth';
+import { Router, type Request, type Response } from 'express';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { getWorkModel, getFeedbackModel } from '../../../../../dbservice/model/GlobalInfoDBModel';
 import { ComponentManager } from '../../../../../common/BaseComponent';
@@ -10,7 +9,7 @@ import { gameLogger as logger } from '../../../../../util/logger';
 const router = Router();
 
 /** GET /admin/stats — 仪表盘统计数据 */
-router.get('/', async (_req: AdminRequest, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const Work = getWorkModel();
     const Feedback = getFeedbackModel();

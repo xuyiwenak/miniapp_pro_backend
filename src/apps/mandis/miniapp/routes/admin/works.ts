@@ -1,5 +1,4 @@
-import { Router, Response } from 'express';
-import type { AdminRequest } from '../../middleware/adminAuth';
+import { Router, type Request, type Response } from 'express';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { getWorkModel } from '../../../../../dbservice/model/GlobalInfoDBModel';
 import { resolveImageUrl, deleteFromStorage } from '../../../../../util/imageUploader';
@@ -9,7 +8,7 @@ const router = Router();
 const OSS_PREFIX = 'oss://';
 
 /** GET /admin/works — 分页查询所有作品，支持状态/作者过滤 */
-router.get('/', async (req: AdminRequest, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
   const status = req.query.status as string | undefined;
@@ -49,7 +48,7 @@ router.get('/', async (req: AdminRequest, res: Response) => {
 });
 
 /** PATCH /admin/works/:workId/status — 修改作品状态（发布/转草稿） */
-router.patch('/:workId/status', async (req: AdminRequest, res: Response) => {
+router.patch('/:workId/status', async (req: Request, res: Response) => {
   const { workId } = req.params;
   const { status } = req.body ?? {};
 
@@ -70,7 +69,7 @@ router.patch('/:workId/status', async (req: AdminRequest, res: Response) => {
 });
 
 /** PATCH /admin/works/:workId/featured — 切换首页展示 */
-router.patch('/:workId/featured', async (req: AdminRequest, res: Response) => {
+router.patch('/:workId/featured', async (req: Request, res: Response) => {
   const { workId } = req.params;
   const { featured } = req.body ?? {};
 
@@ -91,7 +90,7 @@ router.patch('/:workId/featured', async (req: AdminRequest, res: Response) => {
 });
 
 /** DELETE /admin/works/:workId — 删除作品（含异步清理 OSS 文件） */
-router.delete('/:workId', async (req: AdminRequest, res: Response) => {
+router.delete('/:workId', async (req: Request, res: Response) => {
   const { workId } = req.params;
 
   try {
