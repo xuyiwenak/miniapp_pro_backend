@@ -3,7 +3,8 @@ import { BiAnalyticsService } from '../../../bi/BiAnalyticsService';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import { BiAnalyticsComponent } from '../../../../component/BiAnalyticsComponent';
 import type { IClientEventData } from '../../../../entity/biEvent.entity';
-import { authMiddleware } from '../../../../shared/miniapp/middleware/auth';
+import { mandisAdminJwtAuth } from './mandisAdmin/auth';
+import { sendSucc } from '../../../../shared/miniapp/middleware/response';
 import { gameLogger } from '../../../../util/logger';
 
 const router = Router();
@@ -13,7 +14,7 @@ const service = new BiAnalyticsService();
  * GET /api/bi/metrics
  * 查询聚合指标
  */
-router.get('/metrics', authMiddleware, async (req: Request, res: Response) => {
+router.get('/metrics', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { startTime, endTime, granularity, appName, eventType } = req.query;
     if (!startTime || !endTime || !granularity) {
@@ -31,7 +32,8 @@ router.get('/metrics', authMiddleware, async (req: Request, res: Response) => {
       eventType as string | undefined,
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/metrics failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
@@ -42,7 +44,7 @@ router.get('/metrics', authMiddleware, async (req: Request, res: Response) => {
  * GET /api/bi/trends
  * 查询趋势数据
  */
-router.get('/trends', authMiddleware, async (req: Request, res: Response) => {
+router.get('/trends', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { startTime, endTime, granularity, appName, eventType, metrics } = req.query;
     if (!startTime || !endTime || !granularity) {
@@ -58,7 +60,8 @@ router.get('/trends', authMiddleware, async (req: Request, res: Response) => {
       eventType as string | undefined,
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/trends failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
@@ -69,7 +72,7 @@ router.get('/trends', authMiddleware, async (req: Request, res: Response) => {
  * GET /api/bi/errors
  * 查询错误分析
  */
-router.get('/errors', authMiddleware, async (req: Request, res: Response) => {
+router.get('/errors', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { startTime, endTime, appName, limit } = req.query;
     if (!startTime || !endTime) {
@@ -83,7 +86,8 @@ router.get('/errors', authMiddleware, async (req: Request, res: Response) => {
       limit ? parseInt(limit as string, 10) : 20,
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/errors failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
@@ -94,7 +98,7 @@ router.get('/errors', authMiddleware, async (req: Request, res: Response) => {
  * GET /api/bi/costs
  * 查询成本分析
  */
-router.get('/costs', authMiddleware, async (req: Request, res: Response) => {
+router.get('/costs', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { startTime, endTime, appName, groupBy } = req.query;
     if (!startTime || !endTime) {
@@ -108,7 +112,8 @@ router.get('/costs', authMiddleware, async (req: Request, res: Response) => {
       (groupBy as 'hour' | 'day' | 'model') ?? 'day',
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/costs failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
@@ -119,7 +124,7 @@ router.get('/costs', authMiddleware, async (req: Request, res: Response) => {
  * GET /api/bi/performance
  * 查询性能分析
  */
-router.get('/performance', authMiddleware, async (req: Request, res: Response) => {
+router.get('/performance', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { startTime, endTime, appName, eventType } = req.query;
     if (!startTime || !endTime) {
@@ -133,7 +138,8 @@ router.get('/performance', authMiddleware, async (req: Request, res: Response) =
       eventType as string | undefined,
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/performance failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
@@ -144,7 +150,7 @@ router.get('/performance', authMiddleware, async (req: Request, res: Response) =
  * GET /api/bi/dashboard
  * Dashboard 总览
  */
-router.get('/dashboard', authMiddleware, async (req: Request, res: Response) => {
+router.get('/dashboard', mandisAdminJwtAuth, async (req: Request, res: Response) => {
   try {
     const { timeRange, appName } = req.query;
 
@@ -153,7 +159,8 @@ router.get('/dashboard', authMiddleware, async (req: Request, res: Response) => 
       appName as string | undefined,
     );
 
-    return res.json({ code: 200, data });
+    sendSucc(res, data);
+    return;
   } catch (error) {
     gameLogger.error('GET /api/bi/dashboard failed', { error });
     return res.status(500).json({ code: 500, message: 'Internal error' });
