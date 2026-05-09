@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 
 export function sendSucc(res: Response, data?: unknown): void {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.status(200).json({
     code: 200,
     success: true,
@@ -13,6 +14,7 @@ export function sendErr(
   message: string,
   code: number = 400
 ): void {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.status(code).json({
     code,
     success: false,

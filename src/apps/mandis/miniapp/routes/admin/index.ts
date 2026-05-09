@@ -13,6 +13,14 @@ import systemRouter from './system';
 
 const router = Router();
 
+// 禁用所有 admin API 响应的 HTTP 缓存（防止 304）
+router.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Expires', '0');
+  res.set('Pragma', 'no-cache');
+  next();
+});
+
 // 所有 /admin/* 路由都需要管理员身份
 router.use(adminAuthMiddleware);
 

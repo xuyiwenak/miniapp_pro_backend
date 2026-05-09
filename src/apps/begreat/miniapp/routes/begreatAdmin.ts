@@ -7,6 +7,8 @@ import paymentsRoutes                      from './begreatAdmin/payments';
 import invitesRoutes                       from './begreatAdmin/invites';
 import configRoutes                        from './begreatAdmin/config';
 import occupationsRoutes                   from './begreatAdmin/occupations';
+import questionsRoutes                     from './begreatAdmin/questions';
+import normsRoutes                         from './begreatAdmin/norms';
 
 const router = Router();
 
@@ -22,5 +24,7 @@ router.use('/payments',    paymentsRoutes);
 router.use('/invites',     invitesRoutes);
 router.use('/config',      configRoutes);
 router.use('/occupations', occupationsRoutes);
+router.use('/questions',   questionsRoutes);
+router.use('/norms',       normsRoutes);
 
 export default router;
