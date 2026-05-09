@@ -112,8 +112,38 @@ function registerMeRoute(router: Router, options: AdminAuthRouterOptions): void 
   });
 }
 
+function registerChangePasswordRoute(router: Router, options: AdminAuthRouterOptions): void {
+  const { logPrefix, jwtAuth, getPayload, getModel } = options;
+  router.post('/change-password', jwtAuth, async (req: Request, res: Response) => {
+    const payload = getPayload(req);
+    if (!payload) { sendErr(res, 'Unauthorized', 401); return; }
+
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (!currentPassword || typeof currentPassword !== 'string' ||
+        !newPassword   || typeof newPassword   !== 'string') {
+      sendErr(res, 'currentPassword and newPassword are required', 400);
+      return;
+    }
+    if (newPassword.length < 8) {
+      sendErr(res, 'newPassword must be at least 8 characters', 400);
+      return;
+    }
+
+    const admin = await getModel().findOne({ adminId: payload.adminId });
+    if (!admin) { sendErr(res, 'Admin not found', 404); return; }
+
+    const match = await bcrypt.compare(currentPassword, admin.passwordHash);
+    if (!match) { sendErr(res, 'Current password is incorrect', 401); return; }
+
+    admin.passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+    await admin.save();
+    logger.info(`${logPrefix} password changed: ${admin.username}`);
+    sendSucc(res, { message: 'Password changed successfully' });
+  });
+}
+
 /**
- * 创建 admin 鉴权路由（init-admin / login / me）。
+ * 创建 admin 鉴权路由（init-admin / login / me / change-password）。
  * getPayload 从 req 上读取当前中间件挂载的 payload。
  */
 export function makeAdminAuthRouter(options: AdminAuthRouterOptions): Router {
@@ -121,5 +151,6 @@ export function makeAdminAuthRouter(options: AdminAuthRouterOptions): Router {
   registerInitAdminRoute(router, options);
   registerLoginRoute(router, options);
   registerMeRoute(router, options);
+  registerChangePasswordRoute(router, options);
   return router;
 }
