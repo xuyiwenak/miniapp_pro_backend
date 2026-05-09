@@ -83,6 +83,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       BEGREAT_ADMIN_JWT_SECRET: ${BEGREAT_ADMIN_JWT_SECRET}
+      COMPOSE_PROJECT_DIR: /workspace
     ports:
       - "41001:41001"
       - "41002:41002"
@@ -90,6 +91,8 @@ services:
       - ./src/apps/begreat/sysconfig:/app/config:ro
       - ./static:/app/static
       - ./logs/begreat:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/workspace/miniapp_pro_backend:/workspace:ro
 
   mandis_app:
     image: art-backend:latest          # 复用 begreat_app 构建的镜像，无需重复 build
