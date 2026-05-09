@@ -92,7 +92,7 @@ const BiMetricsHourlySchema = new Schema<IBiMetricsHourly>(
         totalBytes: { type: Number, default: 0 },
         avgBytes: { type: Number, default: 0 },
         totalImages: { type: Number, default: 0 },
-        contentTypes: { type: Map, of: Number, default: {} },
+        contentTypes: { type: Object, default: {} },
       },
       default: undefined,
     },
@@ -103,7 +103,7 @@ const BiMetricsHourlySchema = new Schema<IBiMetricsHourly>(
         totalTokens: { type: Number, default: 0 },
         totalCost: { type: Number, default: 0 },
         avgTokensPerRequest: { type: Number, default: 0 },
-        models: { type: Map, of: Number, default: {} },
+        models: { type: Object, default: {} },
       },
       default: undefined,
     },
@@ -111,8 +111,9 @@ const BiMetricsHourlySchema = new Schema<IBiMetricsHourly>(
     // API 指标
     api: {
       type: {
-        endpoints: { type: Map, of: Number, default: {} },
-        statusCodes: { type: Map, of: Number, default: {} },
+        // plain Object 而非 Map，避免 Mongoose cast 错误
+        endpoints: { type: Object, default: {} },
+        statusCodes: { type: Object, default: {} },
         totalRequestBytes: { type: Number, default: 0 },
         totalResponseBytes: { type: Number, default: 0 },
       },

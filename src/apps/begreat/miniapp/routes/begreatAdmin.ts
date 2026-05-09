@@ -9,6 +9,7 @@ import configRoutes                        from './begreatAdmin/config';
 import occupationsRoutes                   from './begreatAdmin/occupations';
 import questionsRoutes                     from './begreatAdmin/questions';
 import normsRoutes                         from './begreatAdmin/norms';
+import systemRoutes                        from './begreatAdmin/system';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/config',      configRoutes);
 router.use('/occupations', occupationsRoutes);
 router.use('/questions',   questionsRoutes);
 router.use('/norms',       normsRoutes);
+router.use('/system',      systemRoutes);
 
 export default router;

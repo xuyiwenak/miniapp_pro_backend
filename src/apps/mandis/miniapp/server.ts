@@ -15,6 +15,7 @@ import workRoutes from './routes/work';
 import healingRoutes from './routes/healing';
 import ossRoutes from './routes/oss';
 import adminRoutes from './routes/admin/index';
+import mandisAdminAuthRoutes from './routes/mandisAdmin/auth';
 import appRoutes from './routes/app';
 import biRoutes from './routes/bi';
 import { gameLogger } from '../../../util/logger';
@@ -49,7 +50,8 @@ export function createMiniappApp(): express.Express {
   app.use('/oss', authMiddleware, ossRoutes);
   app.use('/dataCenter', dataCenterRoutes);
   app.use('/healing', healingRoutes);
-  app.use('/admin', adminRoutes);
+  app.use('/mandis-admin/auth', mandisAdminAuthRoutes);
+  app.use('/mandis-admin', adminRoutes);
 
   // BI 查询 API（admin JWT 鉴权）
   app.use('/api/bi', biRoutes);

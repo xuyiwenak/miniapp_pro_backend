@@ -17,23 +17,32 @@ function resolveConfigPath(): string {
   return resolveSysconfigJsonFile(environment, serverProvide, 'runtime_config.json');
 }
 
-// GET /begreat-admin/config
-router.get('/', (_req: Request, res: Response) => {
-  const cfg = getRuntimeConfig();
-  sendSucc(res, {
+function buildResponse(cfg: ReturnType<typeof getRuntimeConfig>) {
+  return {
     price_fen:       cfg.price_fen,
     payment_enabled: cfg.payment_enabled,
     dev_openids:     cfg.devOpenids,
-  });
+    oss_images: {
+      share_home:          cfg.ossImages.shareHome,
+      share_home_timeline: cfg.ossImages.shareHomeTimeline,
+      wxacode:             cfg.ossImages.wxacode,
+    },
+  };
+}
+
+// GET /begreat-admin/config
+router.get('/', (_req: Request, res: Response) => {
+  sendSucc(res, buildResponse(getRuntimeConfig()));
 });
 
 // POST /begreat-admin/config
 // eslint-disable-next-line max-lines-per-function
 router.post('/', (req: Request, res: Response) => {
   const body = req.body ?? {};
-  const priceFen = body['price_fen'];
+  const priceFen       = body['price_fen'];
   const paymentEnabled = body['payment_enabled'];
-  const devOpenids = body['dev_openids'];
+  const devOpenids     = body['dev_openids'];
+  const ossImages      = body['oss_images'];
 
   if (priceFen !== undefined) {
     if (
@@ -54,23 +63,24 @@ router.post('/', (req: Request, res: Response) => {
     sendErr(res, 'dev_openids must be an array of strings', 400);
     return;
   }
+  if (ossImages !== undefined && (typeof ossImages !== 'object' || Array.isArray(ossImages))) {
+    sendErr(res, 'oss_images must be an object', 400);
+    return;
+  }
 
   try {
     const filePath = resolveConfigPath();
     const existing = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf-8')) : {};
 
-    if (priceFen !== undefined) existing['price_fen'] = priceFen;
-    if (paymentEnabled !== undefined) existing['payment_enabled'] = paymentEnabled;
-    if (devOpenids !== undefined) existing['dev_openids'] = devOpenids;
+    if (priceFen !== undefined)       existing['price_fen']       = priceFen;
+    if (paymentEnabled !== undefined)  existing['payment_enabled']  = paymentEnabled;
+    if (devOpenids !== undefined)      existing['dev_openids']      = devOpenids;
+    if (ossImages !== undefined)       existing['oss_images']       = ossImages;
 
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
     const updated = reloadRuntimeConfig();
     logger.info('[admin/config] config updated and reloaded');
-    sendSucc(res, {
-      price_fen: updated.price_fen,
-      payment_enabled: updated.payment_enabled,
-      dev_openids: updated.devOpenids,
-    });
+    sendSucc(res, buildResponse(updated));
   } catch (err) {
     sendErr(res, 'Failed to write config', 500);
     console.error('[admin/config] write error:', err);
@@ -80,12 +90,7 @@ router.post('/', (req: Request, res: Response) => {
 // POST /begreat-admin/config/reload
 router.post('/reload', (_req: Request, res: Response) => {
   try {
-    const updated = reloadRuntimeConfig();
-    sendSucc(res, {
-      price_fen: updated.price_fen,
-      payment_enabled: updated.payment_enabled,
-      dev_openids: updated.devOpenids,
-    });
+    sendSucc(res, buildResponse(reloadRuntimeConfig()));
   } catch (err) {
     sendErr(res, 'Reload failed', 500);
     console.error('[admin/config/reload]', err);

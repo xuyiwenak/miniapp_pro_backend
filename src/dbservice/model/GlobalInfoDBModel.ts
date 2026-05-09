@@ -10,12 +10,14 @@ import { Connection, Model } from 'mongoose';
 import { IPersonalInfo, PersonalInfoSchema } from '../../entity/personalInfo.entity';
 import { IWork, WorkSchema } from '../../entity/work.entity';
 import { FeedbackSchema, type IFeedback } from '../../entity/feedback.entity';
+import { IMandisAdmin, MandisAdminSchema } from '../../apps/mandis/entity/mandisAdmin.entity';
 
 class GlobalModelManager {
   private connection: Connection;
   private workModel!: Model<IWork>;
   private personalInfoModel!: Model<IPersonalInfo>;
   private feedbackModel!: Model<IFeedback>;
+  private mandisAdminModel!: Model<IMandisAdmin>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -31,6 +33,9 @@ class GlobalModelManager {
 
     this.feedbackModel = this.connection.model<IFeedback>('Feedback', FeedbackSchema);
     this.feedbackModel.createIndexes().catch(() => {});
+
+    this.mandisAdminModel = this.connection.model<IMandisAdmin>('MandisAdmin', MandisAdminSchema);
+    this.mandisAdminModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -43,6 +48,10 @@ class GlobalModelManager {
 
   public getFeedbackModel(): Model<IFeedback> {
     return this.feedbackModel;
+  }
+
+  public getMandisAdminModel(): Model<IMandisAdmin> {
+    return this.mandisAdminModel;
   }
 
   public async stopConnection() {
@@ -78,4 +87,8 @@ export function getPersonalInfoModel(): Model<IPersonalInfo> {
 
 export function getFeedbackModel(): Model<IFeedback> {
   return getGlobalModelManager().getFeedbackModel();
+}
+
+export function getMandisAdminModel(): Model<IMandisAdmin> {
+  return getGlobalModelManager().getMandisAdminModel();
 }

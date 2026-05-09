@@ -82,6 +82,7 @@ services:
       MONGO_URI: mongodb://root:password@mongo:27017
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      BEGREAT_ADMIN_JWT_SECRET: ${BEGREAT_ADMIN_JWT_SECRET}
     ports:
       - "41001:41001"
       - "41002:41002"
@@ -120,6 +121,7 @@ services:
       MONGO_URI: mongodb://root:password@mongo:27017
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      MANDIS_ADMIN_JWT_SECRET: ${MANDIS_ADMIN_JWT_SECRET}
     ports:
       - "42000:42000"
       - "42001:42001"
