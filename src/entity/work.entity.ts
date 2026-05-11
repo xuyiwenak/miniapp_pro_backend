@@ -65,7 +65,7 @@ const HealingDataSubSchema = new Schema<IHealingData>(
     status: {
       type: String,
       enum: ['pending', 'success', 'failed'],
-      default: 'success',
+      default: 'pending',
     },
     isPublic: { type: Boolean, default: true },
     submittedAt: { type: Date },
@@ -95,7 +95,7 @@ const HealingDataSubSchema = new Schema<IHealingData>(
 export const WorkSchema = new Schema<IWork>(
   {
     workId: { type: String, required: true, unique: true },
-    authorId: { type: String },
+    authorId: { type: String, index: true },
     desc: { type: String, required: false },
     images: [
       {
@@ -117,3 +117,5 @@ export const WorkSchema = new Schema<IWork>(
   },
   { timestamps: true },
 );
+
+WorkSchema.index({ authorId: 1, status: 1, createdAt: -1 });

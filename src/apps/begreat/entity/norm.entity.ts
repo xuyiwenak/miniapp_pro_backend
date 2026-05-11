@@ -44,7 +44,7 @@ export const NormSchema = new Schema<INormEntry>(
     modelType:   { type: String, required: true, enum: ['BIG5', 'RIASEC'] },
     dimension:   { type: String, required: true },
     gender:      { type: String, required: true, enum: ['male', 'female', 'all'] },
-    ageGroup:    { type: String, required: true },
+    ageGroup:    { type: String, required: true, enum: ['18-24', '25-34', '35-44', '45+'] },
     mean:        { type: Number, required: true },
     sd:          { type: Number, required: true },
     sampleSize:  { type: Number, default: null },

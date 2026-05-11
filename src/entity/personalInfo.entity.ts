@@ -8,8 +8,9 @@ export interface IPersonalInfo {
   name: string;
   star?: string;
   mbti?: string;
-  gender: number;
-  birth?: string;
+  /** 微信性别：0=未知，1=男，2=女 */
+  gender: 0 | 1 | 2;
+  birth?: Date;
   address: string[];
   brief?: string;
   photos: { url: string; name: string; type: string }[];
@@ -27,8 +28,8 @@ export const PersonalInfoSchema = new Schema<IPersonalInfo>(
     name: { type: String, required: true },
     star: { type: String },
     mbti: { type: String },
-    gender: { type: Number, required: true },
-    birth: { type: String },
+    gender: { type: Number, required: true, enum: [0, 1, 2] },
+    birth: { type: Date },
     address: [{ type: String }],
     brief: { type: String },
     photos: [

@@ -97,7 +97,7 @@ export interface IBiEvent extends IEventContext {
 // Mongoose Schema 定义
 const BiEventSchema = new Schema<IBiEvent>(
   {
-    eventId: { type: String, required: true, unique: true, index: true },
+    eventId: { type: String, required: true, unique: true },
     eventType: {
       type: String,
       required: true,

@@ -43,9 +43,11 @@ export const QuestionSchema = new Schema<IQuestion>(
     ageMin:     { type: Number, default: 0 },
     ageMax:     { type: Number, default: 999 },
     isActive:   { type: Boolean, default: true, index: true },
-    bfiItemNo:  { type: Number, required: false, index: true },
+    bfiItemNo:  { type: Number, required: false, unique: true, sparse: true },
     bfiReverse: { type: Boolean, required: false },
     bfiFacet:   { type: String, required: false },
   },
   { timestamps: { createdAt: 'createdAt', updatedAt: false } }
 );
+
+QuestionSchema.index({ modelType: 1, dimension: 1, isActive: 1, gender: 1 });

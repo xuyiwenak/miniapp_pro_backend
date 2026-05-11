@@ -94,7 +94,7 @@ router.get('/genPersonalInfo', authMiddleware, async (req: MiniappRequest, res: 
         star: doc.star ?? DEFAULT_PERSONAL.star,
         mbti: doc.mbti ?? DEFAULT_PERSONAL.mbti,
         gender: doc.gender ?? DEFAULT_PERSONAL.gender,
-        birth: doc.birth ?? DEFAULT_PERSONAL.birth,
+        birth: formatBirthDate(doc.birth),
         address: Array.isArray(doc.address) ? doc.address : DEFAULT_PERSONAL.address,
         brief: doc.brief ?? DEFAULT_PERSONAL.brief,
         photos: Array.isArray(doc.photos) ? doc.photos : DEFAULT_PERSONAL.photos,
@@ -420,11 +420,17 @@ type PersonalInfoDoc = {
   star?: string;
   mbti?: string;
   gender: number;
-  birth?: string;
+  birth?: Date | string;
   address?: string[];
   brief?: string;
   photos?: { url: string; name: string; type: string }[];
 };
+
+function formatBirthDate(birth: Date | string | undefined | null): string {
+  if (!birth) return DEFAULT_PERSONAL.birth;
+  if (birth instanceof Date) return birth.toISOString().slice(0, 10);
+  return String(birth).slice(0, 10);
+}
 
 function buildPersonalInfoUpdate(
   userId: string,
@@ -458,7 +464,7 @@ function buildPersonalInfoResponse(docRow: PersonalInfoDoc, userId: string): Rec
     star: docRow.star ?? '',
     mbti: docRow.mbti ?? '',
     gender: docRow.gender ?? DEFAULT_PERSONAL.gender,
-    birth: docRow.birth ?? DEFAULT_PERSONAL.birth,
+    birth: formatBirthDate(docRow.birth),
     address: Array.isArray(docRow.address) ? docRow.address : DEFAULT_PERSONAL.address,
     brief: docRow.brief ?? DEFAULT_PERSONAL.brief,
     photos: Array.isArray(docRow.photos) ? docRow.photos : DEFAULT_PERSONAL.photos,

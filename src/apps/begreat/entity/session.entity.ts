@@ -185,3 +185,5 @@ export const SessionSchema = new Schema<IAssessmentSession>(
   },
   { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
 );
+
+SessionSchema.index({ openId: 1, status: 1 });
