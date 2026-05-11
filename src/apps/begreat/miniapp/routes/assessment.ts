@@ -360,17 +360,26 @@ router.post('/batch/:sessionId/:batchIndex', authMiddleware, async (req: Miniapp
 
   try {
     const Sessions = getSessionModel();
-    const session = await Sessions.findOne({ sessionId, openId: req.userId }).exec();
+    const session = await Sessions.findOne({ sessionId, openId: req.userId })
+      .select('status questionIds')
+      .lean()
+      .exec();
     if (!session) { sendErr(res, 'Session not found', 404); return; }
     if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
 
     // 仅接受合法 index 范围内的答案
     const total = session.questionIds.length;
     const valid = answers.filter((a: { index: number }) => a.index >= 0 && a.index < total);
-    session.answers.push(...valid);
-    await session.save();
 
-    sendSucc(res, { savedCount: valid.length, totalAnswered: session.answers.length });
+    // 原子 $push，避免并发提交互相覆盖答案
+    const updated = await Sessions.findOneAndUpdate(
+      { sessionId, openId: req.userId, status: 'in_progress' },
+      { $push: { answers: { $each: valid } } },
+      { new: true },
+    ).select('answers').lean().exec();
+
+    if (!updated) { sendErr(res, 'Session already completed', 400); return; }
+    sendSucc(res, { savedCount: valid.length, totalAnswered: updated.answers.length });
   } catch (err) {
     logger.error('[assessment/submit-batch]', err);
     sendErr(res, 'Internal error', 500);
@@ -514,44 +523,79 @@ function collectAnswerMap(
   return map;
 }
 
+type CompleteResult =
+  | { ok: true; payload: object }
+  | { ok: false; status: number; message: string };
+
+interface CompletableSession {
+  sessionId: string;
+  assessmentType: string;
+  answers: Array<{ index: number; score: number }>;
+  questionIds: string[];
+  normVersion?: string | null;
+  userProfile: { gender: Gender; age: number };
+  instrumentVersion?: string | null;
+}
+
+async function processCompletedAssessment(
+  session: CompletableSession,
+  bodyAnswers: unknown,
+): Promise<CompleteResult> {
+  const Sessions = getSessionModel();
+  const { sessionId } = session;
+  const typedAnswers = bodyAnswers as Array<{ index: number; score: number }> | undefined;
+  const answerByIndex = collectAnswerMap(typedAnswers, session.answers, session.questionIds.length);
+  if (answerByIndex.size !== session.questionIds.length) {
+    await Sessions.updateOne({ sessionId }, { $set: { status: 'in_progress' } });
+    return { ok: false, status: 400, message: `Incomplete or invalid: ${answerByIndex.size}/${session.questionIds.length} unique answers` };
+  }
+  const isFreeVersion = session.assessmentType === 'BFI2_FREE';
+  const scoreResult = await computeBig5Scores(
+    answerByIndex, session.questionIds, isFreeVersion, session.assessmentType);
+  if (scoreResult.error) {
+    await Sessions.updateOne({ sessionId }, { $set: { status: 'in_progress' } });
+    return { ok: false, status: 500, message: scoreResult.error };
+  }
+  const { rawBig5Mean, big5DomainSum, bfi2FacetMeans } = scoreResult;
+  const normVersion = session.normVersion ?? '';
+  const { gender, age } = session.userProfile;
+  const { big5Norm, topCareers, hardExcluded, softAdjusted, label, freeSummary, report, normMeta } =
+    await computeAssessmentData(rawBig5Mean, gender, age, normVersion, isFreeVersion);
+  if (isFreeVersion) {
+    await Sessions.deleteOne({ sessionId });
+    return { ok: true, payload: { personalityLabel: label, freeSummary, sessionId, report, topCareers } };
+  }
+  await Sessions.updateOne(
+    { sessionId },
+    { $set: { status: 'completed', result: {
+      big5Scores: rawBig5Mean, big5DomainSum, bfi2FacetMeans, big5Normalized: big5Norm,
+      topCareers, hardExcluded, softAdjusted, freeSummary, personalityLabel: label, report,
+      instrumentVersion: session.instrumentVersion ?? BFI2_INSTRUMENT_VERSION,
+      normVersion, normSource: normMeta?.source ?? null, normSampleSize: normMeta?.sampleSize ?? null,
+    } } },
+  );
+  return { ok: true, payload: { personalityLabel: label, freeSummary, sessionId, report } };
+}
+
 /** POST /assessment/complete/:sessionId — 完成测评：计算得分、生成报告、存储结果 */
 router.post('/complete/:sessionId', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const { sessionId } = req.params;
   try {
     const Sessions = getSessionModel();
-    const session = await Sessions.findOne({ sessionId, openId: req.userId }).exec();
-    if (!session) { sendErr(res, 'Session not found', 404); return; }
-    if (session.status !== 'in_progress') { sendErr(res, 'Session already completed', 400); return; }
-
-    const answerByIndex = collectAnswerMap(req.body?.answers, session.answers, session.questionIds.length);
-    if (answerByIndex.size !== session.questionIds.length) {
-      sendErr(res, `Incomplete or invalid: ${answerByIndex.size}/${session.questionIds.length} unique answers`, 400);
+    // 原子地将 in_progress → completing，防止并发请求重复计算
+    const session = await Sessions.findOneAndUpdate(
+      { sessionId, openId: req.userId, status: 'in_progress' },
+      { $set: { status: 'completing' } },
+      { new: false },
+    ).lean().exec();
+    if (!session) {
+      const exists = await Sessions.exists({ sessionId, openId: req.userId });
+      sendErr(res, exists ? 'Session already completed' : 'Session not found', exists ? 400 : 404);
       return;
     }
-    const isFreeVersion = session.assessmentType === 'BFI2_FREE';
-    const scoreResult = await computeBig5Scores(
-      answerByIndex, session.questionIds, isFreeVersion, session.assessmentType);
-    if (scoreResult.error) { sendErr(res, scoreResult.error, 500); return; }
-    const { rawBig5Mean, big5DomainSum, bfi2FacetMeans } = scoreResult;
-    const normVersion = session.normVersion ?? '';
-    const { gender, age } = session.userProfile;
-    const { big5Norm, topCareers, hardExcluded, softAdjusted, label, freeSummary, report, normMeta } =
-      await computeAssessmentData(rawBig5Mean, gender, age, normVersion, isFreeVersion);
-
-    if (isFreeVersion) {
-      await session.deleteOne();
-      sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report, topCareers });
-      return;
-    }
-    session.result = {
-      big5Scores: rawBig5Mean, big5DomainSum, bfi2FacetMeans, big5Normalized: big5Norm,
-      topCareers, hardExcluded, softAdjusted, freeSummary, personalityLabel: label, report,
-      instrumentVersion: session.instrumentVersion ?? BFI2_INSTRUMENT_VERSION,
-      normVersion, normSource: normMeta?.source ?? null, normSampleSize: normMeta?.sampleSize ?? null,
-    };
-    session.status = 'completed';
-    await session.save();
-    sendSucc(res, { personalityLabel: label, freeSummary, sessionId, report });
+    const result = await processCompletedAssessment(session, req.body?.answers);
+    if (!result.ok) { sendErr(res, result.message, result.status); return; }
+    sendSucc(res, result.payload);
   } catch (err) {
     logger.error('[assessment/complete]', err);
     sendErr(res, 'Internal error', 500);

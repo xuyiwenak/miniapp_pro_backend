@@ -30,23 +30,27 @@ router.get('/my-code', authMiddleware, async (req: MiniappRequest, res: Response
   const openId = req.userId ?? '';
   try {
     const InviteCodes = getInviteCodeModel();
-    let record = await InviteCodes.findOne({ openId }).lean().exec();
 
-    if (!record) {
-      // 生成唯一邀请码（碰撞重试最多 5 次）
-      let code = '';
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const candidate = generateCode();
-        const exists = await InviteCodes.findOne({ code: candidate }).lean().exec();
-        if (!exists) { code = candidate; break; }
-      }
-      if (!code) {
-        sendErr(res, 'Failed to generate invite code', 500);
-        return;
-      }
-      record = await InviteCodes.create({ code, openId });
+    // 生成唯一邀请码候选（碰撞重试最多 5 次）
+    let code = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = generateCode();
+      const exists = await InviteCodes.findOne({ code: candidate }).lean().exec();
+      if (!exists) { code = candidate; break; }
+    }
+    if (!code) {
+      sendErr(res, 'Failed to generate invite code', 500);
+      return;
     }
 
+    // 原子 upsert：并发请求只有第一个会插入，后续返回已有记录
+    const record = await InviteCodes.findOneAndUpdate(
+      { openId },
+      { $setOnInsert: { code, openId } },
+      { upsert: true, new: true },
+    ).lean().exec();
+
+    if (!record) { sendErr(res, 'Internal error', 500); return; }
     sendSucc(res, { code: record.code });
   } catch (err) {
     logger.error('[invite/my-code]', err);

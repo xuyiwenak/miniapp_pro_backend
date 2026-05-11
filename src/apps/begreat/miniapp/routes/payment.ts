@@ -565,32 +565,4 @@ router.post('/query/:outTradeNo', authMiddleware, async (req: MiniappRequest, re
   }
 });
 
-/**
- * GET /payment/records
- * 管理端：分页查询付费记录（需 admin auth，此处用 authMiddleware 代替，生产环境应加 admin 鉴权）
- */
-router.get('/records', authMiddleware, async (req: MiniappRequest, res: Response) => {
-  const page  = Math.max(1, parseInt(String(req.query['page']  ?? '1')));
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '20'))));
-  const status = req.query['status'] as string | undefined;
-
-  try {
-    const Payments = getPaymentModel();
-    const filter = status ? { status } : {};
-    const [records, total] = await Promise.all([
-      Payments.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean()
-        .exec(),
-      Payments.countDocuments(filter),
-    ]);
-    sendSucc(res, { records, total, page, limit });
-  } catch (err) {
-    logger.error('[payment/records]', err);
-    sendErr(res, 'Internal error', 500);
-  }
-});
-
 export default router;
