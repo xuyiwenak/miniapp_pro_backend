@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { getQuestionModel } from '../../../dbservice/BegreatDBModel';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { gameLogger as logger } from '../../../../../util/logger';
+import { parsePage } from '../../../../../util/pagination';
 
 const router = Router();
 
@@ -10,8 +11,7 @@ const MAX_PAGE_SIZE     = 200;
 
 // GET /begreat-admin/questions
 router.get('/', async (req: Request, res: Response) => {
-  const page     = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(String(req.query['pageSize'] ?? String(DEFAULT_PAGE_SIZE)), 10) || DEFAULT_PAGE_SIZE));
+  const { page, pageSize } = parsePage(req.query as Record<string, unknown>, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
   const filter: Record<string, unknown> = {};
   if (req.query['modelType'])            filter['modelType']  = req.query['modelType'];

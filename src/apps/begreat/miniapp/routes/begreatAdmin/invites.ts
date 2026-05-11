@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getInviteCodeModel, getInviteRewardModel, getSessionModel } from '../../../dbservice/BegreatDBModel';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
+import { gameLogger as logger } from '../../../../../util/logger';
+import { parsePage } from '../../../../../util/pagination';
 
 const router = Router();
 
@@ -37,15 +39,14 @@ router.get('/stats', async (_req: Request, res: Response) => {
       topInviters:    topInviters.map(r => ({ openId: r._id, redeemCount: r.redeemCount })),
     });
   } catch (err) {
+    logger.error('[admin/invites/stats]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/invites/stats]', err);
   }
 });
 
 // GET /begreat-admin/invites
 router.get('/', async (req: Request, res: Response) => {
-  const page     = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(String(req.query['pageSize'] ?? String(DEFAULT_PAGE_SIZE)), 10) || DEFAULT_PAGE_SIZE));
+  const { page, pageSize } = parsePage(req.query as Record<string, unknown>, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const openId   = typeof req.query['openId'] === 'string' ? req.query['openId'] : undefined;
 
   try {
@@ -78,8 +79,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     sendSucc(res, { total, page, pageSize, data });
   } catch (err) {
+    logger.error('[admin/invites]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/invites]', err);
   }
 });
 

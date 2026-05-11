@@ -21,7 +21,7 @@ type WxSessionResult = { openid?: string; session_key?: string; errcode?: number
 
 function code2session(appId: string, appSecret: string, code: string): Promise<WxSessionResult> {
   return new Promise((resolve, reject) => {
-    const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`;
+    const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
     https.get(url, (res) => {
       let data = '';
       res.on('data', (c) => (data += c));

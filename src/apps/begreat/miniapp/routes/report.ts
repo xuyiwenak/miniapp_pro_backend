@@ -9,6 +9,9 @@ import type { IAssessmentResult } from '../../entity/session.entity';
 
 const router = Router();
 
+const FACET_HIGH_THRESHOLD = 4.2; // 突出高分面（5分制）
+const FACET_LOW_THRESHOLD  = 2.5; // 突出低分面（5分制）
+
 type RiskBands = ReturnType<typeof loadReportTemplate>['careers']['ai_impact']['risk_bands'];
 
 /** 构建 Tier-1 付费报告响应数据 */
@@ -171,12 +174,12 @@ function buildFacetInsights(facetMeans: Record<string, number>): FacetInsight[] 
   for (const [facet, score] of Object.entries(facetMeans)) {
     const m = META[facet];
     if (!m) continue;
-    if (score >= 4.2 || score <= 2.5) {
+    if (score >= FACET_HIGH_THRESHOLD || score <= FACET_LOW_THRESHOLD) {
       results.push({
         facet,
         label: m.label,
         score: parseFloat(score.toFixed(2)),
-        insight: score >= 4.2 ? m.high : m.low,
+        insight: score >= FACET_HIGH_THRESHOLD ? m.high : m.low,
       });
     }
   }

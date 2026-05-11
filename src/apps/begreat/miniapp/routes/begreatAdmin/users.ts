@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getSessionModel, getPaymentModel, getInviteCodeModel } from '../../../dbservice/BegreatDBModel';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
+import { gameLogger as logger } from '../../../../../util/logger';
+import { parsePage } from '../../../../../util/pagination';
 
 const router = Router();
 
@@ -14,14 +16,7 @@ type SessionResult = {
 // GET /begreat-admin/users
 // eslint-disable-next-line max-lines-per-function
 router.get('/', async (req: Request, res: Response) => {
-  const page     = Math.max(1, parseInt(String(req.query['page']     ?? '1'),  10) || 1);
-  const pageSize = Math.min(
-    MAX_PAGE_SIZE,
-    Math.max(
-      1,
-      parseInt(String(req.query['pageSize'] ?? String(DEFAULT_PAGE_SIZE)), 10) || DEFAULT_PAGE_SIZE
-    )
-  );
+  const { page, pageSize } = parsePage(req.query as Record<string, unknown>, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const openId     = typeof req.query['openId']    === 'string' ? req.query['openId']    : undefined;
   const startDate  = typeof req.query['startDate'] === 'string' ? req.query['startDate'] : undefined;
   const endDate    = typeof req.query['endDate']   === 'string' ? req.query['endDate']   : undefined;
@@ -72,8 +67,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     sendSucc(res, { total, page, pageSize, data: formatted });
   } catch (err) {
+    logger.error('[admin/users]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/users]', err);
   }
 });
 
@@ -156,8 +151,8 @@ router.get('/:openId/timeline', async (req: Request, res: Response) => {
 
     sendSucc(res, { openId, events });
   } catch (err) {
+    logger.error('[admin/users/timeline]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/users/timeline]', err);
   }
 });
 

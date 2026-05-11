@@ -11,6 +11,8 @@ import { loadSysConfigJson } from '../../../../util/load_json';
 
 const router = Router();
 
+const AES_GCM_TAG_BYTES = 16; // AES-256-GCM authentication tag length
+
 // ========== Helper Functions for /status/:sessionId Route ==========
 
 /**
@@ -66,8 +68,8 @@ function decryptWxPayCallback(
   const key = crypto.createHash('sha256').update(apiV3Key).digest();
   const iv = Buffer.from(nonce, 'utf-8');
   const buf = Buffer.from(ciphertext, 'base64');
-  const tag = buf.slice(buf.length - 16);
-  const enc = buf.slice(0, buf.length - 16);
+  const tag = buf.slice(buf.length - AES_GCM_TAG_BYTES);
+  const enc = buf.slice(0, buf.length - AES_GCM_TAG_BYTES);
 
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
@@ -258,11 +260,15 @@ interface WxPayConfig {
   };
 }
 
+let cachedPayConfig: WxPayConfig | null = null;
+const privateKeyCache = new Map<string, string>();
+
 /**
  * 读取 wx_pay_config.local.json（仅 production 环境需要）。
- * development 环境走 devMode，直接返回空配置。
+ * development 环境走 devMode，直接返回空配置。结果进程级缓存，避免每次请求重复读文件。
  */
 function getPayConfig(): WxPayConfig {
+  if (cachedPayConfig) return cachedPayConfig;
   const env = process.env.ENV ?? process.env.environment ?? 'development';
   if (env === 'development') return {};
 
@@ -271,11 +277,17 @@ function getPayConfig(): WxPayConfig {
     logger.warn(`[payment] Failed to load wx_pay_config.local.json: ${msg}`);
     return {};
   }
-  return data as WxPayConfig;
+  cachedPayConfig = data as WxPayConfig;
+  return cachedPayConfig;
 }
 
+/** 读取私钥文件并缓存，避免每次支付请求同步阻塞事件循环 */
 function loadPrivateKey(keyPath: string): string {
-  return fs.readFileSync(keyPath, 'utf-8');
+  const cached = privateKeyCache.get(keyPath);
+  if (cached) return cached;
+  const key = fs.readFileSync(keyPath, 'utf-8');
+  privateKeyCache.set(keyPath, key);
+  return key;
 }
 
 function buildV3Authorization(

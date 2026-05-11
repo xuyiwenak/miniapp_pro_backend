@@ -88,14 +88,18 @@ export async function getHealDailyUsage(userId: string): Promise<number> {
   return val !== null ? parseInt(val, 10) : 0;
 }
 
-/** 自增今日用量，返回自增后的值，首次使用时设置到次日零点的 TTL */
+// 原子地 INCR + EXPIRE（首次创建时）：防止进程崩溃在两步之间导致 key 永不过期
+const INCR_WITH_EXPIRE_LUA = `
+  local v = redis.call("INCR", KEYS[1])
+  if v == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end
+  return v
+`;
+
+/** 自增今日用量，返回自增后的值，首次使用时原子设置到次日零点的 TTL */
 export async function incrementHealDailyUsage(userId: string): Promise<number> {
   const client = getRedis();
   const key = `heal:daily:${userId}:${todayDateStr()}`;
-  const count = await client.incr(key);
-  if (count === 1) {
-    await client.expire(key, secondsUntilUtcMidnight());
-  }
+  const count = await client.eval(INCR_WITH_EXPIRE_LUA, 1, key, String(secondsUntilUtcMidnight())) as number;
   return count;
 }
 

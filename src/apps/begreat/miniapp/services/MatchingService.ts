@@ -11,6 +11,12 @@ const AGE_GROUP_22_24 = 22;
 const SCORE_MIN = 0;
 const SCORE_MAX = 100;
 
+// ========== 年龄惩罚倍率 ==========
+const AGE_PENALTY_SLIGHT   = 0.95; // 偏离 ≤2 岁
+const AGE_PENALTY_MODERATE = 0.85; // 偏离 ≤5 岁
+const AGE_PENALTY_SEVERE   = 0.70; // 偏离 ≤10 岁
+const AGE_PENALTY_EXTREME  = 0.50; // 偏离 >10 岁
+
 interface MatchInput {
   big5Norm: Record<string, number>; // O, C, E, A, N
   age: number;
@@ -39,7 +45,7 @@ interface MatchDiagnostics {
 /**
  * 根据年龄返回对应的年龄组
  */
-function getAgeGroup(age: number): OccupationAgeGroup {
+function getOccupationAgeGroup(age: number): OccupationAgeGroup {
   if (age >= AGE_GROUP_45_PLUS) return '45+';
   if (age >= AGE_GROUP_31_35) return '31-35';
   if (age >= AGE_GROUP_25_30) return '25-30';
@@ -117,7 +123,7 @@ function evaluateExcludeRules(input: MatchInput, job: IOccupationNorm): {
 
 function ageMultiplierForJob(age: number, job: IOccupationNorm): number {
   if (age >= job.ageRange.min && age <= job.ageRange.max) {
-    const ageGroup = getAgeGroup(age);
+    const ageGroup = getOccupationAgeGroup(age);
     return job.ageBonusMultiplier[ageGroup] ?? 1.0;
   }
 
@@ -126,10 +132,10 @@ function ageMultiplierForJob(age: number, job: IOccupationNorm): number {
     ? job.ageRange.min - age
     : age - job.ageRange.max;
 
-  if (deviation <= 2) return 0.95;   // 轻微偏离
-  if (deviation <= 5) return 0.85;   // 中等偏离
-  if (deviation <= 10) return 0.70;  // 严重偏离
-  return 0.50;                       // 极度偏离
+  if (deviation <= 2) return AGE_PENALTY_SLIGHT;
+  if (deviation <= 5) return AGE_PENALTY_MODERATE;
+  if (deviation <= 10) return AGE_PENALTY_SEVERE;
+  return AGE_PENALTY_EXTREME;
 }
 
 /**
@@ -178,8 +184,8 @@ function scoreCareer(
   const extraversion = input.big5Norm['E'] ?? 0;
   const agreeableness = input.big5Norm['A'] ?? 0;
 
-  const { oDiff, cDiff, nDiff, isHighStressJob } = computeCoreDiffs(input, job);
-  let { weightedSquares } = computeCoreDiffs(input, job);
+  const { oDiff, cDiff, nDiff, isHighStressJob, weightedSquares: initialWS } = computeCoreDiffs(input, job);
+  let weightedSquares = initialWS;
 
   const breakdown: ScoreBreakdown = {
     openness: -Math.abs(oDiff) * 12 * (0.7 + job.salaryIndex * 0.6),

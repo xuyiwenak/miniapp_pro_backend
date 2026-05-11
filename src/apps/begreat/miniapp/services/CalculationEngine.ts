@@ -16,28 +16,55 @@ export function getAgeGroup(age: number): AgeGroup {
 
 type NormCache = Map<string, [number, number]>;
 
-const normCacheStore = new Map<string, NormCache>(); // per normVersion
+const NORM_CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟后自动失效，确保 DB 更新后能刷新
+
+const normCacheStore = new Map<string, NormCache>();
+const normCacheTimestamps = new Map<string, number>();
+const normCacheInflight = new Map<string, Promise<NormCache>>(); // 并发去重
 
 function normCacheKey(modelType: string, dimension: string, gender: string, ageGroup: string) {
   return `${modelType}|${dimension}|${gender}|${ageGroup}`;
 }
 
+/** 主动失效缓存（管理员更新常模后调用）；不传 normVersion 则清空全部 */
+export function invalidateNormCache(normVersion?: string): void {
+  if (normVersion) {
+    normCacheStore.delete(normVersion);
+    normCacheTimestamps.delete(normVersion);
+  } else {
+    normCacheStore.clear();
+    normCacheTimestamps.clear();
+  }
+}
+
 /**
- * 加载指定版本的全部常模到内存缓存（每个版本只查一次 DB）
+ * 加载指定版本的全部常模到内存缓存。
+ * - 命中有效缓存直接返回，无 DB 查询
+ * - 并发首次加载同一版本时只发一次 DB 请求（inflight 去重）
+ * - 超过 TTL 自动重新加载
  */
 async function loadNormCache(normVersion: string): Promise<NormCache> {
+  const ts = normCacheTimestamps.get(normVersion) ?? 0;
   const cached = normCacheStore.get(normVersion);
-  if (cached) return cached;
+  if (cached && Date.now() - ts < NORM_CACHE_TTL_MS) return cached;
 
-  const NormModel = getNormModel();
-  const docs = await NormModel.find({ normVersion }).lean().exec();
+  const inflight = normCacheInflight.get(normVersion);
+  if (inflight) return inflight;
 
-  const cache: NormCache = new Map();
-  for (const d of docs) {
-    cache.set(normCacheKey(d.modelType, d.dimension, d.gender, d.ageGroup), [d.mean, d.sd]);
-  }
-  normCacheStore.set(normVersion, cache);
-  return cache;
+  const load = (async () => {
+    const NormModel = getNormModel();
+    const docs = await NormModel.find({ normVersion }).lean().exec();
+    const cache: NormCache = new Map();
+    for (const d of docs) {
+      cache.set(normCacheKey(d.modelType, d.dimension, d.gender, d.ageGroup), [d.mean, d.sd]);
+    }
+    normCacheStore.set(normVersion, cache);
+    normCacheTimestamps.set(normVersion, Date.now());
+    return cache;
+  })().finally(() => normCacheInflight.delete(normVersion));
+
+  normCacheInflight.set(normVersion, load);
+  return load;
 }
 
 /**

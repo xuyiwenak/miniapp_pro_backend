@@ -25,79 +25,58 @@ export class BullComponent implements IBaseComponent {
     this.gameLogger = gameLogger || console;
   }
 
-  // Add a message to the queue
   async sendMessage<TMessage, TResult>(
-    message: TMessage
+    message: TMessage,
   ): Promise<Bull.Job<TResult>> {
     const job = await this.queue.add(message);
     return job as Bull.Job<TResult>;
   }
 
-  // Process messages in the queue with a given concurrency level
-  //   processMessages(
-  //     concurrency: number,
-  //     processor: Bull.ProcessCallbackFunction<any>
-  //   ): void {
-  //     this.queue.process(concurrency, processor);
-  //   }
+  processMessages(
+    concurrency: number,
+    processor: Bull.ProcessCallbackFunction<unknown> | Bull.ProcessPromiseFunction<unknown>,
+  ): void {
+    this.queue.process(concurrency, processor as Bull.ProcessCallbackFunction<unknown>);
+  }
 
-  // Retrieve metrics about the queue's current state
-  async getQueueMetrics(): Promise<{
-    active: number;
-    completed: number;
-    failed: number;
-  }> {
+  async getQueueMetrics(): Promise<{ active: number; completed: number; failed: number }> {
     const [active, completed, failed] = await Promise.all([
       this.queue.getActiveCount(),
       this.queue.getCompletedCount(),
       this.queue.getFailedCount(),
     ]);
-
     return { active, completed, failed };
   }
 
-  // Update the queue options dynamically
-  setQueueOptions(options: Bull.QueueOptions): void {
+  // 关闭旧队列后再创建新队列，避免泄漏 Redis 连接
+  async setQueueOptions(options: Bull.QueueOptions): Promise<void> {
+    await this.queue.close();
     this.queue = new Bull(this.queue.name, options);
   }
 
-  // Initialize the component (placeholder for additional logic)
-  async init() {
-    // Initialization logic for BullComponent
-  }
+  async init(): Promise<void> {}
 
-  // Start the component and connect to the Redis server
-  async start() {}
+  async start(): Promise<void> {}
 
-  // Logic to execute after the component starts (placeholder)
-  async afterStart() {
-    const sysCfgComp = ComponentManager.instance.getComponent(
-      EComName.SysCfgComponent
-    );
+  async afterStart(): Promise<void> {
+    const sysCfgComp = ComponentManager.instance.getComponent(EComName.SysCfgComponent);
     const redisOptions = sysCfgComp.redis_global;
     if (!redisOptions) {
       throw new Error('BullComponent: redis_global config is missing');
     }
-    this.queue = new Bull(this.queue.name, {
-      redis: {
-        host: redisOptions.host,
-        port: redisOptions.port,
-        db: redisOptions.db,
-      },
+    await this.setQueueOptions({
+      redis: { host: redisOptions.host, port: redisOptions.port, db: redisOptions.db },
     });
     this.gameLogger.log('Bull queue connected to Redis server');
-    // Logic to execute after the component starts
   }
 
-  // Stop the component and release resources
-  async stop() {
+  async stop(): Promise<void> {
     this.gameLogger.log('Waiting for all message callbacks to complete...');
     await this.queue.close();
     this.gameLogger.log('Bull queue resources released.');
   }
 
-  // Set a mock queue for testing purposes
-  setMockqueue(mockQueue: Bull.Queue) {
+  setMockqueue(mockQueue: Bull.Queue): void {
     this.queue = mockQueue;
   }
 }

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getSessionModel } from '../../../dbservice/BegreatDBModel';
 import { sendSucc, sendErr } from '../../../../../shared/miniapp/middleware/response';
 import { gameLogger as logger } from '../../../../../util/logger';
+import { parsePage } from '../../../../../util/pagination';
 
 const router = Router();
 
@@ -11,8 +12,7 @@ const VALID_STATUSES    = ['in_progress', 'completed', 'paid', 'invite_unlocked'
 
 // GET /begreat-admin/sessions
 router.get('/', async (req: Request, res: Response) => {
-  const page     = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(String(req.query['pageSize'] ?? String(DEFAULT_PAGE_SIZE)), 10) || DEFAULT_PAGE_SIZE));
+  const { page, pageSize } = parsePage(req.query as Record<string, unknown>, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const openId    = typeof req.query['openId']    === 'string' ? req.query['openId']    : undefined;
   const startDate = typeof req.query['startDate'] === 'string' ? req.query['startDate'] : undefined;
   const endDate   = typeof req.query['endDate']   === 'string' ? req.query['endDate']   : undefined;
@@ -47,8 +47,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     sendSucc(res, { total, page, pageSize, data });
   } catch (err) {
+    logger.error('[admin/sessions]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/sessions]', err);
   }
 });
 
@@ -67,8 +67,8 @@ router.get('/:sessionId', async (req: Request, res: Response) => {
     }
     sendSucc(res, session);
   } catch (err) {
+    logger.error('[admin/sessions/:id]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/sessions/:id]', err);
   }
 });
 
@@ -114,8 +114,8 @@ router.post('/:sessionId/grant', async (req: Request, res: Response) => {
     logger.info(`[admin/sessions/grant] sessionId=${sessionId} reason="${grantReason}"`);
     sendSucc(res, { granted: true });
   } catch (err) {
+    logger.error('[admin/sessions/grant]', err);
     sendErr(res, 'Internal error', 500);
-    console.error('[admin/sessions/grant]', err);
   }
 });
 

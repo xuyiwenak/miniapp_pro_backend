@@ -66,14 +66,18 @@ function registerInitAdminRoute(router: Router, options: AdminAuthRouterOptions)
       sendErr(res, 'username and password are required', 400);
       return;
     }
-    const model = getModel();
-    const count = await model.countDocuments();
-    if (count > 0) {
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+    // 原子 upsert：空 filter + $setOnInsert 保证并发请求只有第一个能插入
+    // new: false → 返回旧文档；若为 null 说明是新插入（集合原本为空）
+    const existing = await getModel().findOneAndUpdate(
+      {},
+      { $setOnInsert: { adminId: randomUUID(), username, passwordHash } },
+      { upsert: true, new: false },
+    );
+    if (existing) {
       sendErr(res, 'Admin already initialized', 409);
       return;
     }
-    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
-    await model.create({ adminId: randomUUID(), username, passwordHash });
     logger.info(`${logPrefix} admin account initialized`);
     res.status(201).json({ success: true });
   });
