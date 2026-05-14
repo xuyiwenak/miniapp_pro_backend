@@ -1,25 +1,6 @@
 {
   "apps": [
     {
-      "name": "drawing",
-      "cwd": ".",
-      "script": "npm",
-      "args": "run dev:drawing",
-      "interpreter": "none",
-      "watch": false,
-      "env": {
-        "NODE_ENV": "development",
-        "ENV": "development",
-        "environment": "development",
-        "WS_PORT": "40000",
-        "HTTP_PORT": "40001",
-        "MINIAPP_PORT": "40002",
-        "SERVER_ID": "front_1",
-        "id": "front_1",
-        "SYSCONFIG_ROOT": "src/apps/drawing/sysconfig"
-      }
-    },
-    {
       "name": "begreat",
       "cwd": ".",
       "script": "npm",
