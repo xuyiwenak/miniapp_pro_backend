@@ -15,6 +15,7 @@ interface OssImagesConfig {
   icon_original: string;
   icon_image: string;
   icon_safe: string;
+  share_cover?: string;
 }
 
 interface RuntimeConfig {
@@ -31,6 +32,7 @@ const DEFAULT_OSS_IMAGES: OssImagesConfig = {
   icon_original: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-original.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=UiV7NROZPQEW3ZSArKKfm%2FkGaZY%3D',
   icon_image: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-image.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=wYF6%2BVkbXFit3D%2BR1UOMVHJR7AU%3D',
   icon_safe: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-safe.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=AkiqWKnh7WkfIuZGAAxJCz%2BFwW0%3D',
+  share_cover: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/share_cover.png?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=tcVD4MOdu4BRoY84DcdbJzcV0FU%3D',
 };
 
 const DEFAULT_BASE_URL = 'https://mandis.starryspark.com.cn';
@@ -55,6 +57,7 @@ router.get('/config', (_req, res: Response) => {
       iconOriginal: ossImages.icon_original || DEFAULT_OSS_IMAGES.icon_original,
       iconImage: ossImages.icon_image || DEFAULT_OSS_IMAGES.icon_image,
       iconSafe: ossImages.icon_safe || DEFAULT_OSS_IMAGES.icon_safe,
+      shareCover: ossImages.share_cover || DEFAULT_OSS_IMAGES.share_cover,
     },
   });
 });

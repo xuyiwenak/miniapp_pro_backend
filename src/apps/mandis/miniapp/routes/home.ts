@@ -11,6 +11,7 @@ import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 const OSS_PREFIX = 'oss://';
+const SHARE_IMAGE_EXPIRE_SECONDS = 30 * 24 * 60 * 60; // 30天
 
 const CARDS = [
   { url: '/static/home/card0.png', desc: '少年,星空与梦想', tags: [{ text: 'AI绘画', theme: 'primary' }, { text: '版权素材', theme: 'success' }] },
@@ -106,7 +107,11 @@ router.get('/workDetail', async (req: Request, res: Response) => {
     });
     const healingInfo = buildHealingResponse(work, viewerId);
     const images = resolveWorkImages(work);
-    sendSucc(res, { ...work, images, ...healingInfo });
+    const rawCover = (work.images as { url?: string }[] | undefined)?.[0]?.url ?? '';
+    const shareImageUrl = rawCover && rawCover.startsWith(OSS_PREFIX)
+      ? resolveImageUrl(rawCover, SHARE_IMAGE_EXPIRE_SECONDS)
+      : rawCover;
+    sendSucc(res, { ...work, images, shareImageUrl, ...healingInfo });
   } catch (err) {
     logRequestError('home.ts:workDetail:error', 'workDetail server error', {
       req, requestBody: { workId }, statusCode: 500,

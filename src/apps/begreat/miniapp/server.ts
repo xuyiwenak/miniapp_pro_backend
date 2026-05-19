@@ -6,7 +6,12 @@ import {
   setupNotFoundHandler,
   startMiniappHttpServer,
 } from '../../../shared/miniapp/server';
-import { biTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
+import { createBiTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
+
+const BEGREAT_BI_PREFIXES = [
+  '/app', '/login', '/assessment', '/report',
+  '/payment', '/invite', '/admin', '/begreat-admin',
+];
 import loginRoutes        from './routes/login';
 import assessmentRoutes   from './routes/assessment';
 import reportRoutes       from './routes/report';
@@ -33,7 +38,7 @@ export function createBegreatApp(): express.Express {
   });
 
   // BI 追踪中间件：记录所有 API 请求
-  app.use(biTrackingMiddleware);
+  app.use(createBiTrackingMiddleware(BEGREAT_BI_PREFIXES));
 
   app.use('/app',            appRoutes);
   app.use('/login',          loginRoutes);

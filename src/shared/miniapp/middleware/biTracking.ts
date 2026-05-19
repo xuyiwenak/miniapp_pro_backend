@@ -4,39 +4,33 @@ import { BiAnalyticsComponent } from '../../../component/BiAnalyticsComponent';
 import { MiniappRequest } from './auth';
 
 /**
- * BI 追踪中间件：自动记录 API 请求事件
- * 实现 OpenSpec: art_backend/openspec/specs/bi-analytics/spec.md
- *
- * 功能：
- * 1. 记录请求开始时间
- * 2. 拦截响应，记录状态码和响应时间
- * 3. 异步发送事件（不阻塞响应）
+ * 创建 BI 追踪中间件。
+ * 只记录路径以 allowedPrefixes 中某个前缀开头的请求，其余请求（扫描探测等）直接跳过。
  */
-export function biTrackingMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const requestStartAt = Date.now();
+export function createBiTrackingMiddleware(allowedPrefixes: string[]) {
+  return function biTrackingMiddleware(req: Request, res: Response, next: NextFunction): void {
+    if (!allowedPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+      next();
+      return;
+    }
+    const requestStartAt = Date.now();
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    const requestSize = req.headers['content-length']
+      ? parseInt(req.headers['content-length'], 10)
+      : Buffer.byteLength(JSON.stringify(req.body || {}));
 
-  // 保存原始的 res.json 和 res.send 方法
-  const originalJson = res.json.bind(res);
-  const originalSend = res.send.bind(res);
+    res.json = function (body: unknown) {
+      trackApiRequest(req, res, requestStartAt, requestSize, body);
+      return originalJson(body);
+    };
+    res.send = function (body: unknown) {
+      trackApiRequest(req, res, requestStartAt, requestSize, body);
+      return originalSend(body);
+    };
 
-  // 获取请求大小（估算）
-  const requestSize = req.headers['content-length']
-    ? parseInt(req.headers['content-length'], 10)
-    : Buffer.byteLength(JSON.stringify(req.body || {}));
-
-  // 包装 res.json
-  res.json = function (body: unknown) {
-    trackApiRequest(req, res, requestStartAt, requestSize, body);
-    return originalJson(body);
+    next();
   };
-
-  // 包装 res.send
-  res.send = function (body: unknown) {
-    trackApiRequest(req, res, requestStartAt, requestSize, body);
-    return originalSend(body);
-  };
-
-  next();
 }
 
 /**

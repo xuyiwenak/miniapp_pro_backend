@@ -5,7 +5,12 @@ import { WebSocketServer } from 'ws';
 import { sharedHttpOptions } from '../httpServer';
 import { setupChatWs } from './ws/chatServer';
 import { authMiddleware } from '../../../shared/miniapp/middleware/auth';
-import { biTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
+import { createBiTrackingMiddleware } from '../../../shared/miniapp/middleware/biTracking';
+
+const MANDIS_BI_PREFIXES = [
+  '/app', '/login', '/home', '/api', '/work', '/oss',
+  '/dataCenter', '/healing', '/mandis-admin',
+];
 import { setupCommonMiniappApp, setupNotFoundHandler } from '../../../shared/miniapp/server';
 import loginRoutes from './routes/login';
 import homeRoutes from './routes/home';
@@ -40,7 +45,7 @@ export function createMiniappApp(): express.Express {
   app.use('/static', express.static(staticDir));
 
   // BI 追踪中间件：记录所有 API 请求
-  app.use(biTrackingMiddleware);
+  app.use(createBiTrackingMiddleware(MANDIS_BI_PREFIXES));
 
   app.use('/app', appRoutes);
   app.use('/login', loginRoutes);

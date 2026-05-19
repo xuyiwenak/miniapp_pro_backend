@@ -162,6 +162,14 @@ function resolveWorkImages(work: IWork): { url: string; name?: string; type?: st
   });
 }
 
+const SHARE_IMAGE_EXPIRE_SECONDS = 30 * 24 * 60 * 60; // 30天
+
+function resolveShareImageUrl(work: IWork): string {
+  const raw = (work.images as { url?: string }[] | undefined)?.[0]?.url ?? '';
+  if (!raw) return '';
+  return raw.startsWith(OSS_PREFIX) ? resolveImageUrl(raw, SHARE_IMAGE_EXPIRE_SECONDS) : raw;
+}
+
 function cleanupWorkImages(workId: string, work: Record<string, unknown>): void {
   const imageUrls = (work.images as { url?: string }[] | undefined)
     ?.map((img) => img?.url)
@@ -243,7 +251,8 @@ router.get('/detail', async (req: MiniappRequest, res: Response) => {
     if (!work) { sendErr(res, 'Work not found', 404); return; }
     const healingInfo = buildHealingResponse(work as IWork, userId);
     const images = resolveWorkImages(work as IWork);
-    sendSucc(res, { ...work, images, ...healingInfo });
+    const shareImageUrl = resolveShareImageUrl(work as IWork);
+    sendSucc(res, { ...work, images, shareImageUrl, ...healingInfo });
   } catch (err) {
     logRequestError('work.ts:detail:error', 'get work detail failed', {
       req, requestBody: { workId }, statusCode: 500,
