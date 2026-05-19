@@ -79,7 +79,7 @@ function swaggui() {
 function buildServerGlobals(): ServerGlobals {
   const httpPort = envNumber('httpPort', 'HTTP_PORT') ?? 40001;
   const args: ServerGlobals = {
-    id: envFirst('id', 'SERVER_ID') ?? 'front_1',
+    id: envFirst('id', 'SERVER_ID') ?? 'mandis_1',
     internalIP: envFirst('internalIP', 'INTERNAL_IP'),
     publicIP: envFirst('publicIP', 'PUBLIC_IP'),
     gameType: envFirst('gameType', 'GAME_TYPE') ?? 'front',

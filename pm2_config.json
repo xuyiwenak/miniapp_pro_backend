@@ -32,8 +32,8 @@
         "WS_PORT": "42000",
         "HTTP_PORT": "42001",
         "MINIAPP_PORT": "42002",
-        "SERVER_ID": "front_1",
-        "id": "front_1",
+        "SERVER_ID": "mandis_1",
+        "id": "mandis_1",
         "SYSCONFIG_ROOT": "src/apps/mandis/sysconfig"
       }
     }
