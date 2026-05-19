@@ -1,5 +1,7 @@
 {
-  "_note": "热加载配置（mandis 小程序暂无热加载功能，修改后需重启）",
+  "_note": "热加载配置，修改后无需重启，下次小程序启动时生效",
+  "_comment_base_url": "小程序 API 域名，修改后无需重启进程，小程序下次拉取 /app/config 即生效",
+  "base_url": "http://192.168.3.24:42002",
   "_comment_wx_img_sec_max_bytes": "微信 img_sec_check 图片大小阈值（字节）；默认 750KB=768000",
   "wx_img_sec_max_bytes": 768000,
   "oss_images": {

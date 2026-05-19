@@ -13,12 +13,13 @@ const router = Router();
  * 无需鉴权，供小程序启动时获取
  */
 router.get('/config', (_req, res: Response) => {
-  const { ossImages } = getRuntimeConfig();
+  const config = getRuntimeConfig();
   sendSucc(res, {
+    baseUrl: config.base_url,
     ossImages: {
-      shareHome: ossImages.shareHome,
-      shareHomeTimeline: ossImages.shareHomeTimeline,
-      wxacode: ossImages.wxacode,
+      shareHome: config.ossImages.shareHome,
+      shareHomeTimeline: config.ossImages.shareHomeTimeline,
+      wxacode: config.ossImages.wxacode,
     },
   });
 });

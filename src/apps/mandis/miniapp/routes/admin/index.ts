@@ -7,6 +7,7 @@ import usersRouter from './users';
 import worksRouter from './works';
 import feedbackRouter from './feedback';
 import systemRouter from './system';
+import miniappConfigRouter from './miniappConfig';
 
 const router = Router();
 
@@ -34,10 +35,11 @@ router.get('/me', (req: Request, res: Response) => {
   });
 });
 
-router.use('/stats',    statsRouter);
-router.use('/users',    usersRouter);
-router.use('/works',    worksRouter);
-router.use('/feedback', feedbackRouter);
-router.use('/system',   systemRouter);
+router.use('/stats',          statsRouter);
+router.use('/users',          usersRouter);
+router.use('/works',          worksRouter);
+router.use('/feedback',       feedbackRouter);
+router.use('/system',         systemRouter);
+router.use('/miniapp-config', miniappConfigRouter);
 
 export default router;

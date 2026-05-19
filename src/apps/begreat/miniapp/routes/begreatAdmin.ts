@@ -10,6 +10,7 @@ import occupationsRoutes                   from './begreatAdmin/occupations';
 import questionsRoutes                     from './begreatAdmin/questions';
 import normsRoutes                         from './begreatAdmin/norms';
 import systemRoutes                        from './begreatAdmin/system';
+import miniappConfigRoutes                 from './begreatAdmin/miniappConfig';
 import { issueToken }                      from '../../../../shared/miniapp/tokenStore';
 import { getRuntimeConfig }                from '../../config/BegreatRuntimeConfig';
 import { sendSucc, sendErr }               from '../../../../shared/miniapp/middleware/response';
@@ -42,7 +43,8 @@ router.use('/invites',     invitesRoutes);
 router.use('/config',      configRoutes);
 router.use('/occupations', occupationsRoutes);
 router.use('/questions',   questionsRoutes);
-router.use('/norms',       normsRoutes);
-router.use('/system',      systemRoutes);
+router.use('/norms',          normsRoutes);
+router.use('/system',         systemRoutes);
+router.use('/miniapp-config', miniappConfigRoutes);
 
 export default router;

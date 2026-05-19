@@ -18,6 +18,7 @@ interface OssImagesConfig {
 }
 
 interface RuntimeConfig {
+  base_url?: string;
   oss_images?: OssImagesConfig;
 }
 
@@ -32,9 +33,11 @@ const DEFAULT_OSS_IMAGES: OssImagesConfig = {
   icon_safe: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-safe.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=AkiqWKnh7WkfIuZGAAxJCz%2BFwW0%3D',
 };
 
+const DEFAULT_BASE_URL = 'https://mandis.starryspark.com.cn';
+
 /**
  * GET /app/config
- * 下发应用配置给前端（OSS 图片 URL 等）
+ * 下发应用配置给前端（域名、OSS 图片 URL 等）
  * 无需鉴权，供小程序启动时获取
  */
 router.get('/config', (_req, res: Response) => {
@@ -43,6 +46,7 @@ router.get('/config', (_req, res: Response) => {
   const ossImages = config.oss_images || DEFAULT_OSS_IMAGES;
 
   sendSucc(res, {
+    baseUrl: config.base_url || DEFAULT_BASE_URL,
     ossImages: {
       background: ossImages.background || DEFAULT_OSS_IMAGES.background,
       wordsWelcome: ossImages.words_welcome || DEFAULT_OSS_IMAGES.words_welcome,

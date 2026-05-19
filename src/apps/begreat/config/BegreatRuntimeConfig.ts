@@ -18,6 +18,7 @@ export interface OssImagesConfig {
 }
 
 export interface RuntimeConfig {
+  base_url: string;
   price_fen: number;
   /** 是否开启支付。false 时所有用户直接视为已付费（用于维护/测试）*/
   payment_enabled: boolean;
@@ -33,7 +34,10 @@ const DEFAULT_OSS_IMAGES: OssImagesConfig = {
   wxacode: '',
 };
 
+const DEFAULT_BASE_URL = 'https://begreat.starryspark.com.cn';
+
 const DEFAULTS: RuntimeConfig = {
+  base_url: DEFAULT_BASE_URL,
   price_fen: 2900,
   payment_enabled: true,
   devOpenids: [],
@@ -60,6 +64,7 @@ function load(): RuntimeConfig {
   }
   const cfg = data as Record<string, unknown>;
   return {
+    base_url:        typeof cfg['base_url']        === 'string'  ? cfg['base_url']               : DEFAULTS.base_url,
     price_fen:       typeof cfg['price_fen']       === 'number'  ? cfg['price_fen']              : DEFAULTS.price_fen,
     payment_enabled: typeof cfg['payment_enabled'] === 'boolean' ? cfg['payment_enabled']         : DEFAULTS.payment_enabled,
     devOpenids:      Array.isArray(cfg['dev_openids'])           ? cfg['dev_openids'] as string[] : DEFAULTS.devOpenids,
