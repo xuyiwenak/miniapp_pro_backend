@@ -481,12 +481,14 @@ async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): P
   }
 }
 
-async function runQwenVlAnalysis(work: IWork, jobId: string): Promise<void> {
+async function runQwenVlAnalysis(work: IWork, jobId: string, userId: string): Promise<void> {
   const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
   const desc = work.desc ?? '';
   const tags = (work.tags ?? []).join(',');
   const output = await analyzeArtwork(imageUrl, desc, tags, work.workId);
   await applyHealingSuccessFromRunId(jobId, output);
+  // 仅检测通过后扣除次数，NotArtworkError 或其他失败不扣
+  void incrementHealDailyUsage(userId).catch(() => {});
 }
 
 async function handleQwenVlAnalysisError(workId: string, userId: string, err: unknown): Promise<void> {
@@ -515,10 +517,9 @@ router.post('/analyze', authMiddleware, async (req: MiniappRequest, res: Respons
     const work = await validateWorkOwnership(workId, userId, res);
     if (!work) return;
     const jobId = randomUUID();
-    void incrementHealDailyUsage(userId).catch(() => {});
     await initializePendingHealing(workId, jobId);
     sendSucc(res, { workId, status: 'pending', runId: jobId });
-    void runQwenVlAnalysis(work, jobId).catch((err) => handleQwenVlAnalysisError(workId, userId, err));
+    void runQwenVlAnalysis(work, jobId, userId).catch((err) => handleQwenVlAnalysisError(workId, userId, err));
   } catch (err) {
     logRequestError('healing.ts:analyze:error', 'healing analyze error', {
       req, requestBody: { workId }, statusCode: 500,
