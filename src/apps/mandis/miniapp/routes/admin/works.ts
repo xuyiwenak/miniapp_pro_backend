@@ -47,6 +47,30 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+/** GET /admin/works/:workId — 作品详情（含 healing 分析数据） */
+router.get('/:workId', async (req: Request, res: Response) => {
+  const { workId } = req.params;
+
+  try {
+    const Work = getWorkModel();
+    const work = await Work.findOne({ workId }).lean().exec();
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+
+    const workRec = work as Record<string, unknown>;
+    const rawImages = (workRec.images as { url?: string; name?: string; type?: string }[] | undefined) ?? [];
+    const images = rawImages.map((img) => {
+      const raw = (img?.url ?? '').trim();
+      const url = raw.startsWith(OSS_PREFIX) ? resolveImageUrl(raw) : raw;
+      return { ...img, url };
+    });
+
+    sendSucc(res, { ...workRec, images });
+  } catch (err) {
+    logger.error('admin:works:detail error', { workId, error: (err as Error).message });
+    sendErr(res, 'Failed to get work detail', 500);
+  }
+});
+
 /** PATCH /admin/works/:workId/status — 修改作品状态（发布/转草稿） */
 router.patch('/:workId/status', async (req: Request, res: Response) => {
   const { workId } = req.params;
