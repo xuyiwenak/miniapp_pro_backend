@@ -275,8 +275,8 @@ function mapErrorAnalysisResults(
   total: number,
 ) {
   return results.map((r) => ({
-    errorCode: r.errorCode,
-    count: r.count,
+    errorCode: r.errorCode as string,
+    count: r.count as number,
     rate: total ? (r.count as number) / total : 0,
     firstSeen: r.firstSeen,
     lastSeen: r.lastSeen,
@@ -334,8 +334,8 @@ function summarizeCostBreakdown(results: Array<Record<string, unknown>>) {
     totalTokens,
     totalRequests,
     breakdown: results.map((r) => ({
-      period: r.period,
-      model: r.model,
+      period: r.period as string | undefined,
+      model: r.model as string | undefined,
       tokens: (r.tokens as number) ?? 0,
       cost: (r.cost as number) ?? 0,
       requests: (r.requests as number) ?? 0,

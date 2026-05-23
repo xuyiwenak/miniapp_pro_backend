@@ -85,9 +85,9 @@ export class MongoComponent extends BaseMongoComponent implements IBaseComponent
         disconnectedLog: 'MongoDB disconnected, mongoose will auto-reconnect',
         reconnectedLog: 'MongoDB reconnected',
         onConnected: (connection) => {
-        initializeServerModel(connection);
-        initializeBiModels(connection);
-      },
+          initializeServerModel(connection);
+          initializeBiModels(connection);
+        },
       }),
     );
 
