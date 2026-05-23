@@ -26,8 +26,14 @@ const APP_SERVICE: Record<AppName, string> = {
   begreat: 'begreat_app',
 };
 const APP_CONTAINER: Record<AppName, string> = {
-  mandis: 'art-mandis',
-  begreat: 'art-begreat',
+  mandis: 'miniapp-mandis',
+  begreat: 'miniapp-begreat',
+};
+
+// mandis 没有独立 build 配置，复用 begreat_app 构建的镜像
+const APP_BUILD_SVC: Record<AppName, string> = {
+  mandis: 'begreat_app',
+  begreat: 'begreat_app',
 };
 
 // ── Runtime 配置 ──────────────────────────────────────────────────────────────
@@ -316,16 +322,17 @@ export function createSystemRouter(requirePrivileged: RequestHandler = noOp, app
     const projectDir = resolveProject(res);
     if (!projectDir) return;
     const svc         = APP_SERVICE[app];
+    const buildSvc    = APP_BUILD_SVC[app];
     const cname       = APP_CONTAINER[app];
     const noCacheFlag = noCache ? '--no-cache' : '';
     const cmd         = [
       forceKillContainerCmd(cname),
-      composeCmd(projectDir, `build ${noCacheFlag} ${svc}`),
+      composeCmd(projectDir, `build ${noCacheFlag} ${buildSvc}`),
       composeCmd(projectDir, `up -d --force-recreate --no-deps ${svc}`),
       `docker exec ${nginxContainerName()} nginx -s reload 2>/dev/null || true`,
     ].join('\n');
 
-    logger.info(`system:app/build-restart ${app} noCache=${noCache}`, { svc, cname });
+    logger.info(`system:app/build-restart ${app} noCache=${noCache}`, { svc, buildSvc, cname });
     exec(cmd, { timeout: 480000, cwd: projectDir }, (err, stdout, stderr) => {
       if (err) {
         logger.error(`system:app/build-restart ${app} failed`, { error: (stderr || err.message).slice(0, 500) });
