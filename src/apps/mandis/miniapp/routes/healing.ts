@@ -83,7 +83,7 @@ const EMOTION_COEFFICIENT_VITALITY = 0.95;
  * label: 前端展示文案
  * emoji: 前端图标
  */
-const SCORE_DIMENSIONS = [
+export const SCORE_DIMENSIONS = [
   { key: 'joy',             label: '快乐',   emoji: '✨' },
   { key: 'calm',            label: '平静',   emoji: '🌿' },
   { key: 'anxiety',         label: '焦虑',   emoji: '😰' },
