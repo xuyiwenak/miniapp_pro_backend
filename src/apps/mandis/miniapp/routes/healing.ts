@@ -25,7 +25,7 @@ const OSS_PREFIX = 'oss://';
  * 前端 config/constants.js 的 HEALING_ESTIMATED_SECONDS 仅作离线 fallback，
  * 两处数值应保持一致。
  */
-const HEALING_ESTIMATED_SECONDS = 600;
+const HEALING_ESTIMATED_SECONDS = 10;
 
 /** 分数归一化：最小值阈值 */
 const SCORE_MIN_THRESHOLD = 5;

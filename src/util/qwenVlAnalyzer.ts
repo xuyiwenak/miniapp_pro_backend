@@ -390,6 +390,85 @@ function trackQwenAnalyzeSuccess(
   });
 }
 
+const TIPS_SYSTEM_PROMPT = `\
+你是一位温柔、有洞察力的创作见证者。用户今天通过创作留下了一点痕迹，请根据这件作品，给他们写一句今日回响。
+
+要求：
+- 50 到 120 个汉字，一到两句话
+- 语气温暖、私密，像是写给老朋友的话
+- 聚焦于今天这个创作行为本身传递出的情绪或状态，不评价作品好坏
+- 不要说"你的作品"、"这幅画"之类的指代，直接说感受
+- 只输出回响正文，不含任何解释或标点以外的内容`;
+
+const TIPS_MAX_OUTPUT_TOKENS = 256;
+
+function buildTipsPostData(cfg: QwenVlConfig, imageUrl: string, desc: string): Buffer {
+  const model = cfg.model ?? DEFAULT_MODEL;
+  const userText = desc
+    ? `用户今天的创作描述：${desc}\n\n请写出今日回响。`
+    : '请根据这件作品写出今日回响。';
+  return Buffer.from(JSON.stringify({
+    model,
+    max_tokens: TIPS_MAX_OUTPUT_TOKENS,
+    messages: [
+      { role: 'system', content: TIPS_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'text', text: userText },
+        ],
+      },
+    ],
+  }));
+}
+
+export async function generateUserTipsContent(
+  imageUrl: string,
+  desc: string,
+  workId?: string,
+): Promise<string> {
+  const cfg = getQwenVlConfig();
+  const model = cfg.model ?? DEFAULT_MODEL;
+  const baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+  logger.info('QwenVL tips generate start workId=', workId ?? 'unknown');
+  const startAt = Date.now();
+  const postData = buildTipsPostData(cfg, imageUrl, desc);
+  const fullUrl = new URL(`${baseUrl}/chat/completions`);
+  const rawBody = await sendQwenVlRequest(cfg, postData, fullUrl);
+  const durationMs = Date.now() - startAt;
+
+  let resp: DashScopeResponse;
+  try {
+    resp = JSON.parse(rawBody) as DashScopeResponse;
+  } catch (e) {
+    logger.error('QwenVL tips: response parse failed', { workId, durationMs });
+    throw e;
+  }
+
+  if (resp.error) {
+    logger.error('QwenVL tips: API error', { workId, code: resp.error.code, msg: resp.error.message, durationMs });
+    throw new Error(`QwenVL API error: ${resp.error.code ?? ''} ${resp.error.message ?? ''}`);
+  }
+
+  const content = resp.choices?.[0]?.message?.content?.trim() ?? '';
+  if (!content) {
+    logger.error('QwenVL tips: empty content', { workId, durationMs });
+    throw new Error('QwenVL returned empty tips content');
+  }
+
+  const usage = resp.usage;
+  logger.info('qwen.tips.usage', {
+    workId,
+    promptTokens: usage?.prompt_tokens ?? 0,
+    completionTokens: usage?.completion_tokens ?? 0,
+    cost: calculateQwenCost(model, usage?.prompt_tokens ?? 0, usage?.completion_tokens ?? 0).toFixed(6),
+    durationMs,
+  });
+
+  return content;
+}
+
 export async function analyzeArtwork(
   imageUrl: string,
   desc: string,

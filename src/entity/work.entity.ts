@@ -43,6 +43,7 @@ export interface IWork {
   location?: string;
   status: 'draft' | 'published';
   featured?: boolean;
+  onWall?: boolean;
   healing?: IHealingData | null;
   createdAt: Date;
   updatedAt: Date;
@@ -113,6 +114,7 @@ export const WorkSchema = new Schema<IWork>(
       index: true,
     },
     featured: { type: Boolean, default: false, index: true },
+    onWall: { type: Boolean, default: false, index: true },
     healing: { type: HealingDataSubSchema, default: null },
   },
   { timestamps: true },

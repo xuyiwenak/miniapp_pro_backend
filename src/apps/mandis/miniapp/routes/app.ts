@@ -25,7 +25,7 @@ interface RuntimeConfig {
 
 // 默认 OSS URL（作为兜底，10年有效期）
 const DEFAULT_OSS_IMAGES: OssImagesConfig = {
-  background: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/background.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=0UFU32APlX33mQby5FdauJy7N%2BQ%3D',
+  background: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/background.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2094906328&Signature=zpBY9YM1I9dTFD8Ppf4KH0bHhYk%3D',
   words_welcome: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/words_welcome.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=10D3T71sCC6BDnMHleooVroMOW4%3D',
   words_upload: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/words_upload.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=CDd5gheyDU48ZUb5FuuV7Tn%2Fz6I%3D',
   icon_upload: 'https://image-miniapp001.oss-cn-wulanchabu.aliyuncs.com/mandis/mini_app_loading/images/icon-upload.webp?OSSAccessKeyId=LTAI5t8GB7eDYqEr9ea28pB8&Expires=2093077468&Signature=%2BfA6M2ZwUruerVsedSMnFH49JhA%3D',

@@ -13,6 +13,7 @@ import { checkText, checkImage } from '../../../../util/wxContentSecurity';
 import { uploadToStorage, resolveImageUrl, deleteFromStorage } from '../../../../util/imageUploader';
 import { getOssUploadPrefixes } from '../../../../util/ossUploader';
 import { gameLogger as logger } from '../../../../util/logger';
+import { triggerUserTipsGeneration } from '../../../../util/userTipsGenerator';
 
 const router = Router();
 
@@ -52,12 +53,22 @@ type ValidatedPublishInput = {
 
 function mapWorkListItem(w: IWork): {
   workId: string; desc: string; tags: string[]; coverUrl: string;
-  status: 'draft' | 'published'; createdAt: Date;
+  status: 'draft' | 'published'; onWall: boolean; createdAt: Date;
 } {
   const cover = Array.isArray(w.images) && w.images.length > 0 ? w.images[0] : null;
   const rawCoverUrl = cover?.url ?? '/static/home/card0.png';
-  const coverUrl = rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawCoverUrl) : rawCoverUrl;
-  return { workId: w.workId, desc: w.desc, tags: w.tags ?? [], coverUrl, status: w.status, createdAt: w.createdAt };
+  const coverUrl = rawCoverUrl.startsWith(OSS_PREFIX)
+    ? resolveImageUrl(rawCoverUrl)
+    : rawCoverUrl;
+  return {
+    workId: w.workId,
+    desc: w.desc,
+    tags: w.tags ?? [],
+    coverUrl,
+    status: w.status,
+    onWall: w.onWall ?? false,
+    createdAt: w.createdAt,
+  };
 }
 
 function validatePublishInput(
@@ -187,6 +198,10 @@ function cleanupWorkImages(workId: string, work: Record<string, unknown>): void 
 router.get('/list', async (req: MiniappRequest, res: Response) => {
   const userId = req.userId;
   const status = (req.query?.status as string | undefined)?.trim() as 'draft' | 'published' | undefined;
+  const onWallParam = req.query?.onWall as string | undefined;
+  const yearParam = req.query?.year as string | undefined;
+  const monthParam = req.query?.month as string | undefined;
+
   if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
   if (status && status !== 'draft' && status !== 'published') { sendErr(res, 'Invalid status', 400); return; }
 
@@ -194,16 +209,59 @@ router.get('/list', async (req: MiniappRequest, res: Response) => {
     const Work = getWorkModel();
     const query: Record<string, unknown> = { authorId: userId };
     if (status) query.status = status;
+    if (onWallParam === 'true') query.onWall = true;
+    if (yearParam && monthParam) {
+      const year = parseInt(yearParam, 10);
+      const month = parseInt(monthParam, 10);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+        query.createdAt = { $gte: new Date(year, month - 1, 1), $lt: new Date(year, month, 1) };
+      }
+    }
     const works = await Work.find(query).sort({ createdAt: -1 }).lean().exec();
     sendSucc(res, (works as IWork[]).map(mapWorkListItem));
   } catch (err) {
     logRequestError('work.ts:list:error', 'get work list failed', {
-      req, requestBody: { status }, statusCode: 500,
+      req, requestBody: { status, onWallParam, yearParam, monthParam }, statusCode: 500,
       extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Get work list failed', 500);
   }
 });
+
+async function handlePublishWork(
+  req: MiniappRequest,
+  res: Response,
+  payload: PublishPayload,
+  validated: ValidatedPublishInput,
+): Promise<void> {
+  const { desc, rawImages, tags, status, authorId } = validated;
+  if (desc) {
+    const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
+    const openId = playerComp ? await playerComp.getOpenIdByUserId(authorId) : undefined;
+    const textResult = await checkText(desc, openId);
+    if (!textResult.safe) { sendErr(res, '内容包含敏感词，请修改后重试', 400); return; }
+  }
+  const workId = uuidv4();
+  const images = await processPublishImages(rawImages, authorId, workId, res);
+  if (!images) return;
+  const Work = getWorkModel();
+  const doc = await Work.create({ workId, authorId, desc, images, tags, location: payload.location, status });
+  logRequest('work.ts:publish:success', 'work published', {
+    req, requestBody: payload, responseBody: { workId: doc.workId, authorId }, statusCode: 200,
+  });
+  sendSucc(res, { workId: doc.workId });
+
+  const firstImageUrl = images[0]?.url ?? '';
+  if (firstImageUrl) {
+    void triggerUserTipsGeneration({
+      userId: authorId,
+      workId,
+      imageUrl: firstImageUrl,
+      desc,
+      sourceType: 'image',
+    });
+  }
+}
 
 router.post('/publish', async (req: MiniappRequest, res: Response) => {
   const payload = (req.body?.data ?? req.body) as PublishPayload;
@@ -213,23 +271,8 @@ router.post('/publish', async (req: MiniappRequest, res: Response) => {
   });
   const validated = validatePublishInput(payload, req.userId, req, res);
   if (!validated) return;
-  const { desc, rawImages, tags, status, authorId } = validated;
   try {
-    if (desc) {
-      const playerComp = ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
-      const openId = playerComp ? await playerComp.getOpenIdByUserId(authorId) : undefined;
-      const textResult = await checkText(desc, openId);
-      if (!textResult.safe) { sendErr(res, '内容包含敏感词，请修改后重试', 400); return; }
-    }
-    const workId = uuidv4();
-    const images = await processPublishImages(rawImages, authorId, workId, res);
-    if (!images) return;
-    const Work = getWorkModel();
-    const doc = await Work.create({ workId, authorId, desc, images, tags, location: payload.location, status });
-    logRequest('work.ts:publish:success', 'work published', {
-      req, requestBody: payload, responseBody: { workId: doc.workId, authorId }, statusCode: 200,
-    });
-    sendSucc(res, { workId: doc.workId });
+    await handlePublishWork(req, res, payload, validated);
   } catch (err) {
     logRequestError('work.ts:publish:dbError', 'publish failed', {
       req, requestBody: payload, statusCode: 500,
@@ -307,6 +350,64 @@ router.post('/delete', async (req: MiniappRequest, res: Response) => {
       extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
     });
     sendErr(res, 'Delete work failed', 500);
+  }
+});
+
+router.patch('/onWall', async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  const body = (req.body?.data ?? req.body) as { workId?: string; onWall?: boolean };
+  const workId = body?.workId?.trim();
+  const onWall = body?.onWall;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  if (!workId) { sendErr(res, 'Missing workId', 400); return; }
+  if (typeof onWall !== 'boolean') { sendErr(res, 'onWall must be boolean', 400); return; }
+
+  try {
+    const Work = getWorkModel();
+    const work = await Work.findOne({ workId }).lean().exec();
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+    if (work.authorId !== userId) { sendErr(res, 'Forbidden', 403); return; }
+    await Work.updateOne({ workId }, { $set: { onWall } }).exec();
+    sendSucc(res, { workId, onWall });
+  } catch (err) {
+    logRequestError('work.ts:onWall:error', 'update onWall failed', {
+      req, requestBody: { workId, onWall }, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
+    });
+    sendErr(res, 'Update onWall failed', 500);
+  }
+});
+
+const TAGS_MAX_COUNT = 5;
+const TAG_MAX_LEN = 20;
+
+router.patch('/tags', async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  const body = (req.body?.data ?? req.body) as { workId?: string; tags?: unknown };
+  const workId = body?.workId?.trim();
+  const tags = body?.tags;
+
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  if (!workId) { sendErr(res, 'Missing workId', 400); return; }
+  if (!Array.isArray(tags)) { sendErr(res, 'tags must be an array', 400); return; }
+  if (tags.length > TAGS_MAX_COUNT) { sendErr(res, `最多 ${TAGS_MAX_COUNT} 个标签`, 400); return; }
+  const invalidTag = tags.find((t) => typeof t !== 'string' || t.trim().length === 0 || t.length > TAG_MAX_LEN);
+  if (invalidTag !== undefined) { sendErr(res, '标签格式不合法', 400); return; }
+
+  try {
+    const Work = getWorkModel();
+    const work = await Work.findOne({ workId }).lean().exec();
+    if (!work) { sendErr(res, 'Work not found', 404); return; }
+    if (work.authorId !== userId) { sendErr(res, 'Forbidden', 403); return; }
+    const cleanTags = (tags as string[]).map((t) => t.trim());
+    await Work.updateOne({ workId }, { $set: { tags: cleanTags } }).exec();
+    sendSucc(res, { workId, tags: cleanTags });
+  } catch (err) {
+    logRequestError('work.ts:tags:error', 'update tags failed', {
+      req, requestBody: { workId, tags }, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
+    });
+    sendErr(res, 'Update tags failed', 500);
   }
 });
 

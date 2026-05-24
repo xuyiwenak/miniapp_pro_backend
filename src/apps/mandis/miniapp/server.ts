@@ -9,7 +9,7 @@ import { createBiTrackingMiddleware } from '../../../shared/miniapp/middleware/b
 
 const MANDIS_BI_PREFIXES = [
   '/app', '/login', '/home', '/api', '/work', '/oss',
-  '/dataCenter', '/healing', '/mandis-admin',
+  '/dataCenter', '/healing', '/mandis-admin', '/userTips',
 ];
 import { setupCommonMiniappApp, setupNotFoundHandler } from '../../../shared/miniapp/server';
 import loginRoutes from './routes/login';
@@ -23,6 +23,7 @@ import adminRoutes from './routes/admin/index';
 import mandisAdminAuthRoutes from './routes/mandisAdmin/auth';
 import appRoutes from './routes/app';
 import biRoutes from './routes/bi';
+import userTipsRoutes from './routes/userTips';
 import { gameLogger } from '../../../util/logger';
 
 const staticDir = path.join(process.cwd(), 'static');
@@ -55,6 +56,7 @@ export function createMiniappApp(): express.Express {
   app.use('/oss', authMiddleware, ossRoutes);
   app.use('/dataCenter', dataCenterRoutes);
   app.use('/healing', healingRoutes);
+  app.use('/userTips', userTipsRoutes);
   app.use('/mandis-admin/auth', mandisAdminAuthRoutes);
   app.use('/mandis-admin', adminRoutes);
 
