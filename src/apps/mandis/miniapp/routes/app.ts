@@ -21,6 +21,7 @@ interface OssImagesConfig {
 interface RuntimeConfig {
   base_url?: string;
   oss_images?: OssImagesConfig;
+  preset_tags?: string[];
 }
 
 // 默认 OSS URL（作为兜底，10年有效期）
@@ -37,6 +38,11 @@ const DEFAULT_OSS_IMAGES: OssImagesConfig = {
 
 const DEFAULT_BASE_URL = 'https://mandis.starryspark.com.cn';
 
+const DEFAULT_PRESET_TAGS = [
+  '今天很平静', '有点忧郁', '充满能量', '轻轻放下', '还在想',
+  '慢慢来', '好开心', '有点乱', '想念某人', '就是记录',
+];
+
 /**
  * GET /app/config
  * 下发应用配置给前端（域名、OSS 图片 URL 等）
@@ -49,6 +55,7 @@ router.get('/config', (_req, res: Response) => {
 
   sendSucc(res, {
     baseUrl: config.base_url || DEFAULT_BASE_URL,
+    presetTags: config.preset_tags || DEFAULT_PRESET_TAGS,
     ossImages: {
       background: ossImages.background || DEFAULT_OSS_IMAGES.background,
       wordsWelcome: ossImages.words_welcome || DEFAULT_OSS_IMAGES.words_welcome,

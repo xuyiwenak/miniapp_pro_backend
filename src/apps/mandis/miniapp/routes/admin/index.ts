@@ -8,6 +8,7 @@ import worksRouter from './works';
 import feedbackRouter from './feedback';
 import systemRouter from './system';
 import miniappConfigRouter from './miniappConfig';
+import presetTagsRouter from './presetTags';
 
 const router = Router();
 
@@ -41,5 +42,6 @@ router.use('/works',          worksRouter);
 router.use('/feedback',       feedbackRouter);
 router.use('/system',         systemRouter);
 router.use('/miniapp-config', miniappConfigRouter);
+router.use('/preset-tags',   presetTagsRouter);
 
 export default router;
