@@ -411,4 +411,25 @@ router.patch('/tags', async (req: MiniappRequest, res: Response) => {
   }
 });
 
+router.get('/active-months', async (req: MiniappRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) { sendErr(res, 'Unauthorized', 401); return; }
+  try {
+    const Work = getWorkModel();
+    const results = await Work.aggregate([
+      { $match: { authorId: userId, onWall: true } },
+      { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } } } },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+      { $project: { _id: 0, year: '$_id.year', month: '$_id.month' } },
+    ]).exec();
+    sendSucc(res, results);
+  } catch (err) {
+    logRequestError('work.ts:active-months:error', 'get active months failed', {
+      req, requestBody: {}, statusCode: 500,
+      extra: { errorName: (err as Error).name, errorMessage: (err as Error).message },
+    });
+    sendErr(res, 'Get active months failed', 500);
+  }
+});
+
 export default router;
