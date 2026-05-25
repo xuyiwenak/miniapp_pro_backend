@@ -158,6 +158,8 @@ services:
       - ./art_web_dist:/usr/share/nginx/html/app:ro
       # Commander 管理后台（commander build 产物）
       - ../commander/dist:/usr/share/nginx/html/commander:ro
+      # Distilled H5（distilled build 产物）
+      - /root/workspace/distilled/dist:/usr/share/nginx/html/distill:ro
 
 networks:
   default:
