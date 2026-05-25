@@ -1,9 +1,12 @@
 name: ArtJoy Backend CI/CD
 
+# 暂时禁用自动触发，等 CI/CD 流程完善后再开启
+# on:
+#   push:
+#     branches:
+#       - master
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
   build-and-push:
