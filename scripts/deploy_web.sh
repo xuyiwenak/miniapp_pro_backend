@@ -3,13 +3,13 @@
 # 用法：在 art_backend 项目根目录执行
 #   bash scripts/deploy_web.sh [art_web路径]
 #
-# 默认 art_web 路径：与 art_backend 同级目录 ../art_web
-# ECS 示例：bash scripts/deploy_web.sh /root/workspace/art_web
+# 默认 art_web 路径：art_backend 仓库内的 art_web/
+# ECS 示例：bash scripts/deploy_web.sh /root/workspace/miniapp_pro_backend/art_web
 
 set -e
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ART_WEB_DIR="${1:-../art_web}"
+ART_WEB_DIR="${1:-art_web}"
 
 if [ ! -d "$ART_WEB_DIR" ]; then
   echo "❌ art_web 目录不存在：$ART_WEB_DIR"
@@ -41,4 +41,4 @@ docker ps --filter name=miniapp-nginx
 
 echo ""
 echo "✅ 部署完成！访问地址："
-echo "   https://autorecordarchery.xyz/app/admin/login"
+echo "   https://www.starryspark.com.cn/art/"

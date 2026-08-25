@@ -1,5 +1,9 @@
 // 文件顶部
-import { ComponentManager, EComName, IBaseComponent } from '../common/BaseComponent';
+import {
+  ComponentManager,
+  EComName,
+  IBaseComponent,
+} from '../common/BaseComponent';
 import { getPlayerModel } from '../dbservice/model/ZoneDBModel';
 import { gameLogger } from '../util/logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +17,10 @@ type PlayerDTO = {
   nickname?: string;
   zoneId?: string;
   openId?: string;
+  unionId?: string;
+  webOpenId?: string;
+  phone?: string;
+  email?: string;
 };
 
 type PlayerResult =
@@ -25,6 +33,10 @@ type PlayerDoc = {
   nickname?: string;
   zoneId?: string;
   openId?: string;
+  unionId?: string;
+  webOpenId?: string;
+  phone?: string;
+  email?: string;
 };
 
 function buildPlayerData(doc: PlayerDoc, fallbackOpenId?: string): PlayerDTO {
@@ -34,6 +46,10 @@ function buildPlayerData(doc: PlayerDoc, fallbackOpenId?: string): PlayerDTO {
     nickname: doc.nickname,
     zoneId: doc.zoneId,
     openId: doc.openId ?? fallbackOpenId,
+    unionId: doc.unionId,
+    webOpenId: doc.webOpenId,
+    phone: doc.phone,
+    email: doc.email,
   };
 }
 
@@ -46,12 +62,14 @@ export class PlayerComponent implements IBaseComponent {
 
   async start(): Promise<void> {
     const sysCfg = ComponentManager.instance.getComponent(
-      EComName.SysCfgComponent,
+      EComName.SysCfgComponent
     );
     const zoneIdList = sysCfg.server?.zoneIdList ?? [];
     this.defaultZone = zoneIdList[0] ?? 'zone1';
     if (!zoneIdList.length) {
-      gameLogger.warn('PlayerComponent: zoneIdList is empty in zone_config.json, falling back to default zone "zone1"');
+      gameLogger.warn(
+        'PlayerComponent: zoneIdList is empty in zone_config.json, falling back to default zone "zone1"'
+      );
     }
     gameLogger.debug('PlayerComponent start, defaultZone=', this.defaultZone);
   }
@@ -76,7 +94,10 @@ export class PlayerComponent implements IBaseComponent {
     if (!this.defaultZone) return undefined;
     try {
       const Player = getPlayerModel(this.defaultZone);
-      const player = await Player.findOne({ userId }).select('openId').lean().exec();
+      const player = await Player.findOne({ userId })
+        .select('openId')
+        .lean()
+        .exec();
       return player?.openId ?? undefined;
     } catch {
       return undefined;
@@ -112,7 +133,10 @@ export class PlayerComponent implements IBaseComponent {
     }
   }
 
-  private async createNewPlayer(account: string, password: string): Promise<PlayerResult> {
+  private async createNewPlayer(
+    account: string,
+    password: string
+  ): Promise<PlayerResult> {
     const Player = getPlayerModel(this.defaultZone);
     const userId = uuidv4();
     const zoneId = this.defaultZone;
@@ -123,7 +147,14 @@ export class PlayerComponent implements IBaseComponent {
       zoneId,
       level: AccountLevel.User,
     });
-    gameLogger.info('register success, account=', account, 'userId=', userId, 'zoneId=', zoneId);
+    gameLogger.info(
+      'register success, account=',
+      account,
+      'userId=',
+      userId,
+      'zoneId=',
+      zoneId
+    );
     return { ok: true, data: buildPlayerData(created) };
   }
 
@@ -132,7 +163,10 @@ export class PlayerComponent implements IBaseComponent {
    */
   async register(account: string, password: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
-      gameLogger.error('register failed: defaultZone is empty, account=', account);
+      gameLogger.error(
+        'register failed: defaultZone is empty, account=',
+        account
+      );
       return { ok: false, error: 'DefaultZoneNotReady' };
     }
     try {
@@ -168,7 +202,14 @@ export class PlayerComponent implements IBaseComponent {
         gameLogger.warn('login failed: password error, account=', account);
         return { ok: false, error: 'PasswordError' };
       }
-      gameLogger.info('login success, account=', account, 'userId=', player.userId, 'zoneId=', player.zoneId);
+      gameLogger.info(
+        'login success, account=',
+        account,
+        'userId=',
+        player.userId,
+        'zoneId=',
+        player.zoneId
+      );
       return { ok: true, data: buildPlayerData(player, undefined) };
     } catch (err) {
       gameLogger.error('login exception, account=', account, err);
@@ -176,7 +217,10 @@ export class PlayerComponent implements IBaseComponent {
     }
   }
 
-  private async autoRegisterByOpenId(openId: string): Promise<PlayerResult> {
+  private async autoRegisterByOpenId(
+    openId: string,
+    unionId?: string,
+  ): Promise<PlayerResult> {
     const Player = getPlayerModel(this.defaultZone);
     const userId = uuidv4();
     const zoneId = this.defaultZone;
@@ -187,9 +231,17 @@ export class PlayerComponent implements IBaseComponent {
       password: undefined,
       zoneId,
       openId,
+      unionId,
       level: AccountLevel.User,
     });
-    gameLogger.info('loginByOpenId auto register success, openId=', openId, 'userId=', userId, 'zoneId=', zoneId);
+    gameLogger.info(
+      'loginByOpenId auto register success, openId=',
+      openId,
+      'userId=',
+      userId,
+      'zoneId=',
+      zoneId
+    );
     return { ok: true, data: buildPlayerData(player, openId) };
   }
 
@@ -197,23 +249,123 @@ export class PlayerComponent implements IBaseComponent {
    * 使用微信 openId 登录：按 openId 查找或自动注册
    */
   async loginByOpenId(openId: string): Promise<PlayerResult> {
+    return this.loginByOpenIdWithUnionId(openId);
+  }
+
+  async loginByOpenIdWithUnionId(
+    openId: string,
+    unionId?: string,
+  ): Promise<PlayerResult> {
     if (!this.defaultZone) {
-      gameLogger.error('loginByOpenId failed: defaultZone is empty, openId=', openId);
+      gameLogger.error(
+        'loginByOpenIdWithUnionId failed: defaultZone is empty, openId=',
+        openId
+      );
       return { ok: false, error: 'DefaultZoneNotReady' };
     }
     try {
       const Player = getPlayerModel(this.defaultZone);
-      // 1. 尝试按 openId 查找已有玩家
-      const player = await Player.findOne({ openId }).exec();
+      const query = unionId ? { $or: [{ unionId }, { openId }] } : { openId };
+      const player = await Player.findOne(query).exec();
       if (player) {
-        gameLogger.info('loginByOpenId success (existing), openId=', openId, 'userId=', player.userId, 'zoneId=', player.zoneId);
+        if (player.openId !== openId || (unionId && player.unionId !== unionId)) {
+          player.openId = openId;
+          if (unionId) player.unionId = unionId;
+          await player.save();
+        }
+        gameLogger.info(
+          'loginByOpenId success (existing), openId=',
+          openId,
+          'userId=',
+          player.userId,
+          'zoneId=',
+          player.zoneId
+        );
         return { ok: true, data: buildPlayerData(player, openId) };
       }
-      // 2. 不存在则自动注册一个账号
-      return await this.autoRegisterByOpenId(openId);
+      return await this.autoRegisterByOpenId(openId, unionId);
     } catch (err) {
-      gameLogger.error('loginByOpenId exception, openId=', openId, err);
+      gameLogger.error('loginByOpenIdWithUnionId exception, openId=', openId, err);
       return { ok: false, error: 'LoginByOpenIdException' };
+    }
+  }
+
+  async loginByWechatIdentity(
+    webOpenId: string,
+    unionId?: string
+  ): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const query = unionId
+        ? { $or: [{ unionId }, { webOpenId }] }
+        : { webOpenId };
+      const player = await Player.findOne(query).exec();
+      if (player) {
+        if (unionId && !player.unionId) {
+          player.unionId = unionId;
+          await player.save();
+        }
+        return { ok: true, data: buildPlayerData(player) };
+      }
+      const userId = uuidv4();
+      const account = `web_wx_${webOpenId}`;
+      const created = await Player.create({
+        userId,
+        account,
+        webOpenId,
+        unionId,
+        zoneId: this.defaultZone,
+        level: AccountLevel.User,
+      });
+      return { ok: true, data: buildPlayerData(created) };
+    } catch (err) {
+      gameLogger.error(
+        'loginByWechatIdentity exception, webOpenId=',
+        webOpenId,
+        err
+      );
+      return { ok: false, error: 'WechatIdentityLoginException' };
+    }
+  }
+
+  async loginByPhone(phone: string): Promise<PlayerResult> {
+    const existing = await this.findByPhone(phone);
+    if (existing.ok) return existing;
+    if (existing.error !== 'NotFound') return existing;
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const created = await Player.create({
+        userId: uuidv4(),
+        account: `phone_${phone}`,
+        phone,
+        zoneId: this.defaultZone,
+        level: AccountLevel.User,
+      });
+      return { ok: true, data: buildPlayerData(created) };
+    } catch (err) {
+      gameLogger.error('loginByPhone exception, phone=', phone, err);
+      return { ok: false, error: 'PhoneLoginException' };
+    }
+  }
+
+  async loginByEmail(email: string): Promise<PlayerResult> {
+    const existing = await this.findByEmail(email);
+    if (existing.ok) return existing;
+    if (existing.error !== 'NotFound') return existing;
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const created = await Player.create({
+        userId: uuidv4(),
+        account: `email_${email}`,
+        email,
+        zoneId: this.defaultZone,
+        level: AccountLevel.User,
+      });
+      return { ok: true, data: buildPlayerData(created) };
+    } catch (err) {
+      gameLogger.error('loginByEmail exception, email=', email, err);
+      return { ok: false, error: 'EmailLoginException' };
     }
   }
 
@@ -222,7 +374,10 @@ export class PlayerComponent implements IBaseComponent {
    */
   async createRole(userId: string, nickname: string): Promise<PlayerResult> {
     if (!this.defaultZone) {
-      gameLogger.error('createRole failed: defaultZone is empty, userId=', userId);
+      gameLogger.error(
+        'createRole failed: defaultZone is empty, userId=',
+        userId
+      );
       return { ok: false, error: 'DefaultZoneNotReady' };
     }
     try {
@@ -233,12 +388,20 @@ export class PlayerComponent implements IBaseComponent {
         return { ok: false, error: 'UserNotFound' };
       }
       if (player.nickname) {
-        gameLogger.warn('createRole failed: role already exists, userId=', userId);
+        gameLogger.warn(
+          'createRole failed: role already exists, userId=',
+          userId
+        );
         return { ok: false, error: 'RoleAlreadyExists' };
       }
       player.nickname = nickname;
       await player.save();
-      gameLogger.info('createRole success, userId=', userId, 'nickname=', nickname);
+      gameLogger.info(
+        'createRole success, userId=',
+        userId,
+        'nickname=',
+        nickname
+      );
       return { ok: true, data: buildPlayerData(player) };
     } catch (err) {
       gameLogger.error('createRole exception, userId=', userId, err);
@@ -255,37 +418,129 @@ export class PlayerComponent implements IBaseComponent {
       const Player = getPlayerModel(this.defaultZone);
       const player = await Player.findOne({ phone }).exec();
       if (!player) return { ok: false, error: 'NotFound' };
-      return {
-        ok: true,
-        data: {
-          userId: player.userId,
-          account: player.account,
-          nickname: player.nickname,
-          zoneId: player.zoneId,
-          openId: player.openId ?? undefined,
-        },
-      };
+      return { ok: true, data: buildPlayerData(player) };
     } catch (err) {
       gameLogger.error('findByPhone exception, phone=', phone, err);
       return { ok: false, error: 'FindByPhoneException' };
     }
   }
 
-  private async fetchWxPhoneNumber(wxCode: string, accessToken: string): Promise<string | null> {
+  async findByEmail(email: string): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ email }).exec();
+      if (!player) return { ok: false, error: 'NotFound' };
+      return { ok: true, data: buildPlayerData(player) };
+    } catch (err) {
+      gameLogger.error('findByEmail exception, email=', email, err);
+      return { ok: false, error: 'FindByEmailException' };
+    }
+  }
+
+  async getAuthProfile(userId: string): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ userId }).exec();
+      if (!player) return { ok: false, error: 'NotFound' };
+      return { ok: true, data: buildPlayerData(player) };
+    } catch (err) {
+      gameLogger.error('getAuthProfile exception, userId=', userId, err);
+      return { ok: false, error: 'GetAuthProfileException' };
+    }
+  }
+
+  async bindEmail(
+    userId: string,
+    email: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.bindCredential(userId, 'email', email);
+  }
+
+  async bindWebPhone(
+    userId: string,
+    phone: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.bindCredential(userId, 'phone', phone);
+  }
+
+  private async bindCredential(
+    userId: string,
+    field: 'email' | 'phone',
+    value: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const owner = await Player.findOne({ [field]: value }).exec();
+      if (owner && owner.userId !== userId) return { ok: false, error: 'CredentialBound' };
+      const update = await Player.updateOne({ userId }, { [field]: value }).exec();
+      if (!update.matchedCount) return { ok: false, error: 'NotFound' };
+      gameLogger.info('web credential bound', { userId, field });
+      return { ok: true };
+    } catch (err) {
+      gameLogger.error('bindCredential exception', { userId, field, error: err });
+      return { ok: false, error: 'BindCredentialException' };
+    }
+  }
+
+  async bindWechatIdentity(
+    userId: string,
+    webOpenId: string,
+    unionId?: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const conflictQuery = unionId
+        ? { userId: { $ne: userId }, $or: [{ webOpenId }, { unionId }] }
+        : { userId: { $ne: userId }, webOpenId };
+      const owner = await Player.findOne(conflictQuery).exec();
+      if (owner) return { ok: false, error: 'CredentialBound' };
+      const update = await Player.updateOne({ userId }, { webOpenId, ...(unionId ? { unionId } : {}) }).exec();
+      if (!update.matchedCount) return { ok: false, error: 'NotFound' };
+      gameLogger.info('web WeChat identity bound', { userId, hasUnionId: Boolean(unionId) });
+      return { ok: true };
+    } catch (err) {
+      gameLogger.error('bindWechatIdentity exception', { userId, error: err });
+      return { ok: false, error: 'BindWechatIdentityException' };
+    }
+  }
+
+  private async fetchWxPhoneNumber(
+    wxCode: string,
+    accessToken: string
+  ): Promise<string | null> {
     const body = JSON.stringify({ code: wxCode });
-    type PhoneResp = { phone_info?: { purePhoneNumber?: string }; errcode?: number; errmsg?: string };
+    type PhoneResp = {
+      phone_info?: { purePhoneNumber?: string };
+      errcode?: number;
+      errmsg?: string;
+    };
     const phoneResp = await new Promise<PhoneResp>((resolve, reject) => {
       const req = https.request(
-        `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+        `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(
+          accessToken
+        )}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
         (wxRes) => {
           const chunks: Buffer[] = [];
           wxRes.on('data', (d) => chunks.push(d));
           wxRes.on('end', () => {
-            try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-            catch (e) { reject(e); }
+            try {
+              resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+            } catch (e) {
+              reject(e);
+            }
           });
-        },
+        }
       );
       req.on('error', reject);
       req.write(body);
@@ -297,10 +552,15 @@ export class PlayerComponent implements IBaseComponent {
   /**
    * 绑定手机号：用微信 getPhoneNumber code 换取手机号并保存
    */
-  async bindPhone(userId: string, wxCode: string): Promise<{ ok: true; phone: string } | { ok: false; error: string }> {
+  async bindPhone(
+    userId: string,
+    wxCode: string
+  ): Promise<{ ok: true; phone: string } | { ok: false; error: string }> {
     if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
 
-    const sysCfgComp = ComponentManager.instance.getComponent(EComName.SysCfgComponent) as {
+    const sysCfgComp = ComponentManager.instance.getComponent(
+      EComName.SysCfgComponent
+    ) as {
       server_auth_config?: { wx_miniapp?: { appId?: string } };
     } | null;
     const appId = sysCfgComp?.server_auth_config?.wx_miniapp?.appId;
@@ -344,17 +604,12 @@ export class PlayerComponent implements IBaseComponent {
           'enterZone failed: role not found in zone, userId=',
           userId,
           'zoneId=',
-          zoneId,
+          zoneId
         );
         return { ok: false, error: 'RoleNotFoundInZone' };
       }
 
-      gameLogger.info(
-        'enterZone success, userId=',
-        userId,
-        'zoneId=',
-        zoneId,
-      );
+      gameLogger.info('enterZone success, userId=', userId, 'zoneId=', zoneId);
 
       return {
         ok: true,
@@ -371,7 +626,7 @@ export class PlayerComponent implements IBaseComponent {
         userId,
         'zoneId=',
         zoneId,
-        err,
+        err
       );
       return { ok: false, error: 'EnterZoneException' };
     }

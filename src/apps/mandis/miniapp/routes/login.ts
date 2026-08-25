@@ -11,6 +11,13 @@ import { gameLogger as logger } from '../../../../util/logger';
 
 const router = Router();
 
+type WxCode2SessionResponse = {
+  openid?: string;
+  unionid?: string;
+  errcode?: number;
+  errmsg?: string;
+};
+
 router.post('/postPasswordLogin', async (req: Request, res: Response) => {
   const payload = req.body?.data ?? req.body;
   const account = payload?.account;
@@ -66,39 +73,18 @@ router.post('/postPasswordRegister', async (req: Request, res: Response) => {
   sendSucc(res, { token });
 });
 
-router.get('/getSendMessage', (_req: Request, res: Response) => {
-  // 前端未传手机号，按会话发码可后续扩展；当前直接返回成功，前端跳验证码页
-  sendSucc(res, { success: true });
-});
-
-// 验证码校验：简单实现为任意 6 位数字即通过（与发码逻辑对应，可后续接真实短信）
-const CODE_VERIFY_ACCEPT = '123456';
-
-router.get('/postCodeVerify', async (req: Request, res: Response) => {
-  const code = (req.query?.code as string) ?? (req.body?.code as string) ?? '';
-  if (!code) {
-    sendErr(res, 'Missing code', 400);
-    return;
-  }
-  // 演示：接受固定码或任意 6 位；生产应校验与 getSendMessage 发出的码一致
-  if (code !== CODE_VERIFY_ACCEPT && !/^\d{6}$/.test(code)) {
-    sendErr(res, 'Invalid code', 401);
-    return;
-  }
-  // 验证码登录时无 userId，生成匿名 token；若发码时绑定了手机号可这里查用户再 issue
-  const anonymousId = `phone_${code}_${Date.now()}`;
-  const token = await issueToken(anonymousId);
-  sendSucc(res, { token });
-});
-
-async function fetchWxCode2Session(code: string, appId: string, appSecret: string): Promise<string | null> {
+async function fetchWxCode2Session(
+  code: string,
+  appId: string,
+  appSecret: string,
+): Promise<{ openId: string; unionId?: string } | null> {
   const url =
     `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}` +
     `&secret=${encodeURIComponent(appSecret)}` +
     `&js_code=${encodeURIComponent(code)}` +
     '&grant_type=authorization_code';
   try {
-    const resp = await new Promise<{ openid?: string; errcode?: number; errmsg?: string }>((resolve, reject) => {
+    const resp = await new Promise<WxCode2SessionResponse>((resolve, reject) => {
       https.get(url, (wxRes) => {
         const chunks: Buffer[] = [];
         wxRes.on('data', (d) => chunks.push(d));
@@ -111,7 +97,7 @@ async function fetchWxCode2Session(code: string, appId: string, appSecret: strin
       logger.warn('wxLogin jscode2session failed', { errcode: resp?.errcode, errmsg: resp?.errmsg });
       return null;
     }
-    return resp.openid;
+    return { openId: resp.openid, unionId: resp.unionid };
   } catch {
     return null;
   }
@@ -135,21 +121,17 @@ router.post('/wxLogin', async (req: Request, res: Response) => {
     return;
   }
 
-  const openid = await fetchWxCode2Session(code, appId, appSecret);
-  if (!openid) { sendErr(res, 'WeChat login failed', 401); return; }
+  const wechatSession = await fetchWxCode2Session(code, appId, appSecret);
+  if (!wechatSession) { sendErr(res, 'WeChat login failed', 401); return; }
 
   const playerComp =
     ComponentManager.instance.getComponentByKey<PlayerComponent>('PlayerComponent');
   if (!playerComp) { sendErr(res, 'Server not ready', 503); return; }
 
-  const existed = await playerComp.findByOpenId(openid);
-  if (existed.ok) {
-    const token = await issueToken(existed.data.userId);
-    sendSucc(res, { token, userId: existed.data.userId, isNewUser: false });
-    return;
-  }
-
-  const ret = await playerComp.loginByOpenId(openid);
+  const ret = await playerComp.loginByOpenIdWithUnionId(
+    wechatSession.openId,
+    wechatSession.unionId,
+  );
   if (!ret.ok) { sendErr(res, ret.error, 500); return; }
   const token = await issueToken(ret.data.userId);
   sendSucc(res, { token, userId: ret.data.userId, isNewUser: true });

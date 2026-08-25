@@ -2,6 +2,10 @@ import { ComponentManager, EComName } from '../../common/BaseComponent';
 import { ServerGlobals } from '../../common/ServerGlobal';
 import { GlobalVarComponent } from '../../component/GlobalVarComponent';
 import { SysCfgComponent } from '../../component/SysCfgComponent';
+import { BiAnalyticsComponent } from '../../component/BiAnalyticsComponent';
+import { BiAggregator } from '../../component/BiAggregator';
+import { BiAggregationJob } from '../../jobs/BiAggregationJob';
+import type { AppName } from '../../entity/biEvent.entity';
 
 type LifecycleLogger = {
   error: (...args: unknown[]) => void;
@@ -21,6 +25,30 @@ export function registerCoreComponents(args: ServerGlobals): void {
 export async function startRegisteredComponents(): Promise<void> {
   await ComponentManager.instance.startAll();
   await ComponentManager.instance.afterStartAll();
+}
+
+export function registerBiServices(args: ServerGlobals, appName: AppName): BiAggregationJob {
+  const biAnalyticsComp = new BiAnalyticsComponent();
+  biAnalyticsComp.init({
+    enabled: args.environment !== 'test',
+    appName,
+    appVersion: '1.0.0',
+    platform: 'api',
+  });
+  ComponentManager.instance.register('BiAnalytics', biAnalyticsComp);
+
+  const biAggregator = new BiAggregator();
+  biAggregator.init({});
+  return new BiAggregationJob(biAggregator);
+}
+
+export function startBiAggregationJob(
+  args: ServerGlobals,
+  biAggregationJob: BiAggregationJob,
+): void {
+  if (args.environment !== 'test') {
+    biAggregationJob.start();
+  }
 }
 
 export function setupProcessLifecycle(

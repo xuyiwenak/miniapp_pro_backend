@@ -14,12 +14,12 @@ import { websocketGameServer } from '../../common/WebsocketGameServer';
 
 import { MongoComponent } from '../../component/front/MongoComponent';
 import { PlayerComponent } from '../../component/PlayerComponent';
-import { BiAnalyticsComponent } from '../../component/BiAnalyticsComponent';
-import { BiAggregator } from '../../component/BiAggregator';
 import { BiAggregationJob } from '../../jobs/BiAggregationJob';
 import {
   registerCoreComponents,
+  registerBiServices,
   setupProcessLifecycle,
+  startBiAggregationJob,
   startRegisteredComponents,
 } from '../shared/bootstrap';
 
@@ -100,23 +100,7 @@ function registerBusinessComponents(args: ServerGlobals): BiAggregationJob {
   ComponentManager.instance.register('MongoComponent', mongoComp);
   const playerComp: PlayerComponent = new PlayerComponent();
   ComponentManager.instance.register('PlayerComponent', playerComp);
-  const biAnalyticsComp: BiAnalyticsComponent = new BiAnalyticsComponent();
-  biAnalyticsComp.init({
-    enabled: args.environment !== 'test',
-    appName: 'mandis',
-    appVersion: '1.0.0',
-    platform: 'api',
-  });
-  ComponentManager.instance.register('BiAnalytics', biAnalyticsComp);
-  const biAggregator = new BiAggregator();
-  biAggregator.init({});
-  return new BiAggregationJob(biAggregator);
-}
-
-function startBiAggregationJob(args: ServerGlobals, biAggregationJob: BiAggregationJob): void {
-  if (args.environment !== 'test') {
-    biAggregationJob.start();
-  }
+  return registerBiServices(args, 'mandis');
 }
 
 async function startApiAndMiniappServers(args: ServerGlobals): Promise<void> {

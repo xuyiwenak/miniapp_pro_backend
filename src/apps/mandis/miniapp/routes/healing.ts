@@ -577,7 +577,7 @@ router.get('/status', authMiddleware, async (req: MiniappRequest, res: Response)
   }
 });
 
-router.get('/report', async (req: MiniappRequest, res: Response) => {
+router.get('/report', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const workId = (req.query?.workId as string | undefined)?.trim();
 
   logRequest('healing.ts:report:entry', 'healing report request', {
@@ -596,6 +596,11 @@ router.get('/report', async (req: MiniappRequest, res: Response) => {
 
     if (!work) {
       sendErr(res, 'Work not found', 404);
+      return;
+    }
+
+    if (work.authorId !== req.userId) {
+      sendErr(res, 'Forbidden', 403);
       return;
     }
 

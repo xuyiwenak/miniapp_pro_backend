@@ -42,6 +42,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@alicloud/dm20151123": "^1.11.0",
+    "@alicloud/dysmsapi20170525": "^4.6.0",
+    "@alicloud/openapi-client": "^0.4.15",
     "@types/bcrypt": "^6.0.0",
     "@types/cron": "^2.0.1",
     "@types/jsonwebtoken": "^9.0.10",

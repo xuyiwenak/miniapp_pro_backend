@@ -9,7 +9,7 @@ function getRedis(): Redis {
   }
 
   const sysCfg = ComponentManager.instance.getComponent(
-    EComName.SysCfgComponent,
+    EComName.SysCfgComponent
   );
   const cfg = sysCfg.redis_global;
   if (!cfg) {
@@ -33,16 +33,14 @@ const DEFAULT_TOKEN_TTL_SEC = 7 * 24 * 60 * 60;
 export async function saveTokenUserId(
   token: string,
   userId: string,
-  ttlSec: number = DEFAULT_TOKEN_TTL_SEC,
+  ttlSec: number = DEFAULT_TOKEN_TTL_SEC
 ): Promise<void> {
   const client = getRedis();
   const key = `auth:token:${token}`;
   await client.set(key, userId, 'EX', ttlSec);
 }
 
-export async function loadUserIdByToken(
-  token: string,
-): Promise<string | null> {
+export async function loadUserIdByToken(token: string): Promise<string | null> {
   const client = getRedis();
   const key = `auth:token:${token}`;
   return client.get(key);
@@ -52,6 +50,36 @@ export async function revokeToken(token: string): Promise<void> {
   const client = getRedis();
   const key = `auth:token:${token}`;
   await client.del(key);
+}
+
+export async function saveExpiringValue(
+  key: string,
+  value: string,
+  ttlSec: number
+): Promise<void> {
+  await getRedis().set(key, value, 'EX', ttlSec);
+}
+
+export async function consumeExpiringValue(
+  key: string
+): Promise<string | null> {
+  const client = getRedis();
+  // GET followed by DEL can allow two concurrent requests to reuse a login code.
+  // Execute both operations in Redis as one script instead.
+  const result = await client.eval(
+    'local value = redis.call("GET", KEYS[1]); if value then redis.call("DEL", KEYS[1]); end; return value;',
+    1,
+    key
+  );
+  return typeof result === 'string' ? result : null;
+}
+
+export async function reserveExpiringKey(
+  key: string,
+  ttlSec: number
+): Promise<boolean> {
+  const result = await getRedis().set(key, '1', 'EX', ttlSec, 'NX');
+  return result === 'OK';
 }
 
 // ── 每日分析配额 ──────────────────────────────────────────────────────────────
@@ -99,12 +127,19 @@ const INCR_WITH_EXPIRE_LUA = `
 export async function incrementHealDailyUsage(userId: string): Promise<number> {
   const client = getRedis();
   const key = `heal:daily:${userId}:${todayDateStr()}`;
-  const count = await client.eval(INCR_WITH_EXPIRE_LUA, 1, key, String(secondsUntilUtcMidnight())) as number;
+  const count = (await client.eval(
+    INCR_WITH_EXPIRE_LUA,
+    1,
+    key,
+    String(secondsUntilUtcMidnight())
+  )) as number;
   return count;
 }
 
 /** 批量读取多个用户今日用量（mget 一次请求） */
-export async function getHealDailyUsageBatch(userIds: string[]): Promise<Record<string, number>> {
+export async function getHealDailyUsageBatch(
+  userIds: string[]
+): Promise<Record<string, number>> {
   if (userIds.length === 0) return {};
   const client = getRedis();
   const date = todayDateStr();
@@ -119,7 +154,10 @@ export async function getHealDailyUsageBatch(userIds: string[]): Promise<Record<
 }
 
 /** 手动设置某用户今日用量（管理员调整用），设为 0 时删除 key */
-export async function setHealDailyUsage(userId: string, count: number): Promise<void> {
+export async function setHealDailyUsage(
+  userId: string,
+  count: number
+): Promise<void> {
   const client = getRedis();
   const key = `heal:daily:${userId}:${todayDateStr()}`;
   if (count <= 0) {

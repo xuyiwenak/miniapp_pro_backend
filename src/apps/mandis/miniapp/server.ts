@@ -13,6 +13,7 @@ const MANDIS_BI_PREFIXES = [
 ];
 import { setupCommonMiniappApp, setupNotFoundHandler } from '../../../shared/miniapp/server';
 import loginRoutes from './routes/login';
+import webAuthRoutes from './routes/webAuth';
 import homeRoutes from './routes/home';
 import apiRoutes from './routes/api';
 import dataCenterRoutes from './routes/dataCenter';
@@ -50,6 +51,7 @@ export function createMiniappApp(): express.Express {
 
   app.use('/app', appRoutes);
   app.use('/login', loginRoutes);
+  app.use('/web-auth', webAuthRoutes);
   app.use('/home', homeRoutes);
   app.use('/api', apiRoutes);
   app.use('/work', authMiddleware, workRoutes);
