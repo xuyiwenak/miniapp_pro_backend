@@ -7,8 +7,6 @@ export type AuthProfile = {
   nickname?: string;
   phone?: string;
   email?: string;
-  webOpenId?: string;
-  unionId?: string;
 };
 
 export type ReportItem = {
@@ -47,17 +45,6 @@ export function verifyEmail(email: string, code: string): Promise<AuthResult> {
   });
 }
 
-export function exchangeWechatTicket(ticket: string): Promise<AuthResult> {
-  return apiRequest('/web-auth/wechat/exchange', {
-    method: 'POST',
-    body: JSON.stringify({ ticket }),
-  });
-}
-
-export function startWechatLogin(): void {
-  window.location.assign('/api/web-auth/wechat/start');
-}
-
 export function getAuthProfile(token: string): Promise<AuthProfile> {
   return apiRequest('/web-auth/profile', {}, token);
 }
@@ -88,11 +75,6 @@ export function bindEmail(email: string, code: string, token: string): Promise<u
     method: 'POST',
     body: JSON.stringify({ email, code }),
   }, token);
-}
-
-export async function startWechatBind(token: string): Promise<void> {
-  const result = await apiRequest<{ url: string }>('/web-auth/wechat/bind/start', { method: 'POST' }, token);
-  window.location.assign(result.url);
 }
 
 export function publishArtwork(file: File, token: string): Promise<{ workId: string }> {

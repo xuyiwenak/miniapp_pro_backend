@@ -5,7 +5,6 @@ import {
   getAuthProfile,
   requestBoundEmail,
   requestBoundPhone,
-  startWechatBind,
   type AuthProfile,
 } from '../api/mandis';
 import type { Locale } from '../i18n/copy';
@@ -80,15 +79,10 @@ export function ProfilePage({ locale, token }: ProfilePageProps) {
 
   useEffect(() => { void refreshProfile(); }, [token]);
 
-  async function bindWechat(): Promise<void> {
-    try { await startWechatBind(token); } catch (error) { setMessage(error instanceof Error ? error.message : 'WeChat is unavailable.'); }
-  }
-
   const title = locale === 'zh-CN' ? '账号与安全' : 'Account & security';
   const cards = [
     { key: 'phone', title: locale === 'zh-CN' ? '手机号' : 'Phone', value: profile?.phone ? mask(profile.phone, 3) : null },
     { key: 'email', title: locale === 'zh-CN' ? '邮箱' : 'Email', value: profile?.email ? mask(profile.email, 2) : null },
-    { key: 'wechat', title: 'WeChat', value: profile?.webOpenId || profile?.unionId ? (locale === 'zh-CN' ? '已绑定' : 'Linked') : null },
   ] as const;
 
   return (
@@ -104,7 +98,7 @@ export function ProfilePage({ locale, token }: ProfilePageProps) {
           <article className="credential-row" key={card.key}>
             <div><strong>{card.title}</strong><span>{card.value ?? (locale === 'zh-CN' ? '尚未绑定' : 'Not linked')}</span></div>
             {card.value ? <span className="credential-status">{locale === 'zh-CN' ? '已保护' : 'Protected'}</span> : (
-              <button type="button" onClick={() => card.key === 'wechat' ? void bindWechat() : setActiveForm(card.key)}>
+              <button type="button" onClick={() => setActiveForm(card.key)}>
                 {locale === 'zh-CN' ? '绑定' : 'Link'}
               </button>
             )}

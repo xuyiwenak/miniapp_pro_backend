@@ -17,10 +17,8 @@ type Copy = {
   viewReport: string;
   login: string;
   loginTitle: string;
-  scanLogin: string;
   phoneLogin: string;
   emailLogin: string;
-  scanHint: string;
   phoneHint: string;
   emailHint: string;
   language: string;
@@ -44,10 +42,8 @@ export const COPY: Record<Locale, Copy> = {
     viewReport: '查看报告',
     login: '登录',
     loginTitle: '欢迎回来',
-    scanLogin: '微信扫码',
     phoneLogin: '手机号登录',
     emailLogin: '邮箱登录',
-    scanHint: '请使用微信扫一扫登录',
     phoneHint: '使用手机号验证码登录',
     emailHint: '使用邮箱验证码登录',
     language: 'English',
@@ -71,10 +67,8 @@ export const COPY: Record<Locale, Copy> = {
     viewReport: 'View reflection',
     login: 'Sign in',
     loginTitle: 'Welcome back',
-    scanLogin: 'WeChat scan',
     phoneLogin: 'Phone number',
     emailLogin: 'Email',
-    scanHint: 'Use WeChat to scan and sign in',
     phoneHint: 'Sign in with a phone verification code',
     emailHint: 'Sign in with an email verification code',
     language: '中文',

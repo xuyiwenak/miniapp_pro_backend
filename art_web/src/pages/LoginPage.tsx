@@ -1,13 +1,10 @@
 import { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import type { Locale } from '../i18n/copy';
 import { COPY } from '../i18n/copy';
 import { BrandMark } from '../components/BrandMark';
 import { LocaleToggle } from '../components/LocaleToggle';
 import { WatercolorBackdrop } from '../components/WatercolorBackdrop';
-import { requestEmail, requestSms, startWechatLogin, verifyEmail, verifySms } from '../api/mandis';
-
-const WECHAT_LOGIN_PATH = '/api/web-auth/wechat/start';
+import { requestEmail, requestSms, verifyEmail, verifySms } from '../api/mandis';
 
 type LoginPageProps = {
   locale: Locale;
@@ -16,13 +13,11 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ locale, onLocaleChange, onLogin }: LoginPageProps) {
-  const [method, setMethod] = useState<'email' | 'phone' | 'scan'>('scan');
+  const [method, setMethod] = useState<'email' | 'phone'>('phone');
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
-  const wechatLoginUrl = new URL(WECHAT_LOGIN_PATH, window.location.origin).toString();
-
-  function changeMethod(nextMethod: 'email' | 'phone' | 'scan'): void {
+  function changeMethod(nextMethod: 'email' | 'phone'): void {
     setMethod(nextMethod);
     setMessage('');
   }
@@ -59,15 +54,6 @@ export function LoginPage({ locale, onLocaleChange, onLogin }: LoginPageProps) {
           <h1>{COPY[locale].loginTitle}</h1>
           <div className="login-tabs" role="tablist" aria-label={COPY[locale].loginTitle}>
             <button
-              aria-selected={method === 'scan'}
-              className={method === 'scan' ? 'is-active' : ''}
-              role="tab"
-              type="button"
-              onClick={() => changeMethod('scan')}
-            >
-              {COPY[locale].scanLogin}
-            </button>
-            <button
               aria-selected={method === 'phone'}
               className={method === 'phone' ? 'is-active' : ''}
               role="tab"
@@ -87,21 +73,7 @@ export function LoginPage({ locale, onLocaleChange, onLogin }: LoginPageProps) {
             </button>
           </div>
           <div className="login-panel__body">
-            {method === 'scan' ? (
-              <div className="qr-state" role="tabpanel">
-                <button
-                  className="qr-code"
-                  type="button"
-                  onClick={startWechatLogin}
-                  aria-label={COPY[locale].scanHint}
-                >
-                  <QRCodeSVG bgColor="#fffdfa" fgColor="#2f3230" level="M" size={184} value={wechatLoginUrl} />
-                </button>
-                <p>{COPY[locale].scanHint}</p>
-                <span>{locale === 'zh-CN' ? '也可以点击二维码继续' : 'You can also click the code to continue'}</span>
-              </div>
-            ) : (
-              <form
+            <form
                 className="phone-state"
                 role="tabpanel"
                 onSubmit={(event) => {
@@ -142,8 +114,7 @@ export function LoginPage({ locale, onLocaleChange, onLogin }: LoginPageProps) {
                   {method === 'phone' ? COPY[locale].phoneHint : COPY[locale].emailHint}
                 </p>
                 <p className="form-message" aria-live="polite">{message}</p>
-              </form>
-            )}
+            </form>
           </div>
           <p className="login-panel__legal">
             <span aria-hidden="true">✓</span>

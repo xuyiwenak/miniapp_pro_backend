@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import type { Locale } from './i18n/copy';
 import { LocaleToggle } from './components/LocaleToggle';
 import { SideNav } from './components/SideNav';
 import { UploadPage } from './pages/UploadPage';
 import { LoginPage } from './pages/LoginPage';
-import { beginAnalysis, exchangeWechatTicket, publishArtwork } from './api/mandis';
+import { beginAnalysis, publishArtwork } from './api/mandis';
 import { ReportsPage } from './pages/ReportsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
@@ -55,16 +55,6 @@ function ArtApp() {
   const [locale, setLocale] = useState<Locale>('zh-CN');
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? '');
   const navigate = useNavigate();
-  useEffect(() => {
-    const parameters = new URLSearchParams(window.location.search);
-    const ticket = parameters.get('login_ticket');
-    if (parameters.get('wechat_bound') === '1') {
-      navigate('/profile', { replace: true });
-      return;
-    }
-    if (!ticket) return;
-    exchangeWechatTicket(ticket).then((result) => finishLogin(result.token));
-  }, []);
   function finishLogin(nextToken = ''): void {
     setToken(nextToken);
     sessionStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
