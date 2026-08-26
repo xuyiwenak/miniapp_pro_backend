@@ -12,6 +12,10 @@ import { IWork, WorkSchema } from '../../entity/work.entity';
 import { FeedbackSchema, type IFeedback } from '../../entity/feedback.entity';
 import { IMandisAdmin, MandisAdminSchema } from '../../apps/mandis/entity/mandisAdmin.entity';
 import { IUserTips, UserTipsSchema } from '../../entity/userTips.entity';
+import {
+  EmailTemplateConfigSchema,
+  type IEmailTemplateConfig,
+} from '../../apps/mandis/entity/emailTemplateConfig.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -20,6 +24,7 @@ class GlobalModelManager {
   private feedbackModel!: Model<IFeedback>;
   private mandisAdminModel!: Model<IMandisAdmin>;
   private userTipsModel!: Model<IUserTips>;
+  private emailTemplateConfigModel!: Model<IEmailTemplateConfig>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -41,6 +46,12 @@ class GlobalModelManager {
 
     this.userTipsModel = this.connection.model<IUserTips>('UserTips', UserTipsSchema);
     this.userTipsModel.createIndexes().catch(() => {});
+
+    this.emailTemplateConfigModel = this.connection.model<IEmailTemplateConfig>(
+      'EmailTemplateConfig',
+      EmailTemplateConfigSchema,
+    );
+    this.emailTemplateConfigModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -61,6 +72,10 @@ class GlobalModelManager {
 
   public getUserTipsModel(): Model<IUserTips> {
     return this.userTipsModel;
+  }
+
+  public getEmailTemplateConfigModel(): Model<IEmailTemplateConfig> {
+    return this.emailTemplateConfigModel;
   }
 
   public async stopConnection() {
@@ -104,4 +119,8 @@ export function getMandisAdminModel(): Model<IMandisAdmin> {
 
 export function getUserTipsModel(): Model<IUserTips> {
   return getGlobalModelManager().getUserTipsModel();
+}
+
+export function getEmailTemplateConfigModel(): Model<IEmailTemplateConfig> {
+  return getGlobalModelManager().getEmailTemplateConfigModel();
 }

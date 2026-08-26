@@ -9,6 +9,7 @@ import feedbackRouter from './feedback';
 import systemRouter from './system';
 import miniappConfigRouter from './miniappConfig';
 import presetTagsRouter from './presetTags';
+import emailConfigRouter from './emailConfig';
 
 const router = Router();
 
@@ -43,5 +44,6 @@ router.use('/feedback',       feedbackRouter);
 router.use('/system',         systemRouter);
 router.use('/miniapp-config', miniappConfigRouter);
 router.use('/preset-tags',   presetTagsRouter);
+router.use('/email-config',  emailConfigRouter);
 
 export default router;

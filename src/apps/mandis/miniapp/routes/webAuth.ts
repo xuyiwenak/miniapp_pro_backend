@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto';
 import https from 'https';
-import DirectMailClient, { SingleSendMailRequest } from '@alicloud/dm20151123';
 import DysmsapiClient, { SendSmsRequest } from '@alicloud/dysmsapi20170525';
 import { Config as OpenApiConfig } from '@alicloud/openapi-client';
 import { Router, type Request, type Response } from 'express';
@@ -13,6 +12,7 @@ import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/respons
 import { issueToken } from '../../../../shared/miniapp/tokenStore';
 import { gameLogger as logger } from '../../../../util/logger';
 import { consumeAuthChallenge, createAuthChallenge, normalizeEmail } from '../services/webAuthChallenge';
+import { sendVerificationEmail } from '../services/emailTemplate';
 
 const router = Router();
 const WECHAT_STATE_TTL_SECONDS = 10 * 60;
@@ -68,36 +68,6 @@ async function sendAliyunSms(phone: string, code: string): Promise<void> {
   if (response.body?.code !== 'OK') throw new Error(response.body?.message ?? 'Aliyun SMS rejected request');
 }
 
-function buildEmailContent(code: string, locale: 'en' | 'zh-CN'): { subject: string; html: string } {
-  if (locale === 'en') return {
-    subject: 'Your Original Sense verification code',
-    html: `<p>Your verification code is <strong>${code}</strong>.</p><p>It expires in 5 minutes.</p>`,
-  };
-  return {
-    subject: '原色有感验证码',
-    html: `<p>你的验证码是 <strong>${code}</strong>。</p><p>验证码将在 5 分钟后失效，请勿转发给他人。</p>`,
-  };
-}
-
-async function sendAliyunEmail(email: string, code: string, locale: 'en' | 'zh-CN'): Promise<void> {
-  const content = buildEmailContent(code, locale);
-  const client = new DirectMailClient(new OpenApiConfig({
-    accessKeyId: getRequiredEnv('ALIYUN_DM_ACCESS_KEY_ID'),
-    accessKeySecret: getRequiredEnv('ALIYUN_DM_ACCESS_KEY_SECRET'),
-    regionId: process.env.ALIYUN_DM_REGION_ID?.trim() || 'cn-hangzhou',
-  }));
-  await client.singleSendMail(new SingleSendMailRequest({
-    accountName: getRequiredEnv('ALIYUN_DM_ACCOUNT_NAME'),
-    addressType: 1,
-    fromAlias: process.env.ALIYUN_DM_FROM_ALIAS?.trim() || '原色有感',
-    htmlBody: content.html,
-    replyToAddress: false,
-    subject: content.subject,
-    tagName: process.env.ALIYUN_DM_TAG_NAME?.trim() || 'original-sense-auth',
-    toAddress: email,
-  }));
-}
-
 function readJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
     https.get(url, (response) => {
@@ -148,7 +118,13 @@ async function sendEmailCode(req: Request, res: Response, purpose: string): Prom
   const email = normalizeEmail(parsed.data.email);
   const locale = req.body?.locale === 'en' ? 'en' : 'zh-CN';
   try {
-    const result = await createAuthChallenge('email', purpose, email, getClientIp(req), (code) => sendAliyunEmail(email, code, locale));
+    const result = await createAuthChallenge(
+      'email',
+      purpose,
+      email,
+      getClientIp(req),
+      (code) => sendVerificationEmail(email, code, locale),
+    );
     if (!result.ok) return sendErr(res, 'Please wait before requesting another code', 429);
     sendSucc(res, { expiresInSeconds: result.expiresInSeconds });
   } catch (error) {

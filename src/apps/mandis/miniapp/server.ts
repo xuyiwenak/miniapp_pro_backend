@@ -11,6 +11,7 @@ const MANDIS_BI_PREFIXES = [
   '/app', '/login', '/home', '/api', '/work', '/oss',
   '/dataCenter', '/healing', '/mandis-admin', '/userTips',
 ];
+const TRUSTED_PROXY_HOPS = 1; // Mandis is deployed behind one Nginx reverse proxy.
 import { setupCommonMiniappApp, setupNotFoundHandler } from '../../../shared/miniapp/server';
 import loginRoutes from './routes/login';
 import webAuthRoutes from './routes/webAuth';
@@ -31,6 +32,7 @@ const staticDir = path.join(process.cwd(), 'static');
 
 export function createMiniappApp(): express.Express {
   const app = express();
+  app.set('trust proxy', TRUSTED_PROXY_HOPS);
   setupCommonMiniappApp(app, {
     logger: gameLogger,
     logPrefix: 'miniapp',
