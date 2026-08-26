@@ -1,4 +1,9 @@
-import { apiRequest } from './client';
+import { apiRequest, apiUploadRequest } from './client';
+
+const ANALYSIS_POLL_INTERVAL_MS = 1000;
+const ANALYSIS_TIMEOUT_MS = 3 * 60 * 1000;
+const DEFAULT_ANALYSIS_ESTIMATE_SECONDS = 10;
+const MAX_PENDING_ANALYSIS_PERCENT = 95;
 
 export type AuthResult = { token: string; userId: string };
 
@@ -15,6 +20,12 @@ export type ReportItem = {
   desc: string;
   dominantEmotionLabel: string;
   createdAt: string;
+};
+
+type AnalysisStatus = {
+  status: 'none' | 'pending' | 'success' | 'failed';
+  estimatedSeconds?: number;
+  failReason?: string | null;
 };
 
 export function requestSms(phone: string): Promise<{ expiresInSeconds: number }> {
@@ -77,18 +88,17 @@ export function bindEmail(email: string, code: string, token: string): Promise<u
   }, token);
 }
 
-export function publishArtwork(file: File, token: string): Promise<{ workId: string }> {
+export function publishArtwork(
+  file: File,
+  token: string,
+  onProgress: (percent: number) => void
+): Promise<{ workId: string }> {
   return readFileAsDataUrl(file).then((data) =>
-    apiRequest(
+    apiUploadRequest(
       '/work/publish',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          images: [{ name: file.name, type: file.type, data }],
-          status: 'published',
-        }),
-      },
-      token
+      { images: [{ name: file.name, type: file.type, data }], status: 'published' },
+      token,
+      onProgress
     )
   );
 }
@@ -102,6 +112,34 @@ export function beginAnalysis(workId: string, token: string): Promise<{ workId: 
     },
     token
   );
+}
+
+export async function waitForAnalysis(
+  workId: string,
+  token: string,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  const startedAt = Date.now();
+  let estimateSeconds = DEFAULT_ANALYSIS_ESTIMATE_SECONDS;
+  while (true) {
+    const status = await apiRequest<AnalysisStatus>(
+      `/healing/status?workId=${encodeURIComponent(workId)}`,
+      {},
+      token
+    );
+    if (status.status === 'success') return onProgress(100);
+    if (status.status === 'failed') throw new Error(status.failReason ?? 'Analysis failed');
+    estimateSeconds = status.estimatedSeconds ?? estimateSeconds;
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs >= ANALYSIS_TIMEOUT_MS) throw new Error('Analysis timed out');
+    const elapsedSeconds = elapsedMs / 1000;
+    const percent = Math.min(
+      MAX_PENDING_ANALYSIS_PERCENT,
+      Math.round((elapsedSeconds / estimateSeconds) * 100)
+    );
+    onProgress(percent);
+    await delay(ANALYSIS_POLL_INTERVAL_MS);
+  }
 }
 
 export function listReports(token: string): Promise<ReportItem[]> {
@@ -127,4 +165,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('Could not read image file'));
     reader.readAsDataURL(file);
   });
+}
+
+function delay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, durationMs));
 }

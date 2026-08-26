@@ -402,6 +402,9 @@ h1,
   border-color: #4dbfb4;
   background: rgba(255, 253, 248, 0.93);
 }
+.upload-canvas__zone:disabled {
+  cursor: wait;
+}
 .upload-canvas__zone strong {
   font-size: 22px;
   font-weight: 500;
@@ -432,6 +435,58 @@ h1,
 .primary-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+.upload-progress {
+  background: rgba(255, 253, 248, 0.88);
+  border: 1px solid rgba(49, 153, 154, 0.22);
+  border-radius: 14px;
+  margin-top: 18px;
+  padding: 18px 20px 16px;
+  text-align: left;
+}
+.upload-progress__heading {
+  align-items: baseline;
+  color: #4e4844;
+  display: flex;
+  justify-content: space-between;
+}
+.upload-progress__heading strong {
+  font-size: 15px;
+}
+.upload-progress__heading span {
+  color: #237f81;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.upload-progress progress {
+  appearance: none;
+  background: #e2ded7;
+  border: 0;
+  border-radius: 999px;
+  display: block;
+  height: 7px;
+  margin-top: 12px;
+  overflow: hidden;
+  width: 100%;
+}
+.upload-progress progress::-webkit-progress-bar {
+  background: #e2ded7;
+}
+.upload-progress progress::-webkit-progress-value {
+  background: #329d9f;
+  border-radius: 999px;
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.upload-progress progress::-moz-progress-bar {
+  background: #329d9f;
+  border-radius: 999px;
+}
+.upload-progress p {
+  color: #756d67;
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 10px 0 0;
 }
 .form-error {
   color: #a23852;

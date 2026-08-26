@@ -1,10 +1,11 @@
 import type { Locale } from '../i18n/copy';
+import type { ArtworkProgress } from '../components/UploadCanvas';
 import { COPY } from '../i18n/copy';
 import { UploadCanvas } from '../components/UploadCanvas';
 
 type UploadPageProps = {
   locale: Locale;
-  onSubmit: (file: File) => Promise<void>;
+  onSubmit: (file: File, onProgress: (progress: ArtworkProgress) => void) => Promise<void>;
 };
 
 export function UploadPage({ locale, onSubmit }: UploadPageProps) {

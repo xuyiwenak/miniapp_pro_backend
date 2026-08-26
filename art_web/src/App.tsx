@@ -3,9 +3,10 @@ import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import type { Locale } from './i18n/copy';
 import { LocaleToggle } from './components/LocaleToggle';
 import { SideNav } from './components/SideNav';
+import type { ArtworkProgress } from './components/UploadCanvas';
 import { UploadPage } from './pages/UploadPage';
 import { LoginPage } from './pages/LoginPage';
-import { beginAnalysis, publishArtwork } from './api/mandis';
+import { beginAnalysis, publishArtwork, waitForAnalysis } from './api/mandis';
 import { ReportsPage } from './pages/ReportsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
@@ -23,14 +24,21 @@ function AppLayout({
   onSignOut: () => void;
   token: string;
 }) {
-  async function submitArtwork(file: File): Promise<void> {
-    const work = await publishArtwork(file, token);
+  const navigate = useNavigate();
+
+  async function submitArtwork(
+    file: File,
+    onProgress: (progress: ArtworkProgress) => void
+  ): Promise<void> {
+    const work = await publishArtwork(file, token, (percent) => {
+      onProgress({ phase: 'uploading', percent });
+    });
+    onProgress({ phase: 'analyzing', percent: 0 });
     await beginAnalysis(work.workId, token);
-    window.alert(
-      locale === 'zh-CN'
-        ? '作品已提交，正在生成解读。'
-        : 'Your work is submitted and your reflection is being prepared.'
-    );
+    await waitForAnalysis(work.workId, token, (percent) => {
+      onProgress({ phase: 'analyzing', percent });
+    });
+    navigate(`/reports/${work.workId}`);
   }
 
   return (

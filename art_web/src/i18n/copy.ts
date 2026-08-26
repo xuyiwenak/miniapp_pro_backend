@@ -11,6 +11,11 @@ type Copy = {
   dropzoneTitle: string;
   dropzoneHint: string;
   uploadButton: string;
+  uploading: string;
+  analyzing: string;
+  uploadProgressHint: string;
+  analysisProgressHint: string;
+  processingError: string;
   privacyTitle: string;
   privacyBody: string;
   recentReports: string;
@@ -36,6 +41,11 @@ export const COPY: Record<Locale, Copy> = {
     dropzoneTitle: '拖入作品，或点击选择',
     dropzoneHint: '支持 JPG、PNG、WEBP，文件大小不超过 10MB',
     uploadButton: '上传并开始解读',
+    uploading: '正在上传作品',
+    analyzing: '正在生成解读',
+    uploadProgressHint: '正在安全传送你的作品，请保持页面打开。',
+    analysisProgressHint: '预计进度，正在理解画面中的色彩、构图与情绪。',
+    processingError: '处理没有完成，请检查网络后重试。',
     privacyTitle: '你的作品，只为你而读',
     privacyBody: '我们尊重并保护你的隐私。上传内容仅用于本次解读，不会被保存或用于其他用途。',
     recentReports: '最近的报告',
@@ -60,6 +70,11 @@ export const COPY: Record<Locale, Copy> = {
     dropzoneTitle: 'Drop your artwork here, or choose a file',
     dropzoneHint: 'JPG, PNG, or WEBP. Maximum file size: 10 MB.',
     uploadButton: 'Upload and begin',
+    uploading: 'Uploading artwork',
+    analyzing: 'Preparing your reflection',
+    uploadProgressHint: 'Your artwork is being transferred securely. Keep this page open.',
+    analysisProgressHint: 'Estimated progress while we read the colour, composition, and emotion in your work.',
+    processingError: 'Processing did not finish. Check your connection and try again.',
     privacyTitle: 'Your work is read only for you',
     privacyBody:
       'We treat your privacy with care. Your upload is used only for this reflection and not for other purposes.',
