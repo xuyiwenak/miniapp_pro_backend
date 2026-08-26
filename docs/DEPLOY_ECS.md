@@ -6,19 +6,21 @@
 - 容器内 **`SYSCONFIG_ROOT=/app/config`**，卷 **`./src/sysconfig:/app/config:ro`**。
 - ECS 示例路径：`/root/workspace/miniapp_pro_backend/src/sysconfig` → `/app/config`。
 
-## 推荐发布流程（与 git pull 同步配置）
+## 推荐发布流程（Apple Silicon 本地构建）
 
 ```bash
-cd /root/workspace/miniapp_pro_backend
-git pull origin main
-docker compose build backend_app   # 代码有变更时
-docker compose up -d
+# 本地：先将 master 合入并推送到 release
+./scripts/release.sh
+
+# 本地：构建 linux/amd64 镜像，传入 ECS 后重启两个应用服务
+./scripts/deploy_amd64_image.sh
 ```
 
-## GitHub Actions
+脚本只构建 `origin/release` 的精确提交；服务器会先拉取并校验同一提交，再以 `--no-build` 启动服务。MongoDB、Redis、Nginx 不会重建。
 
-1. **在 ECS 上**：`git pull` + `docker compose up -d`。
-2. **在 Actions 中 SSH**：执行同上；或构建镜像后 `docker pull` 再启动。
+## CI / 其他构建环境
+
+在 x86_64 CI 中也可构建同名镜像后通过 SSH 导入，或改为推送至镜像仓库。ECS 端必须使用 `docker compose up -d --no-build`，避免小规格实例承担构建工作。
 
 密钥请放在 **`src/sysconfig/production/server_auth_config.json`**（或 CI 下发），勿提交到仓库。
 

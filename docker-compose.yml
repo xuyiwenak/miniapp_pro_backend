@@ -3,9 +3,8 @@
 # 典型流程：GitHub Actions / 手动 git pull 拉最新代码与 src/sysconfig → 再在项目根目录执行 docker compose up -d
 # 配置目录挂载：./src/apps/{app}/sysconfig → 容器内 /app/config（与 SYSCONFIG_ROOT 一致）
 #
-# 构建：只有 begreat_app 带 build:，mandis_app 复用同一镜像，`docker compose build begreat_app` 即可。
+# 应用镜像由本地部署脚本构建并传入；两个 Node 服务复用同一镜像。
 # mongo / redis / nginx 使用 pull_policy: if_not_present，本地已有镜像时 compose pull / up 不会反复从仓库拉取。
-# begreat_app.build.pull: false 避免每次构建时强制拉取基础镜像（需更新时临时改为 true 或加 --pull）。
 
 services:
   mongo:
@@ -55,11 +54,9 @@ services:
       start_period: 5s
 
   begreat_app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      pull: false
-    image: art-backend:latest          # 构建镜像，mandis_app 复用此镜像
+    # 生产环境由 scripts/deploy_amd64_image.sh 在本地构建并传入镜像标签。
+    # 未设置时保留默认标签，便于本地已有镜像的场景。
+    image: ${ART_BACKEND_IMAGE:-art-backend:latest}
     container_name: miniapp-begreat
     restart: unless-stopped
     command: ["node", "dist/apps/begreat/front.js"]
@@ -95,7 +92,7 @@ services:
       - /root/workspace/miniapp_pro_backend:/workspace:ro
 
   mandis_app:
-    image: art-backend:latest          # 复用 begreat_app 构建的镜像，无需重复 build
+    image: ${ART_BACKEND_IMAGE:-art-backend:latest}
     container_name: miniapp-mandis
     restart: unless-stopped
     command: ["node", "dist/apps/mandis/front.js"]

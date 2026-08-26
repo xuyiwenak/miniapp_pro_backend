@@ -265,7 +265,7 @@ serverLogger.warn("服务器警告");
 3. `git push origin release`
 4. 切回原分支
 
-> ECS 上执行 `git pull origin release` 后再 `docker compose up -d --build` 即可完成上线。
+> 使用 Apple Silicon 开发机时，请在本地执行 `./scripts/deploy_amd64_image.sh`；它会构建 x86_64 镜像、传到 ECS，并在服务器端不经构建地重启应用服务。
 
 ---
 
@@ -285,21 +285,18 @@ docker compose up -d
 - `backend_app`：本服务（使用 `art_backend/Dockerfile` 构建）
 - `nginx`：统一对外 HTTP 入口（静态资源 + 反向代理到 backend）
 
-### 2. 服务器部署（ECS + ACR + docker-compose）
+### 2. 服务器部署（Apple Silicon 本地构建 + docker-compose）
 
-典型流程（建议）：
+典型流程：
 
-1. 在本地 / CI 内使用 `Dockerfile` 构建镜像并推送到阿里云 ACR；
-2. 在 ECS 上准备好 `docker-compose.yml`（使用远程镜像地址 `registry.cn-xxx.aliyuncs.com/<namespace>/<repo>:tag`）；
-3. 通过 GitHub Actions 或手动 SSH 到 ECS 执行：
+1. 先执行 `./scripts/release.sh`，将代码发布至 `release` 分支；
+2. 在本地执行：
 
 ```bash
-docker compose pull
-docker compose up -d
+./scripts/deploy_amd64_image.sh
 ```
 
-> 当前项目已经在尝试使用 GitHub Actions + 阿里云 ACR 做自动构建和部署，  
-> 根据你实际 CI 配置调整镜像地址和 tag 即可。
+脚本只会构建 `origin/release` 的精确提交，强制输出 `linux/amd64` 镜像并通过 SSH 导入 ECS；ECS 校验同一提交后，仅执行加载镜像和 `docker compose up -d --no-build`。
 
 ### 监控和维护
 
