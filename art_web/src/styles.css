@@ -48,7 +48,7 @@ h1,
   font-family: 'KaiTi', 'STKaiti', 'Songti SC', serif;
 }
 .brand-mark__word {
-  font-size: 32px;
+  font-size: 40px;
   letter-spacing: 0.13em;
 }
 .brand-mark__flower {
@@ -68,12 +68,12 @@ h1,
   padding: 0 15px;
 }
 .watercolor-backdrop {
-  background: var(--watercolor-image) center / cover no-repeat;
-  min-height: 100vh;
+  background: var(--watercolor-image) center / 100% 100% no-repeat;
+  min-height: 100dvh;
   position: relative;
 }
 .watercolor-backdrop::after {
-  background: rgba(255, 249, 242, 0.15);
+  background: rgba(255, 249, 242, 0.04);
   content: '';
   inset: 0;
   pointer-events: none;
@@ -83,39 +83,44 @@ h1,
   align-items: center;
   display: flex;
   justify-content: space-between;
-  padding: 34px 5.5vw;
+  padding: 34px 4.5vw 12px;
   position: relative;
   z-index: 1;
 }
 .login-layout {
   align-items: center;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  min-height: calc(100vh - 108px);
-  padding: 24px 11vw 84px;
+  column-gap: 7vw;
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 510px);
+  min-height: calc(100dvh - 96px);
+  padding: 8px 11vw 50px;
   position: relative;
   z-index: 1;
 }
 .login-layout__whisper {
   color: #685a56;
-  font-size: clamp(34px, 4vw, 62px);
+  font-size: clamp(36px, 3.6vw, 58px);
   letter-spacing: 0.12em;
   margin: 0;
   text-align: center;
   transform: rotate(-3deg);
 }
 .login-panel {
-  background: rgba(255, 251, 244, 0.92);
+  background: rgba(255, 251, 244, 0.94);
   border: 1px solid rgba(141, 120, 106, 0.19);
-  border-radius: 22px;
-  box-shadow: 0 18px 45px rgba(113, 94, 89, 0.13);
-  padding: 58px 62px 42px;
+  border-radius: 14px 18px 13px 19px;
+  box-shadow: 0 24px 54px rgba(113, 94, 89, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.54);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: clamp(560px, 72dvh, 740px);
+  padding: 48px 52px 34px;
+  width: 100%;
 }
 .login-panel h1 {
-  font-size: 46px;
+  font-size: 48px;
   font-weight: 500;
   letter-spacing: 0.16em;
-  margin: 0 0 35px;
+  margin: 0 0 26px;
   text-align: center;
 }
 .login-tabs {
@@ -128,30 +133,58 @@ h1,
   border: 0;
   border-bottom: 3px solid transparent;
   color: #625d5a;
-  padding: 13px;
+  min-height: 49px;
+  padding: 10px 6px;
+  transition: color 180ms ease, border-color 180ms ease;
 }
 .login-tabs button.is-active {
   border-color: #309a99;
   color: #24898a;
   font-weight: 700;
 }
+.login-panel__body {
+  min-height: 0;
+}
 .qr-state,
 .phone-state {
   align-items: center;
   display: flex;
   flex-direction: column;
-  min-height: 300px;
+  height: 100%;
   justify-content: center;
   text-align: center;
 }
 .qr-code {
-  background: repeating-linear-gradient(45deg, #333 0 8px, #fff 8px 16px);
-  border: 12px solid #fff;
-  height: 176px;
-  width: 176px;
+  background: #fffdfa;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 10px 26px rgba(93, 80, 72, 0.14);
+  display: grid;
+  padding: 15px;
+  place-items: center;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+.qr-code:hover {
+  box-shadow: 0 14px 32px rgba(67, 117, 112, 0.2);
+  transform: translateY(-2px);
+}
+.qr-code:active {
+  transform: translateY(0) scale(0.985);
+}
+.qr-state p {
+  color: #544d49;
+  font-size: 16px;
+  margin: 20px 0 0;
+}
+.qr-state span {
+  color: #8a817b;
+  font-size: 12px;
+  margin-top: 7px;
 }
 .phone-state {
-  gap: 18px;
+  gap: 14px;
+  margin: 0 auto;
+  max-width: 330px;
 }
 .phone-state label {
   color: #625d5a;
@@ -166,6 +199,31 @@ h1,
   border-radius: 10px;
   min-height: 48px;
   padding: 0 13px;
+  width: 100%;
+}
+.verification-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.verification-row button {
+  background: transparent;
+  border: 1px solid rgba(45, 140, 142, 0.55);
+  border-radius: 10px;
+  color: #237f81;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+.primary-button.login-submit {
+  margin-top: 5px;
+  min-width: 170px;
+}
+.login-method-hint {
+  color: #655e59;
+  font-size: 13px;
+  margin: 1px 0 0;
 }
 .secondary-button,
 .credential-row button,
@@ -181,14 +239,30 @@ h1,
 .form-message {
   color: #267b7d;
   font-size: 14px;
-  margin: 0;
+  line-height: 18px;
+  margin: -7px 0 0;
+  min-height: 18px;
 }
 .login-panel__legal {
+  align-items: center;
   color: #77706b;
+  display: flex;
   font-size: 12px;
+  gap: 8px;
+  justify-content: center;
   line-height: 1.6;
   margin: 0;
   text-align: center;
+}
+.login-panel__legal span {
+  align-items: center;
+  border: 1px solid #309a99;
+  border-radius: 50%;
+  color: #24898a;
+  display: inline-flex;
+  flex: 0 0 18px;
+  height: 18px;
+  justify-content: center;
 }
 .app-frame {
   background: #f8f1e9;
@@ -498,18 +572,39 @@ h1,
   padding: 0 13px;
 }
 @media (max-width: 760px) {
+  .watercolor-backdrop {
+    background-size: cover;
+  }
+  .login-header {
+    padding: 24px 24px 6px;
+  }
+  .brand-mark__word {
+    font-size: 30px;
+  }
   .login-layout {
     grid-template-columns: 1fr;
-    padding: 25px 24px 50px;
+    min-height: calc(100dvh - 78px);
+    padding: 18px 20px 36px;
   }
   .login-layout__whisper {
     display: none;
   }
   .login-panel {
+    height: 600px;
     margin: 0 auto;
     max-width: 480px;
-    padding: 40px 26px 32px;
+    padding: 36px 24px 28px;
     width: 100%;
+  }
+  .login-panel h1 {
+    font-size: 40px;
+  }
+  .login-tabs button {
+    font-size: 13px;
+  }
+  .qr-code svg {
+    height: 164px;
+    width: 164px;
   }
   .side-nav {
     min-height: auto;
