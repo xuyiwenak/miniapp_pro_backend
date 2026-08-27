@@ -43,5 +43,9 @@ db.players.aggregate([
 
 ```bash
 docker compose up -d mandis_app
-bash scripts/deploy_web.sh
+cd /path/to/art_theroy
+./deploy.sh mandis-web
 ```
+
+Mandis 网页端与 Commander 管理后台使用独立构建目录和线上静态目录。发布网页端不会更新管理后台，
+也不需要重启 Docker 或 reload Nginx。
