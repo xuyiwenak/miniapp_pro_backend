@@ -5,6 +5,8 @@ export interface IPlayer {
   userId: string;
   account: string;
   password?: string;
+  /** 网页邮箱登录密码，仅保存 bcrypt 哈希 */
+  webPasswordHash?: string;
   nickname?: string;
   zoneId?: string;
   openId?: string;
@@ -27,6 +29,7 @@ export const PlayerSchema = new Schema(
     userId: { type: String, required: true, unique: true },
     account: { type: String, required: true, index: true },
     password: { type: String, required: false },
+    webPasswordHash: { type: String, required: false, select: false },
     nickname: { type: String },
     zoneId: { type: String },
     openId: { type: String, index: true, sparse: true },

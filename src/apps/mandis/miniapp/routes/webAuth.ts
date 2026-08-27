@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import https from 'https';
 import DysmsapiClient, { SendSmsRequest } from '@alicloud/dysmsapi20170525';
 import { Config as OpenApiConfig } from '@alicloud/openapi-client';
@@ -6,21 +6,30 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../component/PlayerComponent';
-import { consumeExpiringValue, saveExpiringValue } from '../../../../auth/RedisTokenStore';
+import {
+  consumeExpiringValue,
+  reserveExpiringKey,
+  saveExpiringValue,
+} from '../../../../auth/RedisTokenStore';
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
 import { issueToken } from '../../../../shared/miniapp/tokenStore';
 import { gameLogger as logger } from '../../../../util/logger';
 import { consumeAuthChallenge, createAuthChallenge, normalizeEmail } from '../services/webAuthChallenge';
 import { sendVerificationEmail } from '../services/emailTemplate';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../services/webAuthPassword';
 
 const router = Router();
 const WECHAT_STATE_TTL_SECONDS = 10 * 60;
 const LOGIN_TICKET_TTL_SECONDS = 60;
+const PASSWORD_LOGIN_RATE_SECONDS = 2;
 const PHONE_PATTERN = /^1\d{10}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_LOGIN_PURPOSE = 'phone-login';
-const EMAIL_LOGIN_PURPOSE = 'email-login';
+const EMAIL_PASSWORD_RESET_PURPOSE = 'email-password-reset';
 const PHONE_BIND_PURPOSE = 'phone-bind';
 const EMAIL_BIND_PURPOSE = 'email-bind';
 
@@ -28,6 +37,12 @@ const PhoneSchema = z.object({ phone: z.string().trim().regex(PHONE_PATTERN) });
 const EmailSchema = z.object({ email: z.string().trim().regex(EMAIL_PATTERN) });
 const PhoneVerifySchema = PhoneSchema.extend({ code: z.string().regex(/^\d{6}$/) });
 const EmailVerifySchema = EmailSchema.extend({ code: z.string().regex(/^\d{6}$/) });
+const EmailPasswordSchema = EmailSchema.extend({
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+});
+const EmailPasswordResetSchema = EmailVerifySchema.extend({
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+});
 
 type WechatTokenResponse = { access_token?: string; openid?: string; unionid?: string };
 type WechatUserResponse = { openid?: string; unionid?: string };
@@ -41,6 +56,11 @@ function getRequiredEnv(name: string): string {
 
 function getClientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function reservePasswordLoginAttempt(email: string, ip: string): Promise<boolean> {
+  const identityHash = createHash('sha256').update(`${email}:${ip}`).digest('hex');
+  return reserveExpiringKey(`web:auth:password:rate:${identityHash}`, PASSWORD_LOGIN_RATE_SECONDS);
 }
 
 function getPlayerComponent(): PlayerComponent | undefined {
@@ -134,7 +154,9 @@ async function sendEmailCode(req: Request, res: Response, purpose: string): Prom
 }
 
 router.post('/sms/send', (req, res) => sendPhoneCode(req, res, PHONE_LOGIN_PURPOSE));
-router.post('/email/send', (req, res) => sendEmailCode(req, res, EMAIL_LOGIN_PURPOSE));
+router.post('/email/password/reset/send', (req, res) => {
+  return sendEmailCode(req, res, EMAIL_PASSWORD_RESET_PURPOSE);
+});
 
 router.post('/sms/verify', async (req: Request, res: Response) => {
   const parsed = PhoneVerifySchema.safeParse(req.body);
@@ -147,16 +169,35 @@ router.post('/sms/verify', async (req: Request, res: Response) => {
   sendSucc(res, { token: await issueToken(login.data.userId), userId: login.data.userId });
 });
 
-router.post('/email/verify', async (req: Request, res: Response) => {
-  const parsed = EmailVerifySchema.safeParse(req.body);
-  if (!parsed.success) return sendErr(res, 'Invalid email address or code', 400);
+/** POST /web-auth/email/password/login - 邮箱密码登录。 */
+router.post('/email/password/login', async (req: Request, res: Response) => {
+  const parsed = EmailPasswordSchema.safeParse(req.body);
+  if (!parsed.success) return sendErr(res, 'Invalid email address or password', 400);
   const email = normalizeEmail(parsed.data.email);
-  const verified = await consumeAuthChallenge('email', EMAIL_LOGIN_PURPOSE, email, parsed.data.code);
+  const rateAllowed = await reservePasswordLoginAttempt(email, getClientIp(req));
+  if (!rateAllowed) return sendErr(res, 'Please wait before trying again', 429);
+  const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
+  const login = await playerComp.loginByEmailPassword(email, parsed.data.password);
+  if (!login.ok) return sendErr(res, 'Email address or password is incorrect', 401);
+  sendSucc(res, { token: await issueToken(login.data.userId), userId: login.data.userId });
+});
+
+/** POST /web-auth/email/password/reset - 验证邮箱后设置新密码。 */
+router.post('/email/password/reset', async (req: Request, res: Response) => {
+  const parsed = EmailPasswordResetSchema.safeParse(req.body);
+  if (!parsed.success) return sendErr(res, 'Invalid reset details', 400);
+  const email = normalizeEmail(parsed.data.email);
+  const verified = await consumeAuthChallenge(
+    'email',
+    EMAIL_PASSWORD_RESET_PURPOSE,
+    email,
+    parsed.data.code
+  );
   if (!verified) return sendErr(res, 'Verification code is invalid or expired', 401);
   const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
-  const login = await playerComp.loginByEmail(email);
-  if (!login.ok) return sendErr(res, 'Unable to sign in', 500);
-  sendSucc(res, { token: await issueToken(login.data.userId), userId: login.data.userId });
+  const updated = await playerComp.setEmailPassword(email, parsed.data.password);
+  if (!updated.ok) return sendErr(res, 'Unable to update password', 500);
+  sendSucc(res, { reset: true });
 });
 
 async function startWechat(req: MiniappRequest | Request, res: Response, stateData: WechatState): Promise<void> {

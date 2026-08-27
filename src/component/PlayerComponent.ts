@@ -10,6 +10,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { AccountLevel } from '../shared/enum/AccountLevel';
 import { getAccessToken } from '../util/wxAccessToken';
 import https from 'https';
+import {
+  hashWebPassword,
+  verifyWebPassword,
+} from '../apps/mandis/miniapp/services/webAuthPassword';
 
 type PlayerDTO = {
   userId: string;
@@ -366,6 +370,43 @@ export class PlayerComponent implements IBaseComponent {
     } catch (err) {
       gameLogger.error('loginByEmail exception, email=', email, err);
       return { ok: false, error: 'EmailLoginException' };
+    }
+  }
+
+  /**
+   * 使用邮箱密码登录。接口层始终返回统一错误，避免泄露账号是否存在。
+   */
+  async loginByEmailPassword(email: string, password: string): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const player = await Player.findOne({ email }).select('+webPasswordHash').exec();
+      if (!player?.webPasswordHash) return { ok: false, error: 'InvalidCredentials' };
+      const verified = await verifyWebPassword(password, player.webPasswordHash);
+      if (!verified) return { ok: false, error: 'InvalidCredentials' };
+      gameLogger.info('web email password login success', { userId: player.userId });
+      return { ok: true, data: buildPlayerData(player) };
+    } catch (err) {
+      gameLogger.error('loginByEmailPassword exception', { error: err });
+      return { ok: false, error: 'EmailPasswordLoginException' };
+    }
+  }
+
+  /**
+   * 邮箱所有权验证通过后设置密码；尚无账号时同时创建已验证邮箱账号。
+   */
+  async setEmailPassword(email: string, password: string): Promise<PlayerResult> {
+    const login = await this.loginByEmail(email);
+    if (!login.ok) return login;
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const webPasswordHash = await hashWebPassword(password);
+      await Player.updateOne({ userId: login.data.userId }, { webPasswordHash }).exec();
+      gameLogger.info('web email password updated', { userId: login.data.userId });
+      return login;
+    } catch (err) {
+      gameLogger.error('setEmailPassword exception', { error: err });
+      return { ok: false, error: 'SetEmailPasswordException' };
     }
   }
 

@@ -42,17 +42,24 @@ export function verifySms(phone: string, code: string): Promise<AuthResult> {
   });
 }
 
-export function requestEmail(email: string, locale: string): Promise<{ expiresInSeconds: number }> {
-  return apiRequest('/web-auth/email/send', {
+export function loginWithEmailPassword(email: string, password: string): Promise<AuthResult> {
+  return apiRequest('/web-auth/email/password/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function requestPasswordReset(email: string, locale: string): Promise<{ expiresInSeconds: number }> {
+  return apiRequest('/web-auth/email/password/reset/send', {
     method: 'POST',
     body: JSON.stringify({ email, locale }),
   });
 }
 
-export function verifyEmail(email: string, code: string): Promise<AuthResult> {
-  return apiRequest('/web-auth/email/verify', {
+export function resetEmailPassword(email: string, code: string, password: string): Promise<{ reset: boolean }> {
+  return apiRequest('/web-auth/email/password/reset', {
     method: 'POST',
-    body: JSON.stringify({ email, code }),
+    body: JSON.stringify({ email, code, password }),
   });
 }
 
