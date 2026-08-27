@@ -14,13 +14,21 @@ logStep() {
 }
 
 installDependencies() {
-  if [[ ! -f "$ART_WEB_DIR/node_modules/.package-lock.json" ]] ||
-    ! diff -q "$ART_WEB_DIR/package-lock.json" "$ART_WEB_DIR/node_modules/.package-lock.json" >/dev/null 2>&1; then
-    logStep '1/5 安装 Mandis 网页端依赖'
-    npm --prefix "$ART_WEB_DIR" ci --prefer-offline
+  local dependencyHash
+  local installedHash=''
+  local stampFile="$ART_WEB_DIR/node_modules/.mandis-web-package-lock.sha256"
+
+  dependencyHash="$(shasum -a 256 "$ART_WEB_DIR/package-lock.json" | awk '{print $1}')"
+  if [[ -f "$stampFile" ]]; then
+    installedHash="$(<"$stampFile")"
+  fi
+  if [[ "$dependencyHash" == "$installedHash" ]]; then
+    logStep '1/5 依赖未变化，跳过安装'
     return
   fi
-  logStep '1/5 依赖未变化，跳过安装'
+  logStep '1/5 安装 Mandis 网页端依赖'
+  npm --prefix "$ART_WEB_DIR" ci --prefer-offline
+  printf '%s\n' "$dependencyHash" > "$stampFile"
 }
 
 buildFrontend() {
