@@ -5,7 +5,7 @@ const ANALYSIS_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_ANALYSIS_ESTIMATE_SECONDS = 10;
 const MAX_PENDING_ANALYSIS_PERCENT = 95;
 
-export type AuthResult = { token: string; userId: string };
+export type AuthResult = { userId: string };
 
 export type AuthProfile = {
   userId: string;
@@ -65,6 +65,10 @@ export function resetEmailPassword(email: string, code: string, password: string
 
 export function getAuthProfile(token: string): Promise<AuthProfile> {
   return apiRequest('/web-auth/profile', {}, token);
+}
+
+export function logoutWebSession(): Promise<{ signedOut: boolean }> {
+  return apiRequest('/web-auth/logout', { method: 'POST' });
 }
 
 export function requestBoundPhone(phone: string, token: string): Promise<{ expiresInSeconds: number }> {

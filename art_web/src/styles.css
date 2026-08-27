@@ -87,6 +87,40 @@ h1,
   position: relative;
   z-index: 1;
 }
+.session-restore {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  justify-content: center;
+  min-height: 100dvh;
+  position: relative;
+  z-index: 1;
+}
+.session-restore .brand-mark {
+  position: static;
+}
+.session-restore p {
+  color: #625d5a;
+  font-size: 14px;
+  margin: 0;
+}
+.session-restore__spinner {
+  animation: session-spin 900ms linear infinite;
+  border: 2px solid rgba(48, 154, 153, 0.22);
+  border-radius: 50%;
+  border-top-color: #309a99;
+  height: 28px;
+  width: 28px;
+}
+@keyframes session-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-restore__spinner {
+    animation: none;
+  }
+}
 .login-layout {
   align-items: center;
   display: grid;

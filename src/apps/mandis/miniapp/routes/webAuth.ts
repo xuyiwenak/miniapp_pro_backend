@@ -9,11 +9,18 @@ import type { PlayerComponent } from '../../../../component/PlayerComponent';
 import {
   consumeExpiringValue,
   reserveExpiringKey,
+  revokeToken,
   saveExpiringValue,
 } from '../../../../auth/RedisTokenStore';
 import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/middleware/auth';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
 import { issueToken } from '../../../../shared/miniapp/tokenStore';
+import {
+  clearWebSessionCookie,
+  getWebSessionTtlSeconds,
+  readWebSessionToken,
+  setWebSessionCookie,
+} from '../../../../shared/miniapp/webSession';
 import { gameLogger as logger } from '../../../../util/logger';
 import { consumeAuthChallenge, createAuthChallenge, normalizeEmail } from '../services/webAuthChallenge';
 import { sendVerificationEmail } from '../services/emailTemplate';
@@ -71,6 +78,16 @@ function getPlayerOrRespond(res: Response): PlayerComponent | undefined {
   const playerComp = getPlayerComponent();
   if (!playerComp) sendErr(res, 'Server not ready', 503);
   return playerComp;
+}
+
+async function issueWebSession(res: Response, userId: string): Promise<void> {
+  const token = await issueToken(userId, getWebSessionTtlSeconds());
+  setWebSessionCookie(res, token);
+}
+
+async function sendLoginSuccess(res: Response, userId: string): Promise<void> {
+  await issueWebSession(res, userId);
+  sendSucc(res, { userId });
 }
 
 async function sendAliyunSms(phone: string, code: string): Promise<void> {
@@ -166,7 +183,7 @@ router.post('/sms/verify', async (req: Request, res: Response) => {
   const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
   const login = await playerComp.loginByPhone(parsed.data.phone);
   if (!login.ok) return sendErr(res, 'Unable to sign in', 500);
-  sendSucc(res, { token: await issueToken(login.data.userId), userId: login.data.userId });
+  await sendLoginSuccess(res, login.data.userId);
 });
 
 /** POST /web-auth/email/password/login - 邮箱密码登录。 */
@@ -179,7 +196,7 @@ router.post('/email/password/login', async (req: Request, res: Response) => {
   const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
   const login = await playerComp.loginByEmailPassword(email, parsed.data.password);
   if (!login.ok) return sendErr(res, 'Email address or password is incorrect', 401);
-  sendSucc(res, { token: await issueToken(login.data.userId), userId: login.data.userId });
+  await sendLoginSuccess(res, login.data.userId);
 });
 
 /** POST /web-auth/email/password/reset - 验证邮箱后设置新密码。 */
@@ -246,7 +263,8 @@ router.get('/wechat/callback', async (req: Request, res: Response) => {
     const login = await playerComp.loginByWechatIdentity(identity.openid, identity.unionid);
     if (!login.ok) return sendErr(res, 'Unable to sign in', 500);
     const ticket = randomBytes(24).toString('hex');
-    await saveExpiringValue(`web:login:ticket:${ticket}`, await issueToken(login.data.userId), LOGIN_TICKET_TTL_SECONDS);
+    const token = await issueToken(login.data.userId, getWebSessionTtlSeconds());
+    await saveExpiringValue(`web:login:ticket:${ticket}`, token, LOGIN_TICKET_TTL_SECONDS);
     const returnUrl = new URL(getRequiredEnv('WEB_AUTH_RETURN_URL'));
     returnUrl.searchParams.set('login_ticket', ticket);
     res.redirect(returnUrl.toString());
@@ -261,13 +279,22 @@ router.post('/wechat/exchange', async (req: Request, res: Response) => {
   if (!/^[a-f0-9]{48}$/.test(ticket)) return sendErr(res, 'Invalid login ticket', 400);
   const token = await consumeExpiringValue(`web:login:ticket:${ticket}`);
   if (!token) return sendErr(res, 'Login ticket is invalid or expired', 401);
-  sendSucc(res, { token });
+  setWebSessionCookie(res, token);
+  sendSucc(res, { exchanged: true });
+});
+
+router.post('/logout', async (req: Request, res: Response) => {
+  const token = readWebSessionToken(req);
+  if (token) await revokeToken(token);
+  clearWebSessionCookie(res);
+  sendSucc(res, { signedOut: true });
 });
 
 router.get('/profile', authMiddleware, async (req: MiniappRequest, res: Response) => {
   const playerComp = getPlayerOrRespond(res); if (!playerComp || !req.userId) return;
   const profile = await playerComp.getAuthProfile(req.userId);
   if (!profile.ok) return sendErr(res, 'Profile not found', 404);
+  if (!readWebSessionToken(req)) await issueWebSession(res, req.userId);
   sendSucc(res, profile.data);
 });
 

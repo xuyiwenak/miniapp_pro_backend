@@ -18,7 +18,7 @@ type EmailView = 'login' | 'reset';
 type LoginPageProps = {
   locale: Locale;
   onLocaleChange: (locale: Locale) => void;
-  onLogin: (token: string) => void;
+  onLogin: () => void;
 };
 
 type EmailFormProps = {
@@ -242,11 +242,17 @@ export function LoginPage({ locale, onLocaleChange, onLogin }: LoginPageProps) {
   }
 
   function completeEmailLogin(email: string, password: string): Promise<void> {
-    return runAction(async () => onLogin((await loginWithEmailPassword(email, password)).token));
+    return runAction(async () => {
+      await loginWithEmailPassword(email, password);
+      onLogin();
+    });
   }
 
   function completePhoneLogin(phone: string, code: string): Promise<void> {
-    return runAction(async () => onLogin((await verifySms(phone, code)).token));
+    return runAction(async () => {
+      await verifySms(phone, code);
+      onLogin();
+    });
   }
 
   function sendResetCode(email: string): Promise<void> {

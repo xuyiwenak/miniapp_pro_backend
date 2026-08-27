@@ -17,7 +17,11 @@ WECHAT_WEB_APP_ID=微信开放平台网站应用AppID
 WECHAT_WEB_APP_SECRET=微信开放平台网站应用AppSecret
 WECHAT_WEB_REDIRECT_URI=https://www.starryspark.com.cn/api/web-auth/wechat/callback
 WEB_AUTH_RETURN_URL=https://www.starryspark.com.cn/art/
+WEB_SESSION_TTL_SECONDS=2592000
 ```
+
+网页登录使用服务端可撤销会话和 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie。默认保持 30 天，退出登录或
+服务端会话过期后立即失效；可通过 `WEB_SESSION_TTL_SECONDS` 调整时长。
 
 微信开放平台的网站应用需将 `www.starryspark.com.cn` 配为授权回调域名。小程序和网站应用需绑定在同一开放平台账号下，微信才会返回可用于跨端关联的 UnionID。
 

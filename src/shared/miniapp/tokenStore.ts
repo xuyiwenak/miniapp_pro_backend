@@ -5,8 +5,8 @@ export function createToken(): string {
   return randomBytes(24).toString('hex');
 }
 
-export async function issueToken(userId: string): Promise<string> {
+export async function issueToken(userId: string, ttlSeconds?: number): Promise<string> {
   const token = createToken();
-  await saveTokenUserId(token, userId);
+  await saveTokenUserId(token, userId, ttlSeconds);
   return token;
 }
