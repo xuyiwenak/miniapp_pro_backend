@@ -12,6 +12,7 @@ import { gameLogger as logger } from '../../../../util/logger';
 const router = Router();
 const OSS_PREFIX = 'oss://';
 const SHARE_IMAGE_EXPIRE_SECONDS = 30 * 24 * 60 * 60; // 30天
+const PUBLIC_WORK_FILTER = { status: 'published', 'healing.isPublic': true } as const;
 
 const CARDS = [
   { url: '/static/home/card0.png', desc: '少年,星空与梦想', tags: [{ text: 'AI绘画', theme: 'primary' }, { text: '版权素材', theme: 'success' }] },
@@ -59,10 +60,10 @@ function mapWorkToCard(
 router.get('/cards', async (_req: Request, res: Response) => {
   try {
     const Work = getWorkModel();
-    let works = (await Work.find({ status: 'published', featured: true })
+    let works = (await Work.find({ ...PUBLIC_WORK_FILTER, featured: true })
       .sort({ createdAt: -1 }).limit(20).lean().exec()) as IWork[];
     if (works.length === 0) {
-      works = (await Work.find({ status: 'published' })
+      works = (await Work.find(PUBLIC_WORK_FILTER)
         .sort({ createdAt: -1 }).limit(20).lean().exec()) as IWork[];
     }
     const authorIds = works.filter((w) => w.authorId).map((w) => w.authorId as string);

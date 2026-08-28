@@ -68,7 +68,7 @@ const HealingDataSubSchema = new Schema<IHealingData>(
       enum: ['pending', 'success', 'failed'],
       default: 'pending',
     },
-    isPublic: { type: Boolean, default: true },
+    isPublic: { type: Boolean, default: false },
     submittedAt: { type: Date },
     analyzedAt: { type: Date },
     cozeRunId: { type: String },
@@ -121,3 +121,4 @@ export const WorkSchema = new Schema<IWork>(
 );
 
 WorkSchema.index({ authorId: 1, status: 1, createdAt: -1 });
+WorkSchema.index({ status: 1, 'healing.isPublic': 1, featured: 1, createdAt: -1 });
