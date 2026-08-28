@@ -142,7 +142,41 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
   };
 }
 
-export { buildHealingResponse };
+function resolveWorkCoverUrl(work: IWork): string {
+  const rawCoverUrl = work.images?.[0]?.url ?? '/static/home/card0.png';
+  return rawCoverUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawCoverUrl) : rawCoverUrl;
+}
+
+function buildHealingReportResponse(work: IWork, viewerId?: string): Record<string, unknown> {
+  const legacyResponse = buildHealingResponse(work, viewerId);
+  const healing = work.healing;
+  const isOwner = Boolean(work.authorId && viewerId && work.authorId === viewerId);
+
+  if (!healing || (!healing.isPublic && !isOwner)) return legacyResponse;
+
+  const dominant = pickDominantEmotion(healing.scores);
+  return {
+    ...legacyResponse,
+    workId: work.workId,
+    coverUrl: resolveWorkCoverUrl(work),
+    desc: work.desc ?? '',
+    createdAt: healing.analyzedAt ?? work.updatedAt ?? work.createdAt,
+    isPublic: healing.isPublic,
+    status: healing.status,
+    scores: healing.scores,
+    dominantEmotion: dominant.key,
+    dominantEmotionLabel: dominant.label,
+    dominantEmotionScore: dominant.value,
+    summary: healing.summary,
+    colorAnalysis: healing.colorAnalysis,
+    compositionReport: healing.compositionReport,
+    lineAnalysis: healing.lineAnalysis,
+    suggestion: healing.suggestion,
+    keyColors: healing.keyColors,
+  };
+}
+
+export { buildHealingResponse, buildHealingReportResponse };
 
 // ========== Helper Functions for /analyze Route ==========
 
@@ -605,7 +639,7 @@ router.get('/report', authMiddleware, async (req: MiniappRequest, res: Response)
     }
 
     const viewerId = req.userId;
-    const healingResp = buildHealingResponse(work, viewerId);
+    const healingResp = buildHealingReportResponse(work, viewerId);
     sendSucc(res, healingResp);
   } catch (err) {
     logRequestError('healing.ts:report:error', 'healing report error', {
@@ -623,10 +657,7 @@ router.get('/report', authMiddleware, async (req: MiniappRequest, res: Response)
 
 function mapHealingListItem(w: IWork & { healing: IHealingData }): Record<string, unknown> {
   const healing = w.healing;
-  const cover = w.images?.[0];
   const dominant = pickDominantEmotion(healing.scores);
-  const rawCoverUrl = cover?.url ?? '/static/home/card0.png';
-  const coverUrl = rawCoverUrl && rawCoverUrl.startsWith(OSS_PREFIX) ? resolveImageUrl(rawCoverUrl) : rawCoverUrl;
   return {
     workId: w.workId,
     isPublic: healing.isPublic,
@@ -635,7 +666,7 @@ function mapHealingListItem(w: IWork & { healing: IHealingData }): Record<string
     dominantEmotion: dominant.key,
     dominantEmotionLabel: dominant.label,
     dominantEmotionScore: dominant.value,
-    coverUrl,
+    coverUrl: resolveWorkCoverUrl(w),
     desc: w.desc ?? '',
     tags: w.tags ?? [],
     createdAt: healing.analyzedAt ?? w.updatedAt,
