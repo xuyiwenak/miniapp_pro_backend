@@ -163,6 +163,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/includes:/etc/nginx/includes:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./nginx/certbot/www:/var/www/certbot:ro
       - ./nginx/logs:/var/log/nginx
       - ./static:/usr/share/nginx/html/static:ro
