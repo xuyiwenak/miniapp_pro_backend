@@ -36,6 +36,7 @@ const PASSWORD_LOGIN_RATE_SECONDS = 2;
 const PHONE_PATTERN = /^1\d{10}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_LOGIN_PURPOSE = 'phone-login';
+const EMAIL_LOGIN_PURPOSE = 'email-login';
 const EMAIL_PASSWORD_RESET_PURPOSE = 'email-password-reset';
 const PHONE_BIND_PURPOSE = 'phone-bind';
 const EMAIL_BIND_PURPOSE = 'email-bind';
@@ -171,6 +172,7 @@ async function sendEmailCode(req: Request, res: Response, purpose: string): Prom
 }
 
 router.post('/sms/send', (req, res) => sendPhoneCode(req, res, PHONE_LOGIN_PURPOSE));
+router.post('/email/send', (req, res) => sendEmailCode(req, res, EMAIL_LOGIN_PURPOSE));
 router.post('/email/password/reset/send', (req, res) => {
   return sendEmailCode(req, res, EMAIL_PASSWORD_RESET_PURPOSE);
 });
@@ -182,6 +184,18 @@ router.post('/sms/verify', async (req: Request, res: Response) => {
   if (!verified) return sendErr(res, 'Verification code is invalid or expired', 401);
   const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
   const login = await playerComp.loginByPhone(parsed.data.phone);
+  if (!login.ok) return sendErr(res, 'Unable to sign in', 500);
+  await sendLoginSuccess(res, login.data.userId);
+});
+
+router.post('/email/verify', async (req: Request, res: Response) => {
+  const parsed = EmailVerifySchema.safeParse(req.body);
+  if (!parsed.success) return sendErr(res, 'Invalid email address or code', 400);
+  const email = normalizeEmail(parsed.data.email);
+  const verified = await consumeAuthChallenge('email', EMAIL_LOGIN_PURPOSE, email, parsed.data.code);
+  if (!verified) return sendErr(res, 'Verification code is invalid or expired', 401);
+  const playerComp = getPlayerOrRespond(res); if (!playerComp) return;
+  const login = await playerComp.loginByEmail(email);
   if (!login.ok) return sendErr(res, 'Unable to sign in', 500);
   await sendLoginSuccess(res, login.data.userId);
 });
