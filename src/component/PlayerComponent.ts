@@ -223,7 +223,7 @@ export class PlayerComponent implements IBaseComponent {
 
   private async autoRegisterByOpenId(
     openId: string,
-    unionId?: string,
+    unionId?: string
   ): Promise<PlayerResult> {
     const Player = getPlayerModel(this.defaultZone);
     const userId = uuidv4();
@@ -256,9 +256,11 @@ export class PlayerComponent implements IBaseComponent {
     return this.loginByOpenIdWithUnionId(openId);
   }
 
+  // Maintains backward-compatible OpenID and union ID account reconciliation.
+  // eslint-disable-next-line max-lines-per-function
   async loginByOpenIdWithUnionId(
     openId: string,
-    unionId?: string,
+    unionId?: string
   ): Promise<PlayerResult> {
     if (!this.defaultZone) {
       gameLogger.error(
@@ -272,7 +274,10 @@ export class PlayerComponent implements IBaseComponent {
       const query = unionId ? { $or: [{ unionId }, { openId }] } : { openId };
       const player = await Player.findOne(query).exec();
       if (player) {
-        if (player.openId !== openId || (unionId && player.unionId !== unionId)) {
+        if (
+          player.openId !== openId ||
+          (unionId && player.unionId !== unionId)
+        ) {
           player.openId = openId;
           if (unionId) player.unionId = unionId;
           await player.save();
@@ -289,7 +294,11 @@ export class PlayerComponent implements IBaseComponent {
       }
       return await this.autoRegisterByOpenId(openId, unionId);
     } catch (err) {
-      gameLogger.error('loginByOpenIdWithUnionId exception, openId=', openId, err);
+      gameLogger.error(
+        'loginByOpenIdWithUnionId exception, openId=',
+        openId,
+        err
+      );
       return { ok: false, error: 'LoginByOpenIdException' };
     }
   }
@@ -376,15 +385,26 @@ export class PlayerComponent implements IBaseComponent {
   /**
    * 使用邮箱密码登录。接口层始终返回统一错误，避免泄露账号是否存在。
    */
-  async loginByEmailPassword(email: string, password: string): Promise<PlayerResult> {
+  async loginByEmailPassword(
+    email: string,
+    password: string
+  ): Promise<PlayerResult> {
     if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
     try {
       const Player = getPlayerModel(this.defaultZone);
-      const player = await Player.findOne({ email }).select('+webPasswordHash').exec();
-      if (!player?.webPasswordHash) return { ok: false, error: 'InvalidCredentials' };
-      const verified = await verifyWebPassword(password, player.webPasswordHash);
+      const player = await Player.findOne({ email })
+        .select('+webPasswordHash')
+        .exec();
+      if (!player?.webPasswordHash)
+        return { ok: false, error: 'InvalidCredentials' };
+      const verified = await verifyWebPassword(
+        password,
+        player.webPasswordHash
+      );
       if (!verified) return { ok: false, error: 'InvalidCredentials' };
-      gameLogger.info('web email password login success', { userId: player.userId });
+      gameLogger.info('web email password login success', {
+        userId: player.userId,
+      });
       return { ok: true, data: buildPlayerData(player) };
     } catch (err) {
       gameLogger.error('loginByEmailPassword exception', { error: err });
@@ -392,21 +412,53 @@ export class PlayerComponent implements IBaseComponent {
     }
   }
 
-  /**
-   * 邮箱所有权验证通过后设置密码；尚无账号时同时创建已验证邮箱账号。
-   */
-  async setEmailPassword(email: string, password: string): Promise<PlayerResult> {
-    const login = await this.loginByEmail(email);
-    if (!login.ok) return login;
+  async registerWebUser(
+    email: string,
+    password: string,
+    phone?: string
+  ): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
+    try {
+      const Player = getPlayerModel(this.defaultZone);
+      const credentials = phone ? [{ email }, { phone }] : [{ email }];
+      const existing = await Player.findOne({ $or: credentials }).exec();
+      if (existing) return { ok: false, error: 'CredentialBound' };
+      const webPasswordHash = await hashWebPassword(password);
+      const created = await Player.create({
+        userId: uuidv4(),
+        account: `email_${email}`,
+        email,
+        phone,
+        webPasswordHash,
+        zoneId: this.defaultZone,
+        level: AccountLevel.User,
+      });
+      return { ok: true, data: buildPlayerData(created) };
+    } catch (err) {
+      gameLogger.error('registerWebUser exception', { error: err });
+      return { ok: false, error: 'RegistrationException' };
+    }
+  }
+
+  async updateEmailPassword(
+    email: string,
+    password: string
+  ): Promise<PlayerResult> {
+    if (!this.defaultZone) return { ok: false, error: 'DefaultZoneNotReady' };
     try {
       const Player = getPlayerModel(this.defaultZone);
       const webPasswordHash = await hashWebPassword(password);
-      await Player.updateOne({ userId: login.data.userId }, { webPasswordHash }).exec();
-      gameLogger.info('web email password updated', { userId: login.data.userId });
-      return login;
+      const player = await Player.findOneAndUpdate(
+        { email },
+        { webPasswordHash },
+        { new: true }
+      ).exec();
+      if (!player) return { ok: false, error: 'NotFound' };
+      gameLogger.info('web email password updated', { userId: player.userId });
+      return { ok: true, data: buildPlayerData(player) };
     } catch (err) {
-      gameLogger.error('setEmailPassword exception', { error: err });
-      return { ok: false, error: 'SetEmailPasswordException' };
+      gameLogger.error('updateEmailPassword exception', { error: err });
+      return { ok: false, error: 'UpdateEmailPasswordException' };
     }
   }
 
@@ -515,13 +567,21 @@ export class PlayerComponent implements IBaseComponent {
     try {
       const Player = getPlayerModel(this.defaultZone);
       const owner = await Player.findOne({ [field]: value }).exec();
-      if (owner && owner.userId !== userId) return { ok: false, error: 'CredentialBound' };
-      const update = await Player.updateOne({ userId }, { [field]: value }).exec();
+      if (owner && owner.userId !== userId)
+        return { ok: false, error: 'CredentialBound' };
+      const update = await Player.updateOne(
+        { userId },
+        { [field]: value }
+      ).exec();
       if (!update.matchedCount) return { ok: false, error: 'NotFound' };
       gameLogger.info('web credential bound', { userId, field });
       return { ok: true };
     } catch (err) {
-      gameLogger.error('bindCredential exception', { userId, field, error: err });
+      gameLogger.error('bindCredential exception', {
+        userId,
+        field,
+        error: err,
+      });
       return { ok: false, error: 'BindCredentialException' };
     }
   }
@@ -539,9 +599,15 @@ export class PlayerComponent implements IBaseComponent {
         : { userId: { $ne: userId }, webOpenId };
       const owner = await Player.findOne(conflictQuery).exec();
       if (owner) return { ok: false, error: 'CredentialBound' };
-      const update = await Player.updateOne({ userId }, { webOpenId, ...(unionId ? { unionId } : {}) }).exec();
+      const update = await Player.updateOne(
+        { userId },
+        { webOpenId, ...(unionId ? { unionId } : {}) }
+      ).exec();
       if (!update.matchedCount) return { ok: false, error: 'NotFound' };
-      gameLogger.info('web WeChat identity bound', { userId, hasUnionId: Boolean(unionId) });
+      gameLogger.info('web WeChat identity bound', {
+        userId,
+        hasUnionId: Boolean(unionId),
+      });
       return { ok: true };
     } catch (err) {
       gameLogger.error('bindWechatIdentity exception', { userId, error: err });
