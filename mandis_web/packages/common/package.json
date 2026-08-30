@@ -1,0 +1,10 @@
+{
+  "name": "@mandis/common",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./classroom-types": "./src/classroomTypes.ts",
+    "./classroom-copy": "./src/classroomCopy.ts"
+  }
+}

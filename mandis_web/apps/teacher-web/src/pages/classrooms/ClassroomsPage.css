@@ -1,0 +1,200 @@
+.classrooms-page {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100vh - 112px);
+  border: 1px solid #e8e4dc;
+  background: #fffdf9;
+}
+
+.classrooms-page__list {
+  border-right: 1px solid #e8e4dc;
+  background: #f7f3ec;
+}
+
+.classrooms-page__list > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 20px;
+}
+
+.classrooms-page__list h4 {
+  margin: 0;
+}
+.classrooms-page__list header div {
+  display: grid;
+  gap: 3px;
+}
+.classrooms-page__list .ant-list-item {
+  cursor: pointer;
+  padding: 16px 20px;
+  transition: background 180ms ease;
+}
+.classrooms-page__list .ant-list-item:hover {
+  background: #efeae1;
+}
+.classrooms-page__list .ant-list-item.is-selected {
+  background: #e2eeea;
+  border-inline-end: 3px solid #2f8f88;
+}
+.classrooms-page__list .ant-list-item > div {
+  display: grid;
+  gap: 4px;
+}
+.classrooms-page__list .ant-list-item span,
+.classrooms-page__list .ant-list-item small {
+  color: #716b64;
+}
+
+.classrooms-page__detail {
+  padding: 30px;
+  min-width: 0;
+}
+.classroom-dashboard {
+  display: grid;
+  gap: 26px;
+}
+.classroom-dashboard__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.classroom-dashboard__header h3 {
+  margin: 3px 0 8px;
+}
+
+.classroom-join-strip {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #ded8ce;
+  background: #fffaf3;
+}
+.classroom-join-strip img {
+  width: 132px;
+  display: block;
+}
+.classroom-join-strip > div:last-child {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.classroom-live-metrics {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+  border-block: 1px solid #e5dfd6;
+}
+.classroom-live-metrics div {
+  padding: 18px;
+  border-inline-end: 1px solid #e5dfd6;
+}
+.classroom-live-metrics div:last-child {
+  border: 0;
+}
+.classroom-live-metrics span {
+  display: block;
+  color: #777069;
+  font-size: 12px;
+}
+.classroom-live-metrics strong {
+  font: 600 30px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #273b3a;
+}
+
+.classroom-stage-rail {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(80px, 1fr));
+  overflow-x: auto;
+}
+.classroom-stage-rail div {
+  min-width: 84px;
+  padding: 15px 10px;
+  border-top: 3px solid #9ebdb8;
+  animation: stage-in 320ms ease both;
+  animation-delay: calc(var(--stage-index) * 45ms);
+}
+.classroom-stage-rail span {
+  display: block;
+  color: #716b64;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.classroom-stage-rail strong {
+  font: 600 24px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.classroom-assessment-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+}
+.classroom-assessment-block {
+  border-top: 1px solid #dcd5cb;
+  padding-top: 18px;
+}
+.classroom-assessment-block > div:first-child {
+  display: flex;
+  justify-content: space-between;
+}
+.classroom-assessment-block dl {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 12px 0 0;
+}
+.classroom-assessment-block dl div {
+  padding: 9px;
+  border-inline-start: 1px solid #ebe6de;
+}
+.classroom-assessment-block dt {
+  color: #777069;
+  font-size: 11px;
+}
+.classroom-assessment-block dd {
+  margin: 4px 0 0;
+  font: 600 18px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.classroom-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .classrooms-page {
+    grid-template-columns: 1fr;
+  }
+  .classrooms-page__list {
+    border-right: 0;
+    border-bottom: 1px solid #e8e4dc;
+  }
+  .classroom-dashboard__header {
+    flex-direction: column;
+  }
+  .classroom-live-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .classroom-assessment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .classroom-stage-rail div {
+    animation: none;
+  }
+}

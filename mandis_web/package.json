@@ -1,0 +1,18 @@
+{
+  "name": "mandis-web-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "overrides": {
+    "react-is": "18.3.1"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @mandis/creator-web && npm run build --workspace @mandis/student-h5 && npm run build --workspace @mandis/teacher-web",
+    "build:creator": "npm run build --workspace @mandis/creator-web",
+    "build:student": "npm run build --workspace @mandis/student-h5",
+    "build:teacher": "npm run build --workspace @mandis/teacher-web",
+    "dev:creator": "npm run dev --workspace @mandis/creator-web",
+    "dev:student": "npm run dev --workspace @mandis/student-h5",
+    "dev:teacher": "npm run dev --workspace @mandis/teacher-web"
+  }
+}

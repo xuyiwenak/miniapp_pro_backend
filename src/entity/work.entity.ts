@@ -45,6 +45,11 @@ export interface IWork {
   featured?: boolean;
   onWall?: boolean;
   healing?: IHealingData | null;
+  classroomId?: string;
+  participantId?: string;
+  uploaderRole?: 'student' | 'teacher';
+  uploadReason?: string;
+  contentHash?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -116,9 +121,16 @@ export const WorkSchema = new Schema<IWork>(
     featured: { type: Boolean, default: false, index: true },
     onWall: { type: Boolean, default: false, index: true },
     healing: { type: HealingDataSubSchema, default: null },
+    classroomId: { type: String, index: true },
+    participantId: { type: String, index: true },
+    uploaderRole: { type: String, enum: ['student', 'teacher'] },
+    uploadReason: { type: String },
+    contentHash: { type: String },
   },
   { timestamps: true },
 );
 
 WorkSchema.index({ authorId: 1, status: 1, createdAt: -1 });
 WorkSchema.index({ status: 1, 'healing.isPublic': 1, featured: 1, createdAt: -1 });
+WorkSchema.index({ classroomId: 1, participantId: 1 }, { unique: true, sparse: true });
+WorkSchema.index({ classroomId: 1, contentHash: 1 }, { unique: true, sparse: true });

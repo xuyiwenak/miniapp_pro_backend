@@ -16,6 +16,15 @@ import {
   EmailTemplateConfigSchema,
   type IEmailTemplateConfig,
 } from '../../apps/mandis/entity/emailTemplateConfig.entity';
+import { ClassroomSchema, type IClassroom } from '../../apps/mandis/entity/classroom.entity';
+import {
+  ClassroomParticipationSchema,
+  type IClassroomParticipation,
+} from '../../apps/mandis/entity/classroomParticipation.entity';
+import {
+  TeacherProfileSchema,
+  type ITeacherProfile,
+} from '../../apps/mandis/entity/teacherProfile.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -25,6 +34,9 @@ class GlobalModelManager {
   private mandisAdminModel!: Model<IMandisAdmin>;
   private userTipsModel!: Model<IUserTips>;
   private emailTemplateConfigModel!: Model<IEmailTemplateConfig>;
+  private classroomModel!: Model<IClassroom>;
+  private classroomParticipationModel!: Model<IClassroomParticipation>;
+  private teacherProfileModel!: Model<ITeacherProfile>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -52,6 +64,17 @@ class GlobalModelManager {
       EmailTemplateConfigSchema,
     );
     this.emailTemplateConfigModel.createIndexes().catch(() => {});
+
+    this.classroomModel = this.connection.model<IClassroom>('Classroom', ClassroomSchema);
+    this.classroomModel.createIndexes().catch(() => {});
+
+    this.classroomParticipationModel = this.connection.model<IClassroomParticipation>(
+      'ClassroomParticipation',
+      ClassroomParticipationSchema,
+    );
+    this.classroomParticipationModel.createIndexes().catch(() => {});
+    this.teacherProfileModel = this.connection.model<ITeacherProfile>('TeacherProfile', TeacherProfileSchema);
+    this.teacherProfileModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -76,6 +99,18 @@ class GlobalModelManager {
 
   public getEmailTemplateConfigModel(): Model<IEmailTemplateConfig> {
     return this.emailTemplateConfigModel;
+  }
+
+  public getClassroomModel(): Model<IClassroom> {
+    return this.classroomModel;
+  }
+
+  public getClassroomParticipationModel(): Model<IClassroomParticipation> {
+    return this.classroomParticipationModel;
+  }
+
+  public getTeacherProfileModel(): Model<ITeacherProfile> {
+    return this.teacherProfileModel;
   }
 
   public async stopConnection() {
@@ -123,4 +158,16 @@ export function getUserTipsModel(): Model<IUserTips> {
 
 export function getEmailTemplateConfigModel(): Model<IEmailTemplateConfig> {
   return getGlobalModelManager().getEmailTemplateConfigModel();
+}
+
+export function getClassroomModel(): Model<IClassroom> {
+  return getGlobalModelManager().getClassroomModel();
+}
+
+export function getClassroomParticipationModel(): Model<IClassroomParticipation> {
+  return getGlobalModelManager().getClassroomParticipationModel();
+}
+
+export function getTeacherProfileModel(): Model<ITeacherProfile> {
+  return getGlobalModelManager().getTeacherProfileModel();
 }

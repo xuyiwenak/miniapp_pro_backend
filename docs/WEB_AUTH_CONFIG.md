@@ -48,8 +48,10 @@ db.players.aggregate([
 ```bash
 docker compose up -d mandis_app
 cd /path/to/art_theroy
-./deploy.sh mandis-web
+./deploy.sh creator-web
+./deploy.sh student-h5
+./deploy.sh teacher-web
 ```
 
-Mandis 网页端与 Commander 管理后台使用独立构建目录和线上静态目录。发布网页端不会更新管理后台，
-也不需要重启 Docker 或 reload Nginx。
+Mandis 的个人创作端、学生课堂 H5、教师端和 Commander 管理后台使用独立构建目录及线上静态目录。
+发布任一网页端不会更新其他应用，也不需要重启 Docker 或 reload Nginx。

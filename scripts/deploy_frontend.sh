@@ -9,10 +9,14 @@ readonly DEFAULT_COMMANDER_MESSAGE='chore(deploy): update commander'
 showUsage() {
   printf '%s\n' '用法：'
   printf '%s\n' '  ./deploy.sh commander [commit message]'
-  printf '%s\n' '  ./deploy.sh mandis-web'
+  printf '%s\n' '  ./deploy.sh creator-web'
+  printf '%s\n' '  ./deploy.sh student-h5'
+  printf '%s\n' '  ./deploy.sh teacher-web'
   printf '\n%s\n' '发布单元：'
   printf '%s\n' '  commander   BeGreat + Mandis 共用管理后台'
-  printf '%s\n' '  mandis-web  Mandis 用户网页端'
+  printf '%s\n' '  creator-web  Mandis 个人创作端'
+  printf '%s\n' '  student-h5   学生课堂 H5'
+  printf '%s\n' '  teacher-web  多教师课堂端'
 }
 
 deployCommander() {
@@ -22,8 +26,9 @@ deployCommander() {
 }
 
 deployMandisWeb() {
+  local appName="$1"
   cd "$BACKEND_DIR"
-  exec ./scripts/deploy_web.sh
+  exec ./scripts/deploy_web.sh "$appName"
 }
 
 main() {
@@ -33,8 +38,8 @@ main() {
     commander)
       deployCommander "${2:-}"
       ;;
-    mandis-web)
-      deployMandisWeb
+    creator-web|student-h5|teacher-web)
+      deployMandisWeb "$target"
       ;;
     -h|--help|help|'')
       showUsage

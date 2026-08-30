@@ -1,0 +1,21 @@
+:root {
+  color: #544d49;
+  background: #f7f1e9;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #4dbfb4;
+  outline-offset: 3px;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.brand-mark { color: #403b38; display: inline-flex; align-items: flex-start; gap: 5px; text-decoration: none; }
+.brand-mark__word, h1 { font-family: 'KaiTi', 'STKaiti', 'Songti SC', serif; }
+.brand-mark__word { font-size: 40px; letter-spacing: 0.13em; }
+.brand-mark__flower { color: #c8529a; font-size: 16px; padding-top: 4px; }
+.watercolor-backdrop { background: var(--watercolor-image) center / cover no-repeat; min-height: 100dvh; }

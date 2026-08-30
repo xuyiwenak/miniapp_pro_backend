@@ -167,8 +167,10 @@ services:
       - ./nginx/certbot/www:/var/www/certbot:ro
       - ./nginx/logs:/var/log/nginx
       - ./static:/usr/share/nginx/html/static:ro
-      # 前端 SPA（art_web build 产物）：先在宿主机 build 后放到 art_web_dist/ 目录
-      - ./art_web_dist:/usr/share/nginx/html/app:ro
+      # Mandis 三个独立 Web 应用
+      - ./creator_web_dist:/usr/share/nginx/html/creator:ro
+      - ./student_h5_dist:/usr/share/nginx/html/student:ro
+      - ./teacher_web_dist:/usr/share/nginx/html/teacher:ro
       # 原色有感独立网页端：本地构建后同步到宿主机独立目录，服务器不执行前端构建
       - /root/workspace/miniapp_pro_web_dist:/usr/share/nginx/html/arttherapy:ro
       # Commander 管理后台（commander build 产物）

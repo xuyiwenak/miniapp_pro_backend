@@ -525,6 +525,16 @@ async function runQwenVlAnalysis(work: IWork, jobId: string, userId: string): Pr
   void incrementHealDailyUsage(userId).catch(() => {});
 }
 
+export async function startClassroomArtworkAnalysis(workId: string): Promise<void> {
+  const Work = getWorkModel();
+  const work = (await Work.findOne({ workId }).lean().exec()) as IWork | null;
+  if (!work || work.healing?.status === 'pending' || work.healing?.status === 'success') return;
+  const jobId = randomUUID();
+  await initializePendingHealing(workId, jobId);
+  void runQwenVlAnalysis(work, jobId, 'classroom-research')
+    .catch((err) => handleQwenVlAnalysisError(workId, 'classroom-research', err));
+}
+
 async function handleQwenVlAnalysisError(workId: string, userId: string, err: unknown): Promise<void> {
   const Work = getWorkModel();
   if (err instanceof NotArtworkError) {

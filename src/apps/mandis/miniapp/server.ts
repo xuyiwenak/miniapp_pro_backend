@@ -26,6 +26,9 @@ import mandisAdminAuthRoutes from './routes/mandisAdmin/auth';
 import appRoutes from './routes/app';
 import biRoutes from './routes/bi';
 import userTipsRoutes from './routes/userTips';
+import classroomsPublicRoutes from './routes/classroomsPublic';
+import classroomParticipationRoutes from './routes/classroomParticipation';
+import teacherRoutes from './routes/teacher';
 import { gameLogger } from '../../../util/logger';
 
 const staticDir = path.join(process.cwd(), 'static');
@@ -36,7 +39,8 @@ export function createMiniappApp(): express.Express {
   setupCommonMiniappApp(app, {
     logger: gameLogger,
     logPrefix: 'miniapp',
-    jsonLimit: '10mb',
+    // A 10 MB image expands to roughly 13.4 MB when transported as a base64 data URL.
+    jsonLimit: '15mb',
     cors: sharedHttpOptions.cors
       ? {
         origin: sharedHttpOptions.cors,
@@ -61,6 +65,9 @@ export function createMiniappApp(): express.Express {
   app.use('/dataCenter', dataCenterRoutes);
   app.use('/healing', healingRoutes);
   app.use('/userTips', userTipsRoutes);
+  app.use('/classrooms', classroomsPublicRoutes);
+  app.use('/classroom-participation', classroomParticipationRoutes);
+  app.use('/teacher', teacherRoutes);
   app.use('/mandis-admin/auth', mandisAdminAuthRoutes);
   app.use('/mandis-admin', adminRoutes);
 
