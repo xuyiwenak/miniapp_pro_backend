@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Empty, List, message, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Alert, Button, Empty, List, message, Tooltip, Typography } from 'antd';
+import {
+  DoubleLeftOutlined,
+  DoubleRightOutlined,
+  LogoutOutlined,
+  PlusOutlined,
+  ReadOutlined,
+} from '@ant-design/icons';
 import {
   classroomApi,
   type ClassroomInput,
@@ -10,14 +16,20 @@ import { ClassroomCreateModal } from './classrooms/ClassroomCreateModal';
 import { ClassroomDashboard } from './classrooms/ClassroomDashboard';
 import './classrooms/ClassroomsPage.css';
 
-const { Text, Title } = Typography;
+const { Title } = Typography;
 
-export default function ClassroomsPage() {
+type Props = {
+  teacherDisplayName: string;
+  onLogout: () => void;
+};
+
+export default function ClassroomsPage({ teacherDisplayName, onLogout }: Props) {
   const [classrooms, setClassrooms] = useState<ClassroomRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const loadClassrooms = useCallback(
     async (preferredId?: string): Promise<void> => {
@@ -61,12 +73,12 @@ export default function ClassroomsPage() {
 
   const selected = classrooms.find((item) => item.classId === selectedId);
   return (
-    <main className="classrooms-page">
+    <main className={`classrooms-page${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
       <aside className="classrooms-page__list">
         <header>
-          <div>
+          <div className="classrooms-page__brand">
+            <ReadOutlined />
             <Title level={4}>教育课堂</Title>
-            <Text type="secondary">配置、开放与实时进度</Text>
           </div>
           <Button
             type="primary"
@@ -86,8 +98,8 @@ export default function ClassroomsPage() {
               onClick={() => setSelectedId(item.classId)}
             >
               <div>
+                <i aria-hidden="true" />
                 <strong>{item.sessionTitle}</strong>
-                <span>{item.courseName}</span>
                 <small>
                   {item.classDate} · {item.status}
                 </small>
@@ -95,6 +107,20 @@ export default function ClassroomsPage() {
             </List.Item>
           )}
         />
+        <footer>
+          <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+            <Button
+              type="text"
+              aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+              icon={sidebarCollapsed ? <DoubleRightOutlined /> : <DoubleLeftOutlined />}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            />
+          </Tooltip>
+          {!sidebarCollapsed && <span>{teacherDisplayName}</span>}
+          <Tooltip title="退出">
+            <Button type="text" aria-label="退出" icon={<LogoutOutlined />} onClick={onLogout} />
+          </Tooltip>
+        </footer>
       </aside>
       <section className="classrooms-page__detail">
         {selected ? (

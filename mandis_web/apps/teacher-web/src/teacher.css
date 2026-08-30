@@ -1,9 +1,8 @@
-:root { font-family: Inter, 'PingFang SC', system-ui, sans-serif; color: #263433; background: #f4f1eb; }
+:root { font-family: Inter, 'PingFang SC', system-ui, sans-serif; color: #17212b; background: #fbfcfd; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 1080px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button:focus-visible, a:focus-visible, [role='button']:focus-visible { outline: 2px solid #4dbfb4; outline-offset: 2px; }
 .teacher-loading, .teacher-access { align-items: center; display: flex; justify-content: center; min-height: 100vh; }
 .teacher-access { background: radial-gradient(circle at 20% 10%, #f7dfe7 0, transparent 30%), #edf6f3; }
 .teacher-access__card { width: 460px; }
 .teacher-access__card .ant-segmented, .teacher-access__card .ant-alert { margin-bottom: 22px; }
-.teacher-app__header { align-items: center; background: #fff; border-bottom: 1px solid #dfe7e4; display: flex; gap: 18px; min-height: 64px; padding: 0 28px; }
-.teacher-app__header h4 { margin: 0 auto 0 0; }

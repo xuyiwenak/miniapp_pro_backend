@@ -25,6 +25,10 @@ import {
   TeacherProfileSchema,
   type ITeacherProfile,
 } from '../../apps/mandis/entity/teacherProfile.entity';
+import {
+  TeacherDataExportAuditSchema,
+  type ITeacherDataExportAudit,
+} from '../../apps/mandis/entity/teacherDataExportAudit.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -37,6 +41,7 @@ class GlobalModelManager {
   private classroomModel!: Model<IClassroom>;
   private classroomParticipationModel!: Model<IClassroomParticipation>;
   private teacherProfileModel!: Model<ITeacherProfile>;
+  private teacherDataExportAuditModel!: Model<ITeacherDataExportAudit>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -75,6 +80,11 @@ class GlobalModelManager {
     this.classroomParticipationModel.createIndexes().catch(() => {});
     this.teacherProfileModel = this.connection.model<ITeacherProfile>('TeacherProfile', TeacherProfileSchema);
     this.teacherProfileModel.createIndexes().catch(() => {});
+    this.teacherDataExportAuditModel = this.connection.model<ITeacherDataExportAudit>(
+      'TeacherDataExportAudit',
+      TeacherDataExportAuditSchema,
+    );
+    this.teacherDataExportAuditModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -111,6 +121,10 @@ class GlobalModelManager {
 
   public getTeacherProfileModel(): Model<ITeacherProfile> {
     return this.teacherProfileModel;
+  }
+
+  public getTeacherDataExportAuditModel(): Model<ITeacherDataExportAudit> {
+    return this.teacherDataExportAuditModel;
   }
 
   public async stopConnection() {
@@ -170,4 +184,8 @@ export function getClassroomParticipationModel(): Model<IClassroomParticipation>
 
 export function getTeacherProfileModel(): Model<ITeacherProfile> {
   return getGlobalModelManager().getTeacherProfileModel();
+}
+
+export function getTeacherDataExportAuditModel(): Model<ITeacherDataExportAudit> {
+  return getGlobalModelManager().getTeacherDataExportAuditModel();
 }

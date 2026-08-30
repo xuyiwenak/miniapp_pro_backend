@@ -27,7 +27,12 @@ import {
   isResearchRecordComplete,
 } from '../services/classroomResearch';
 import { createClassroomArtwork } from '../services/classroomArtwork';
+import {
+  finalizeClassroom,
+  finalizeClassroomIfExpired,
+} from '../services/classroomLifecycle';
 import { startClassroomArtworkAnalysis } from './healing';
+import teacherClassroomAssessmentResultsRouter from './teacherClassroomAssessmentResults';
 
 const router = Router();
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
@@ -123,28 +128,6 @@ async function findOwnedClassroom(
     return null;
   }
   return classroom;
-}
-
-async function finalizeClassroomIfExpired(
-  classroom: IClassroom
-): Promise<IClassroom> {
-  if (
-    classroom.status !== 'closing' ||
-    !classroom.gracePeriodEndsAt ||
-    classroom.gracePeriodEndsAt.getTime() > Date.now()
-  )
-    return classroom;
-  const Classroom = getClassroomModel();
-  await Classroom.updateOne(
-    { classId: classroom.classId, status: 'closing' },
-    { $set: { status: 'closed', finalizedAt: new Date() } }
-  ).exec();
-  const Participation = getClassroomParticipationModel();
-  await Participation.updateMany(
-    { classId: classroom.classId, artworkId: { $exists: false } },
-    { $set: { artworkStatus: 'not_provided' } }
-  ).exec();
-  return { ...classroom, status: 'closed', finalizedAt: new Date() };
 }
 
 function buildStudentUrl(req: Request, accessCode: string): string {
@@ -418,6 +401,28 @@ router.post('/:classId/close', async (req, res) => {
   sendSucc(res, { status: 'closing', gracePeriodEndsAt });
 });
 
+router.post('/:classId/finalize', async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  if (!classroom) return;
+  if (classroom.status !== 'closing') {
+    sendErr(res, 'Classroom is not in the grace period', 409);
+    return;
+  }
+  const finalizedAt = new Date();
+  const finalized = await finalizeClassroom(
+    classroom.classId,
+    'teacher',
+    finalizedAt
+  );
+  if (!finalized) {
+    sendErr(res, 'Classroom has already been finalized', 409);
+    return;
+  }
+  sendSucc(res, { status: 'closed', finalizedAt, finalizedBy: 'teacher' });
+});
+
 router.get('/:classId/progress', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
@@ -629,5 +634,7 @@ router.get('/:classId/data-completeness', async (req, res) => {
     ).length,
   });
 });
+
+router.use('/:classId/assessment-results', teacherClassroomAssessmentResultsRouter);
 
 export default router;

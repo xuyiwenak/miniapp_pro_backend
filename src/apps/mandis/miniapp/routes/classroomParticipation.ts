@@ -91,7 +91,13 @@ async function closeExpiredClassroom(classId: string): Promise<void> {
   const Classroom = getClassroomModel();
   const result = await Classroom.updateOne(
     { classId, status: 'closing', gracePeriodEndsAt: { $lte: new Date() } },
-    { $set: { status: 'closed', finalizedAt: new Date() } }
+    {
+      $set: {
+        status: 'closed',
+        finalizedAt: new Date(),
+        finalizedBy: 'system',
+      },
+    }
   ).exec();
   if (result.modifiedCount === 0) return;
   const Participation = getClassroomParticipationModel();

@@ -1,12 +1,18 @@
 import { http } from './client';
 import type {
   ClassroomInput,
+  ClassroomAssessmentSummary,
+  AssessmentParticipantPage,
   ClassroomProgress,
   ClassroomRecord,
   PendingArtwork,
 } from '@mandis/common/classroom-types';
 export type {
+  AssessmentMeasureSummary,
+  AssessmentParticipantPage,
+  AssessmentParticipantRow,
   AssessmentCounts,
+  ClassroomAssessmentSummary,
   ClassroomInput,
   ClassroomProgress,
   ClassroomRecord,
@@ -25,8 +31,26 @@ export const classroomApi = {
     http.post<{ studentUrl: string }>(`${BASE_PATH}/${classId}/open`),
   close: (classId: string) =>
     http.post<{ gracePeriodEndsAt: string }>(`${BASE_PATH}/${classId}/close`),
+  finalize: (classId: string) =>
+    http.post<{ finalizedAt: string; finalizedBy: 'teacher' }>(
+      `${BASE_PATH}/${classId}/finalize`
+    ),
   progress: (classId: string) =>
     http.get<ClassroomProgress>(`${BASE_PATH}/${classId}/progress`),
+  assessmentResults: (classId: string) =>
+    http.get<ClassroomAssessmentSummary>(
+      `${BASE_PATH}/${classId}/assessment-results`
+    ),
+  assessmentParticipants: (classId: string, page: number, pageSize: number) =>
+    http.get<AssessmentParticipantPage>(
+      `${BASE_PATH}/${classId}/assessment-results/participants`,
+      { params: { page, pageSize } }
+    ),
+  exportAssessmentResults: (classId: string, format: 'xlsx' | 'csv') =>
+    http.get<Blob>(`${BASE_PATH}/${classId}/assessment-results/export`, {
+      params: { format },
+      responseType: 'blob',
+    }),
   pendingArtworks: (classId: string) =>
     http.get<{ list: PendingArtwork[] }>(
       `${BASE_PATH}/${classId}/pending-artworks`

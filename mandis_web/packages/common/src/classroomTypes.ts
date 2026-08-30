@@ -108,3 +108,75 @@ export type PendingArtwork = {
   joinedAt: string;
   lastActiveAt: string;
 };
+
+export type DescriptiveStatistics = {
+  count: number;
+  mean: number | null;
+  median: number | null;
+  standardDeviation: number | null;
+};
+
+export type AssessmentMeasureCode =
+  | 'valence'
+  | 'arousal'
+  | 'dominance'
+  | 'positiveAffect'
+  | 'negativeAffect';
+
+export type AssessmentMeasureSummary = {
+  code: AssessmentMeasureCode;
+  label: string;
+  scaleMin: number;
+  scaleMax: number;
+  pre: DescriptiveStatistics;
+  post: DescriptiveStatistics;
+  delta: DescriptiveStatistics;
+  changeCounts: { increased: number; unchanged: number; decreased: number };
+};
+
+export type InstrumentResultGroup = {
+  instrumentVersion: string;
+  participantCount: number;
+  assessmentPairedCount: number;
+  measures: AssessmentMeasureSummary[];
+  narrative: string;
+};
+
+export type ClassroomAssessmentSummary = {
+  generatedAt: string;
+  dataStatus: 'provisional' | 'final';
+  classStatus: 'closing' | 'closed';
+  finalizedAt?: string;
+  datasetVersion: 'classroom-assessment-results-v1';
+  missingValuePolicy: 'not_imputed';
+  disclaimer: string;
+  participantCount: number;
+  preSubmittedCount: number;
+  postSubmittedCount: number;
+  assessmentPairedCount: number;
+  researchRecordCompleteCount: number;
+  instrumentGroups: InstrumentResultGroup[];
+};
+
+export type AssessmentParticipantRow = {
+  classroomCode: string;
+  instrumentVersion: string;
+  gender: string | null;
+  artExperience: string | null;
+  preSubmitted: boolean;
+  postSubmitted: boolean;
+  assessmentPaired: boolean;
+  researchRecordComplete: boolean;
+  scores: Record<string, number | null>;
+  artworkStatus: string;
+  uploaderRole: 'student' | 'teacher' | null;
+  aiStatus: 'none' | 'pending' | 'success' | 'failed';
+};
+
+export type AssessmentParticipantPage = {
+  list: AssessmentParticipantRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  dataStatus: 'provisional' | 'final';
+};

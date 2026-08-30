@@ -36,6 +36,7 @@ export interface IClassroom {
   closedByTeacherAt?: Date;
   gracePeriodEndsAt?: Date;
   finalizedAt?: Date;
+  finalizedBy?: 'system' | 'teacher';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +80,7 @@ export const ClassroomSchema = new Schema<IClassroom>(
     closedByTeacherAt: { type: Date },
     gracePeriodEndsAt: { type: Date },
     finalizedAt: { type: Date },
+    finalizedBy: { type: String, enum: ['system', 'teacher'] },
   },
   { timestamps: true }
 );
