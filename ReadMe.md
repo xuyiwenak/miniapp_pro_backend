@@ -1,4 +1,4 @@
-# ArtJoy / 原色有感后端服务
+# Mandis / 原色有感后端服务
 
 [![Code Review](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml/badge.svg)](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
