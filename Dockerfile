@@ -49,8 +49,10 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN --mount=type=cache,target=/var/cache/apk \
     apk add --no-cache docker-cli docker-cli-compose
 
-# 从 builder 阶段拷贝构建产物（含 dist/ 和 node_modules/）
-COPY --from=builder /app /app
+# 运行时只需要编译产物和生产依赖；不带入源码、模板或构建配置。
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
 
 # 挂载卷
 VOLUME ["/app/static", "/app/logs"]
