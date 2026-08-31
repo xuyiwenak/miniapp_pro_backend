@@ -5,6 +5,7 @@ import type { IClassroomParticipation } from '../../src/apps/mandis/entity/class
 import {
   buildClassroomAssessmentResult,
   describeValues,
+  splitInstrumentVersion,
 } from '../../src/apps/mandis/miniapp/services/classroomAssessmentResults';
 import {
   buildAssessmentCsv,
@@ -101,6 +102,17 @@ describe('classroom assessment results', () => {
     assert.deepEqual(result.instrumentGroups.map((group) => group.instrumentVersion), [
       'version-a', 'version-b',
     ]);
+  });
+
+  it('presents combined and independently versioned instruments separately', () => {
+    assert.deepEqual(splitInstrumentVersion('sam-vad-ipanas-sf-v1'), {
+      samVad: 'sam-vad-v1',
+      ipanasSf: 'ipanas-sf-v1',
+    });
+    assert.deepEqual(splitInstrumentVersion('sam-vad-v2__ipanas-sf-v1'), {
+      samVad: 'sam-vad-v2',
+      ipanasSf: 'ipanas-sf-v1',
+    });
   });
 
   it('distinguishes provisional results from final exportable results', () => {

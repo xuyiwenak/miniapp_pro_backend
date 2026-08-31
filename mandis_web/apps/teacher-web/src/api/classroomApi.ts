@@ -3,6 +3,7 @@ import type {
   ClassroomInput,
   ClassroomAssessmentSummary,
   AssessmentParticipantPage,
+  AssessmentParticipantRow,
   ClassroomProgress,
   ClassroomRecord,
   ClassroomCollaborator,
@@ -22,6 +23,21 @@ export type {
   ArtworkCorrectionAudit,
   PendingArtwork,
 } from '@mandis/common/classroom-types';
+
+export type AssessmentParticipantDetail = AssessmentParticipantRow & {
+  instrumentVersions: {
+    samVad: string;
+    ipanasSf: string;
+  };
+  artworkEvaluation: {
+    status: 'none' | 'pending' | 'success' | 'failed';
+    coverUrl?: string;
+    summary?: string;
+    colorAnalysis?: string;
+    compositionReport?: string;
+    suggestion?: string;
+  };
+};
 
 const BASE_PATH = '/api/teacher/classrooms';
 
@@ -49,6 +65,10 @@ export const classroomApi = {
     http.get<AssessmentParticipantPage>(
       `${BASE_PATH}/${classId}/assessment-results/participants`,
       { params: { page, pageSize } }
+    ),
+  assessmentParticipant: (classId: string, classroomCode: string) =>
+    http.get<AssessmentParticipantDetail>(
+      `${BASE_PATH}/${classId}/assessment-results/participants/${classroomCode}`
     ),
   exportAssessmentResults: (classId: string, format: 'xlsx' | 'csv') =>
     http.get<Blob>(`${BASE_PATH}/${classId}/assessment-results/export`, {

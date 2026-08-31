@@ -7,10 +7,12 @@ import {
   getWorkModel,
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
+import { resolveImageUrl } from '../../../../util/imageUploader';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
 import {
   buildClassroomAssessmentResult,
+  splitInstrumentVersion,
   type ClassroomAssessmentResult,
 } from '../services/classroomAssessmentResults';
 import {
@@ -29,6 +31,9 @@ const ParticipantQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
 const ExportQuerySchema = z.object({ format: z.enum(['xlsx', 'csv']) });
+const ParticipantParamsSchema = z.object({
+  classroomCode: z.string().regex(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/),
+});
 
 type AssessmentDataStatus = 'provisional' | 'final';
 type ResultBundle = {
@@ -102,6 +107,34 @@ function summaryPayload(bundle: ResultBundle): Record<string, unknown> {
   };
 }
 
+async function participantDetailPayload(
+  bundle: ResultBundle,
+  classroomCode: string,
+): Promise<Record<string, unknown> | null> {
+  const participant = bundle.participants.find((item) => item.classroomCode === classroomCode);
+  const participantRow = bundle.result.participants.find((item) => item.classroomCode === classroomCode);
+  if (!participant || !participantRow) return null;
+  const Work = getWorkModel();
+  const work = await Work.findOne({
+    classroomId: bundle.classroom.classId,
+    participantId: participant.participantId,
+  }).select('images healing uploaderRole').lean().exec();
+  const healing = work?.healing;
+  const isSuccessful = healing?.status === 'success';
+  return {
+    ...participantRow,
+    instrumentVersions: splitInstrumentVersion(participant.instrumentVersion),
+    artworkEvaluation: {
+      status: healing?.status ?? 'none',
+      coverUrl: work?.images[0]?.url ? resolveImageUrl(work.images[0].url) : undefined,
+      summary: isSuccessful ? healing.summary : undefined,
+      colorAnalysis: isSuccessful ? healing.colorAnalysis : undefined,
+      compositionReport: isSuccessful ? healing.compositionReport : undefined,
+      suggestion: isSuccessful ? healing.suggestion : undefined,
+    },
+  };
+}
+
 function exportMetadata(format: 'xlsx' | 'csv'): { contentType: string; extension: string } {
   if (format === 'csv') return { contentType: 'text/csv; charset=utf-8', extension: 'csv' };
   return {
@@ -155,6 +188,24 @@ router.get('/participants', async (req, res) => {
     pageSize: parsed.data.pageSize,
     dataStatus: bundle.dataStatus,
   });
+});
+
+router.get('/participants/:classroomCode', async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const parsed = ParticipantParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    sendErr(res, 'Invalid classroom code', 400);
+    return;
+  }
+  const bundle = await loadResultBundle(getClassId(req), teacherId, res);
+  if (!bundle) return;
+  const payload = await participantDetailPayload(bundle, parsed.data.classroomCode);
+  if (!payload) {
+    sendErr(res, 'Participant not found', 404);
+    return;
+  }
+  sendSucc(res, payload);
 });
 
 router.get('/export', async (req, res) => {

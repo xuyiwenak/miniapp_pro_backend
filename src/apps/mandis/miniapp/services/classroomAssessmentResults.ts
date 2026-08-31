@@ -16,6 +16,8 @@ const NEGATIVE_PANAS_CODES = [
   'PANAS_AFRAID',
 ] as const;
 const SCORE_PRECISION = 2;
+const CURRENT_COMBINED_INSTRUMENT_VERSION = 'sam-vad-ipanas-sf-v1';
+const INDEPENDENT_VERSION_SEPARATOR = '__';
 
 export type AssessmentMeasureCode =
   | 'valence'
@@ -65,6 +67,11 @@ export type AssessmentParticipantRow = {
   postClientRecovered: boolean;
 };
 
+export type AssessmentInstrumentVersions = {
+  samVad: string;
+  ipanasSf: string;
+};
+
 export type InstrumentResultGroup = {
   instrumentVersion: string;
   participantCount: number;
@@ -100,6 +107,15 @@ const MEASURE_CONFIG: Array<{
 
 function round(value: number): number {
   return Number(value.toFixed(SCORE_PRECISION));
+}
+
+export function splitInstrumentVersion(instrumentVersion: string): AssessmentInstrumentVersions {
+  if (instrumentVersion === CURRENT_COMBINED_INSTRUMENT_VERSION) {
+    return { samVad: 'sam-vad-v1', ipanasSf: 'ipanas-sf-v1' };
+  }
+  const [samVad, ipanasSf, ...remainder] = instrumentVersion.split(INDEPENDENT_VERSION_SEPARATOR);
+  if (samVad && ipanasSf && remainder.length === 0) return { samVad, ipanasSf };
+  return { samVad: instrumentVersion, ipanasSf: instrumentVersion };
 }
 
 function sumCodes(
