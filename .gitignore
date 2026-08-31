@@ -67,3 +67,8 @@ data/
 # 本地数据分析文件（生成的 CSV/Excel 报告）
 docs/local_*.csv
 docs/local_*.xlsx
+
+# 本地工作流状态与视觉验收截图
+.omx/
+mandis_web/apps/student-h5/design-qa.md
+mandis_web/apps/student-h5/design-qa/
