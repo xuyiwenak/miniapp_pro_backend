@@ -1,16 +1,30 @@
-# 小程序后端服务
+# ArtJoy / 原色有感后端服务
 
 [![Code Review](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml/badge.svg)](https://github.com/xuyiwenak/miniapp_pro_backend/actions/workflows/code-review.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![ESLint](https://img.shields.io/badge/code%20style-ESLint-4B32C3?logo=eslint&logoColor=white)](https://eslint.org)
 
-本目录为小程序的 **后端服务**，基于 Node.js + TypeScript + TSRPC，  
+本仓库是 ArtJoy（原色有感）产品的后端与教育版 Web 工作区，基于 Node.js + TypeScript + TSRPC。
 同时提供：
 
-- TSRPC HTTP / WebSocket 服务（游戏 / 会话等实时能力）
-- 小程序 REST 接口（登录、作品、记录、反馈等）
-- MongoDB / Redis 数据存储
-- 基于 Docker / docker-compose 的一键部署能力，阿里腾讯云ecs实例都兼容
+- BeGreat 与 Mandis 的 TSRPC HTTP / WebSocket 服务
+- 个人创作、小程序与教育课堂 REST 接口
+- Mandis 教育版的学生 H5、教师课堂端和个人创作端
+- MongoDB / Redis 数据存储，以及 Bull 队列与日志系统
+- 基于 Docker / docker-compose 的本地与 ECS 部署能力
+
+## 产品入口
+
+| 目录 | 入口 | 用途 |
+|---|---|---|
+| `src/apps/begreat` | BeGreat 服务 | BeGreat 业务与相关接口 |
+| `src/apps/mandis` | Mandis 服务 | 个人创作、教育课堂、研究数据与实时服务 |
+| `mandis_web/apps/creator-web` | `/art/` | 个人用户上传作品、查看个人报告 |
+| `mandis_web/apps/student-h5` | `/classroom/` | 学生扫码参与课堂、完成前后测与作品流程 |
+| `mandis_web/apps/teacher-web` | `/teacher/` | 教师/科研工作者创建课堂、查看进度与研究结果 |
+
+教育课堂参与者默认保持匿名，仅使用课堂内随机编号；流程为“课前测评 → 线下创作 → 上传作品/教师代传 →
+课后测评 → 作品回响”。VAD 与 I-PANAS-SF 是研究测量，不用于教师评分或心理诊断。
 
 ---
 
@@ -68,6 +82,36 @@ pm2 start pm2_config.json
 
 > 项目已提供 `docker-compose.yml`，也可以通过 Docker 在本地一次性启 Mongo + 后端 + Nginx（见下文“Docker 部署”）。
 
+### Mandis Web 开发
+
+在 `mandis_web/` 目录执行，三个应用可独立启动：
+
+```bash
+npm install
+npm run dev:creator
+npm run dev:student
+npm run dev:teacher
+```
+
+构建全部教育版 Web 应用：
+
+```bash
+npm run build
+```
+
+### 提交前验证
+
+后端常用检查如下；GitHub Actions 的 Code Review 工作流会执行这四项检查：
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+依赖安全审计不作为当前 Code Review 的阻断条件。生产依赖升级或安全修复请单独评估并记录原因。
+
 ---
 
 ## 项目结构（art_backend）
@@ -100,6 +144,9 @@ art_backend/
 │   └── httpServer.ts        # HTTP 服务器入口
 │
 ├── dist/                    # TypeScript 编译产物（Docker 镜像和 PM2 运行都基于此）
+├── mandis_web/              # Mandis 教育版 Web workspace
+│   ├── apps/                # creator-web / student-h5 / teacher-web
+│   └── packages/common/     # 跨端课堂类型与文案
 ├── docs/                    # 文档（tsrpc 生成的 openapi 等）
 ├── logs/                    # 默认日志输出目录
 ├── docker-compose.yml       # 本地 / 服务器一键编排（Mongo + Backend + Nginx）
@@ -249,7 +296,7 @@ serverLogger.warn("服务器警告");
 | `master` | 日常开发、功能合入 |
 | `release` | **线上环境**，ECS 只从此分支拉取，禁止直接往 `release` 提交 |
 
-**发布步骤**（本地执行）：
+**后端发布步骤**（本地执行）：
 
 ```bash
 # 确保工作区干净，然后：
@@ -266,6 +313,26 @@ serverLogger.warn("服务器警告");
 4. 切回原分支
 
 > 使用 Apple Silicon 开发机时，请在本地执行 `./scripts/deploy_amd64_image.sh`；它会构建 x86_64 镜像、传到 ECS，并在服务器端不经构建地重启应用服务。
+
+### 按变更范围发布（推荐）
+
+从工作区根目录执行智能发布计划，先预览再执行：
+
+```bash
+cd /Users/evan/art_theroy
+./deploy.sh smart
+./deploy.sh smart --execute
+```
+
+纯前端变更可以只发布对应的 Mandis Web 应用：
+
+```bash
+./deploy.sh creator-web
+./deploy.sh student-h5
+./deploy.sh teacher-web
+```
+
+详细的发布单元和镜像复用规则见 [`docs/SMART_DEPLOYMENT.md`](docs/SMART_DEPLOYMENT.md)。不要使用 `scp` 覆盖服务器源码；服务器源码和配置统一通过 Git 同步。
 
 ---
 
