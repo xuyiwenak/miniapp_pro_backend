@@ -91,6 +91,7 @@ export function ClassroomPage() {
         locale={flow.locale}
         timepoint="post"
         saved={flow.participation.postAssessment}
+        pendingArtwork={flow.participation.artworkStatus === 'teacher_upload_pending'}
         onDraft={(page, answers, recovered) => flow.saveDraft('post', page, answers, recovered)}
         onSubmit={(page, answers, duration, recovered) =>
           flow.submitAssessment('post', page, answers, duration, recovered)

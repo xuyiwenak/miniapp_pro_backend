@@ -19,14 +19,16 @@ import './classrooms/ClassroomsPage.css';
 const { Title } = Typography;
 
 type Props = {
+  teacherId: string;
   teacherDisplayName: string;
   onLogout: () => void;
 };
 
-export default function ClassroomsPage({ teacherDisplayName, onLogout }: Props) {
+export default function ClassroomsPage({ teacherId, teacherDisplayName, onLogout }: Props) {
   const [classrooms, setClassrooms] = useState<ClassroomRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<ClassroomRecord | undefined>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -66,6 +68,23 @@ export default function ClassroomsPage({ teacherDisplayName, onLogout }: Props) 
       setCreateOpen(false);
       await loadClassrooms(response.data.classId);
       void message.success('课堂草稿已创建');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveClassroom(input: ClassroomInput): Promise<void> {
+    if (!editing) {
+      await createClassroom(input);
+      return;
+    }
+    setSaving(true);
+    try {
+      await classroomApi.update(editing.classId, input);
+      setCreateOpen(false);
+      setEditing(undefined);
+      await loadClassrooms(editing.classId);
+      void message.success('课堂草稿已更新');
     } finally {
       setSaving(false);
     }
@@ -126,6 +145,11 @@ export default function ClassroomsPage({ teacherDisplayName, onLogout }: Props) 
         {selected ? (
           <ClassroomDashboard
             classroom={selected}
+            teacherId={teacherId}
+            onEdit={() => {
+              setEditing(selected);
+              setCreateOpen(true);
+            }}
             onChanged={() => {
               void loadClassrooms(selected.classId);
             }}
@@ -137,8 +161,12 @@ export default function ClassroomsPage({ teacherDisplayName, onLogout }: Props) 
       <ClassroomCreateModal
         open={createOpen}
         saving={saving}
-        onCancel={() => setCreateOpen(false)}
-        onSubmit={createClassroom}
+        classroom={editing}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditing(undefined);
+        }}
+        onSubmit={saveClassroom}
       />
     </main>
   );

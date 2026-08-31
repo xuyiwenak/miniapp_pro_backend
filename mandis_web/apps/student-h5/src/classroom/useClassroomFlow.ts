@@ -8,6 +8,8 @@ import type {
 } from '@mandis/common/classroom-types';
 import { studentClassroomApi } from './api';
 import {
+  ensureResumeToken,
+  getActionIdempotencyKey,
   getResumeToken,
   getSavedLocale,
   loadClassroomCache,
@@ -29,6 +31,10 @@ export function useClassroomFlow(accessCode: string) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [teacherUploadConfirmation, setTeacherUploadConfirmation] = useState<ParticipationState | null>(null);
+
+  function actionKey(action: string): string {
+    return getActionIdempotencyKey(accessCode, action);
+  }
 
   function changeLocale(next: Locale): void {
     setLocaleState(next);
@@ -58,7 +64,7 @@ export function useClassroomFlow(accessCode: string) {
         setClassroom(info);
         saveClassroomCache(accessCode, info);
         if (token) {
-          const resumed = await studentClassroomApi.start(accessCode, token);
+          const resumed = await studentClassroomApi.start(accessCode, token, actionKey('join'));
           if (active) updateParticipation(resumed);
         }
       } catch (nextError) {
@@ -104,8 +110,9 @@ export function useClassroomFlow(accessCode: string) {
   async function start(): Promise<void> {
     setSaving(true);
     try {
-      const started = await studentClassroomApi.start(accessCode);
-      const nextToken = started.resumeToken ?? '';
+      const requestedToken = ensureResumeToken(accessCode);
+      const started = await studentClassroomApi.start(accessCode, requestedToken, actionKey('join'));
+      const nextToken = started.resumeToken ?? requestedToken;
       saveResumeToken(accessCode, nextToken);
       setToken(nextToken);
       updateParticipation(started);
@@ -120,7 +127,8 @@ export function useClassroomFlow(accessCode: string) {
     setSaving(true);
     setError('');
     try {
-      setTeacherUploadConfirmation(await studentClassroomApi.requestTeacherUpload(token));
+      const key = actionKey('request-teacher-upload');
+      setTeacherUploadConfirmation(await studentClassroomApi.requestTeacherUpload(token, key));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Request failed');
     } finally {
@@ -148,8 +156,9 @@ export function useClassroomFlow(accessCode: string) {
     start,
     refresh,
     loadEcho,
-    consent: () => run(() => studentClassroomApi.consent(token)),
-    saveProfile: (profile: Record<string, string>) => run(() => studentClassroomApi.profile(token, profile)),
+    consent: () => run(() => studentClassroomApi.consent(token, actionKey('consent'))),
+    saveProfile: (profile: Record<string, string>) =>
+      run(() => studentClassroomApi.profile(token, profile, actionKey('profile'))),
     saveDraft: (timepoint: 'pre' | 'post', page: number, answers: AssessmentAnswers, clientRecovered: boolean) =>
       run(() => studentClassroomApi.saveDraft(token, timepoint, page, locale, answers, clientRecovered), true),
     submitAssessment: (
@@ -161,13 +170,25 @@ export function useClassroomFlow(accessCode: string) {
     ) =>
       run(
         () =>
-          studentClassroomApi.submitAssessment(token, timepoint, page, locale, answers, durationMs, clientRecovered),
+          studentClassroomApi.submitAssessment(
+            token,
+            timepoint,
+            page,
+            locale,
+            answers,
+            durationMs,
+            clientRecovered,
+            actionKey(`${timepoint}-assessment-submit`)
+          ),
         true
       ),
-    completeActivity: () => run(() => studentClassroomApi.completeActivity(token)),
-    uploadArtwork: (dataUrl: string) => run(() => studentClassroomApi.uploadArtwork(token, dataUrl)),
+    completeActivity: () =>
+      run(() => studentClassroomApi.completeActivity(token, actionKey('activity-complete'))),
+    uploadArtwork: (dataUrl: string) =>
+      run(() => studentClassroomApi.uploadArtwork(token, dataUrl, actionKey('student-artwork-upload')), true),
     requestTeacherUpload,
     confirmTeacherUpload,
-    submitFeedback: (input: Record<string, unknown>) => run(() => studentClassroomApi.feedback(token, input)),
+    submitFeedback: (input: Record<string, unknown>) =>
+      run(() => studentClassroomApi.feedback(token, input, actionKey('feedback'))),
   };
 }

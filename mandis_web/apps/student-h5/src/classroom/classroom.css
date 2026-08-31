@@ -299,6 +299,15 @@
   color: #8b641f;
 }
 
+.course-progress li[data-status='failed'] > span {
+  border-color: #b42318;
+  color: #b42318;
+}
+
+.course-progress li[data-status='failed'] em {
+  color: #b42318;
+}
+
 .assessment-card {
   padding-top: 22px;
 }

@@ -68,7 +68,8 @@ function participation(
 function classroom(status: IClassroom['status'] = 'closed'): IClassroom {
   const now = new Date('2026-08-31T08:00:00.000Z');
   return {
-    classId: 'class-1', createdByTeacherId: 'teacher-1', courseName: '课程', sessionTitle: '课堂',
+    classId: 'class-1', createdByTeacherId: 'teacher-1', authorizedTeacherIds: [],
+    courseName: '课程', sessionTitle: '课堂',
     activityTheme: '主题', classDate: '2026-08-31', startTime: '08:00', endTime: '10:00',
     timezone: 'Asia/Shanghai', scheduledStartAt: now, scheduledEndAt: now,
     gradeLevel: 'undergraduate_1', teacherDisplayName: '教师', locationText: '教室', status,
@@ -119,5 +120,14 @@ describe('classroom assessment results', () => {
     ]);
     assert.equal(sanitizeSpreadsheetCell('+formula'), "'+formula");
     assert.match(buildAssessmentCsv(result).toString('utf8'), /'=unsafe/);
+    const participantRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+      workbook.Sheets.participant_wide,
+    );
+    const responseRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+      workbook.Sheets.responses_long,
+    );
+    assert.equal(participantRows[0]?.dataSchemaVersion, 'classroom-participation-v1');
+    assert.equal(participantRows[0]?.preClientRecovered, false);
+    assert.equal(responseRows[0]?.clientRecovered, false);
   });
 });

@@ -20,13 +20,21 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
   const [allowCommentUse, setAllowCommentUse] = useState(false);
   const [allowArtworkUse, setAllowArtworkUse] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const load = () =>
-      void loadEcho().then((value) => {
-        if (active) setEcho(value);
-      });
+    const load = () => {
+      void loadEcho()
+        .then((value) => {
+          if (!active) return;
+          setEcho(value);
+          setLoadFailed(false);
+        })
+        .catch(() => {
+          if (active) setLoadFailed(true);
+        });
+    };
     load();
     const timer = window.setInterval(load, ECHO_POLL_MS);
     return () => {
@@ -44,12 +52,21 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
     }
   }
 
+  const echoReady = echo?.status === 'success';
+  const artworkStillPending = pendingArtwork && !echo?.coverUrl;
+  const echoFailed = loadFailed || echo?.status === 'failed';
+
   return (
     <main className="course-step-screen">
-      <CourseProgress locale={locale} currentStep={5} pendingArtwork={pendingArtwork} />
+      <CourseProgress
+        locale={locale}
+        currentStep={5}
+        pendingArtwork={artworkStillPending}
+        failedStep={echoFailed ? 5 : undefined}
+      />
       <section className="classroom-card echo-card">
         <p className="classroom-eyebrow">{zh ? '第 5 步 · 作品回响' : 'STEP 5 · REFLECTION'}</p>
-        {pendingArtwork && !echo?.coverUrl ? (
+        {artworkStillPending ? (
           <div className="pending-artwork">
             <h1>{zh ? '等待教师补充作品' : 'Waiting for the teacher upload'}</h1>
             <p>
@@ -62,12 +79,21 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
         ) : (
           <div className="echo-result">
             {echo?.coverUrl && <img src={echo.coverUrl} alt={zh ? '课堂作品' : 'Classroom artwork'} />}
-            {echo?.status === 'success' ? (
+            {echoReady ? (
               <>
                 <h1>{zh ? '作品中的颜色与线条' : 'Colour and line in your artwork'}</h1>
                 <p>{echo.colorAnalysis}</p>
                 <p>{echo.summary}</p>
                 {echo.suggestion && <aside>{echo.suggestion}</aside>}
+              </>
+            ) : echoFailed ? (
+              <>
+                <h1>{zh ? '作品回响暂时生成失败' : 'Reflection generation failed'}</h1>
+                <p>
+                  {zh
+                    ? '作品和测评数据已经保留，请稍后重新扫码查看，或请教师处理 AI 失败告警。'
+                    : 'Your artwork and assessments are saved. Scan again later or ask the teacher to review the alert.'}
+                </p>
               </>
             ) : (
               <>
@@ -86,7 +112,7 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
             ? '学生自评是主要证据，AI仅作辅助整理，不用于心理诊断或课程评分。'
             : 'Your self-report is primary. AI only assists organisation and is not used for diagnosis or grading.'}
         </div>
-        <fieldset className="feedback-fit">
+        <fieldset className="feedback-fit" disabled={!echoReady}>
           <legend>{zh ? '这份回响与你的感受：' : 'This reflection feels:'}</legend>
           {[
             ['mostly', zh ? '比较贴合' : 'Mostly fitting'],
@@ -102,12 +128,18 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
         </fieldset>
         <label className="feedback-comment">
           {zh ? '自愿写下一句感受' : 'Optional comment'}
-          <textarea maxLength={300} value={comment} onChange={(event) => setComment(event.target.value)} />
+          <textarea
+            maxLength={300}
+            value={comment}
+            disabled={!echoReady}
+            onChange={(event) => setComment(event.target.value)}
+          />
         </label>
         <label className="feedback-check">
           <input
             type="checkbox"
             checked={allowCommentUse}
+            disabled={!echoReady}
             onChange={(event) => setAllowCommentUse(event.target.checked)}
           />
           {zh
@@ -118,6 +150,7 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
           <input
             type="checkbox"
             checked={allowArtworkUse}
+            disabled={!echoReady}
             onChange={(event) => setAllowArtworkUse(event.target.checked)}
           />
           {zh
@@ -127,7 +160,7 @@ export function EchoStep({ locale, pendingArtwork, classroomCode, loadEcho, onFe
         <button
           className="classroom-primary"
           type="button"
-          disabled={saving}
+          disabled={saving || !echoReady}
           onClick={() => {
             void submitFeedback();
           }}

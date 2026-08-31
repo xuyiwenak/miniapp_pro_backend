@@ -36,17 +36,21 @@ export interface IClassroomParticipation {
   classId: string;
   classroomCode: string;
   resumeTokenHash: string;
+  joinIdempotencyKey?: string;
   source: 'student' | 'artwork_only';
   instrumentVersion: string;
   dataSchemaVersion: string;
   currentStage: ParticipationStage;
   consentedAt?: Date;
   consentVersion?: string;
+  consentIdempotencyKey?: string;
   profile?: Record<string, string>;
+  profileIdempotencyKey?: string;
   preAssessment: IAssessmentRecord;
   postAssessment: IAssessmentRecord;
   activityStartedAt?: Date;
   activityCompletedAt?: Date;
+  activityIdempotencyKey?: string;
   artworkStatus: ArtworkSubmissionStatus;
   artworkId?: string;
   uploadReason?: string;
@@ -67,6 +71,7 @@ export interface IClassroomParticipation {
     allowCommentUse: boolean;
     allowArtworkUse: boolean;
   };
+  feedbackIdempotencyKey?: string;
   participantFlowCompleted: boolean;
   researchRecordComplete: boolean;
   syncStatus: 'synced' | 'pending' | 'failed';
@@ -102,6 +107,7 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
     classId: { type: String, required: true, index: true },
     classroomCode: { type: String, required: true },
     resumeTokenHash: { type: String, required: true, unique: true },
+    joinIdempotencyKey: { type: String },
     source: {
       type: String,
       enum: ['student', 'artwork_only'],
@@ -125,7 +131,9 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
     },
     consentedAt: { type: Date },
     consentVersion: { type: String },
+    consentIdempotencyKey: { type: String },
     profile: { type: Schema.Types.Mixed },
+    profileIdempotencyKey: { type: String },
     preAssessment: {
       type: AssessmentSchema,
       default: () => ({ status: 'not_started', answeredCount: 0 }),
@@ -136,6 +144,7 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
     },
     activityStartedAt: { type: Date },
     activityCompletedAt: { type: Date },
+    activityIdempotencyKey: { type: String },
     artworkStatus: {
       type: String,
       enum: [
@@ -182,6 +191,7 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
         { _id: false }
       ),
     },
+    feedbackIdempotencyKey: { type: String },
     participantFlowCompleted: { type: Boolean, default: false, index: true },
     researchRecordComplete: { type: Boolean, default: false, index: true },
     syncStatus: {
@@ -202,6 +212,10 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
 ClassroomParticipationSchema.index(
   { classId: 1, classroomCode: 1 },
   { unique: true }
+);
+ClassroomParticipationSchema.index(
+  { classId: 1, joinIdempotencyKey: 1 },
+  { unique: true, sparse: true }
 );
 ClassroomParticipationSchema.index({ classId: 1, currentStage: 1 });
 ClassroomParticipationSchema.index({ classId: 1, artworkStatus: 1 });

@@ -16,6 +16,7 @@ export interface IClassroom {
   classId: string;
   accessCode?: string;
   createdByTeacherId: string;
+  authorizedTeacherIds: string[];
   courseName: string;
   sessionTitle: string;
   activityTheme: string;
@@ -46,6 +47,7 @@ export const ClassroomSchema = new Schema<IClassroom>(
     classId: { type: String, required: true, unique: true },
     accessCode: { type: String, unique: true, sparse: true },
     createdByTeacherId: { type: String, required: true, index: true },
+    authorizedTeacherIds: [{ type: String }],
     courseName: { type: String, required: true, maxlength: 80 },
     sessionTitle: { type: String, required: true, maxlength: 80 },
     activityTheme: { type: String, required: true, maxlength: 120 },
@@ -86,4 +88,5 @@ export const ClassroomSchema = new Schema<IClassroom>(
 );
 
 ClassroomSchema.index({ createdByTeacherId: 1, createdAt: -1 });
+ClassroomSchema.index({ authorizedTeacherIds: 1, createdAt: -1 });
 ClassroomSchema.index({ status: 1, gracePeriodEndsAt: 1 });

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   getClassroomModel,
   getClassroomParticipationModel,
+  getTeacherProfileModel,
   getWorkModel,
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import {
@@ -28,11 +29,17 @@ import {
 } from '../services/classroomResearch';
 import { createClassroomArtwork } from '../services/classroomArtwork';
 import {
+  classroomAccessQuery,
+  findAccessibleClassroom,
+  findOwnedClassroom,
+} from '../services/classroomAccess';
+import {
   finalizeClassroom,
   finalizeClassroomIfExpired,
 } from '../services/classroomLifecycle';
 import { startClassroomArtworkAnalysis } from './healing';
 import teacherClassroomAssessmentResultsRouter from './teacherClassroomAssessmentResults';
+import teacherClassroomCorrectionsRouter from './teacherClassroomCorrections';
 
 const router = Router();
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
@@ -79,6 +86,7 @@ const UploadSchema = z.object({
     'other',
   ]),
 });
+const CollaboratorSchema = z.object({ teacherId: z.string().uuid() });
 
 function getTeacherId(req: Request & { teacherId?: string }, res: Response): string | null {
   const teacherId = req.teacherId;
@@ -109,25 +117,6 @@ function buildClassroomPayload(
     scheduledStartAt: buildScheduledDate(input.classDate, input.startTime),
     scheduledEndAt: buildScheduledDate(input.classDate, input.endTime),
   };
-}
-
-async function findOwnedClassroom(
-  classId: string,
-  teacherId: string,
-  res: Response
-): Promise<IClassroom | null> {
-  const Classroom = getClassroomModel();
-  const classroom = await Classroom.findOne({
-    classId,
-    createdByTeacherId: teacherId,
-  })
-    .lean()
-    .exec();
-  if (!classroom) {
-    sendErr(res, 'Classroom not found', 404);
-    return null;
-  }
-  return classroom;
 }
 
 function buildStudentUrl(req: Request, accessCode: string): string {
@@ -303,7 +292,7 @@ router.get('/', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const Classroom = getClassroomModel();
-  const classrooms = await Classroom.find({ createdByTeacherId: teacherId })
+  const classrooms = await Classroom.find(classroomAccessQuery(teacherId))
     .sort({ createdAt: -1 })
     .lean()
     .exec();
@@ -423,10 +412,63 @@ router.post('/:classId/finalize', async (req, res) => {
   sendSucc(res, { status: 'closed', finalizedAt, finalizedBy: 'teacher' });
 });
 
+router.get('/:classId/collaborators', async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  if (!classroom) return;
+  const Teacher = getTeacherProfileModel();
+  const list = await Teacher.find({
+    teacherId: { $in: classroom.authorizedTeacherIds ?? [] },
+    status: 'active',
+  }).select('teacherId displayName organization').lean().exec();
+  sendSucc(res, { list });
+});
+
+router.post('/:classId/collaborators', async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  const parsed = CollaboratorSchema.safeParse(req.body);
+  if (!classroom || !parsed.success) {
+    if (classroom) sendErr(res, 'Invalid collaborator', 400);
+    return;
+  }
+  if (parsed.data.teacherId === teacherId) {
+    sendErr(res, 'The classroom owner already has access', 409);
+    return;
+  }
+  const Teacher = getTeacherProfileModel();
+  const collaborator = await Teacher.findOne({
+    teacherId: parsed.data.teacherId,
+    status: 'active',
+  }).select('teacherId displayName organization').lean().exec();
+  if (!collaborator) return sendErr(res, 'Teacher profile not found', 404);
+  const Classroom = getClassroomModel();
+  await Classroom.updateOne(
+    { classId: classroom.classId },
+    { $addToSet: { authorizedTeacherIds: collaborator.teacherId } }
+  ).exec();
+  sendSucc(res, collaborator);
+});
+
+router.delete('/:classId/collaborators/:collaboratorTeacherId', async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  if (!classroom) return;
+  const Classroom = getClassroomModel();
+  await Classroom.updateOne(
+    { classId: classroom.classId },
+    { $pull: { authorizedTeacherIds: req.params.collaboratorTeacherId } }
+  ).exec();
+  sendSucc(res, { removed: true });
+});
+
 router.get('/:classId/progress', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
-  const ownedClassroom = await findOwnedClassroom(
+  const ownedClassroom = await findAccessibleClassroom(
     req.params.classId,
     teacherId,
     res
@@ -444,7 +486,7 @@ router.get('/:classId/progress', async (req, res) => {
 router.get('/:classId/pending-artworks', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
-  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
   if (!classroom) return;
   const Participation = getClassroomParticipationModel();
   const records = await Participation.find({
@@ -469,7 +511,7 @@ router.get('/:classId/pending-artworks', async (req, res) => {
 router.post('/:classId/artwork-placeholders', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
-  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
   if (!classroom || !['open', 'closing'].includes(classroom.status)) {
     if (classroom) sendErr(res, 'Classroom is closed', 409);
     return;
@@ -566,7 +608,7 @@ router.post(
     const key = getIdempotencyKey(req, res);
     if (!key) return;
     const classId = req.params.classId;
-    const classroom = await findOwnedClassroom(classId, teacherId, res);
+    const classroom = await findAccessibleClassroom(classId, teacherId, res);
     if (!classroom || !['open', 'closing'].includes(classroom.status)) {
       if (classroom) sendErr(res, 'Classroom is closed', 409);
       return;
@@ -603,7 +645,7 @@ router.post(
 router.get('/:classId/data-completeness', async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
-  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
   if (!classroom) return;
   const Participation = getClassroomParticipationModel();
   const records = await Participation.find({ classId: classroom.classId })
@@ -636,5 +678,6 @@ router.get('/:classId/data-completeness', async (req, res) => {
 });
 
 router.use('/:classId/assessment-results', teacherClassroomAssessmentResultsRouter);
+router.use('/:classId/artwork-corrections', teacherClassroomCorrectionsRouter);
 
 export default router;

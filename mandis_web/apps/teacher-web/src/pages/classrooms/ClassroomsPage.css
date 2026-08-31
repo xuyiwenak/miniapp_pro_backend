@@ -661,6 +661,42 @@
   min-width: 0;
 }
 
+.classroom-close-summary > p {
+  color: var(--teacher-muted);
+}
+
+.classroom-close-summary dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 16px 0;
+  border: 1px solid var(--teacher-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.classroom-close-summary dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--teacher-border);
+}
+
+.classroom-close-summary dl > div:nth-child(odd) {
+  border-right: 1px solid var(--teacher-border);
+}
+
+.classroom-close-summary dt {
+  color: var(--teacher-muted);
+}
+
+.classroom-close-summary dd {
+  margin: 0;
+  color: var(--teacher-ink);
+  font-weight: 700;
+}
+
 @media (max-width: 1180px) {
   .classroom-dashboard__header {
     align-items: flex-start;

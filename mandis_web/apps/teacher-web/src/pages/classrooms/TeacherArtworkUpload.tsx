@@ -50,6 +50,7 @@ export function TeacherArtworkUpload({
   const [file, setFile] = useState<UploadFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const loadPending = useCallback(async (): Promise<void> => {
     const response = await classroomApi.pendingArtworks(classId);
@@ -82,12 +83,13 @@ export function TeacherArtworkUpload({
         classId,
         selectedCode,
         { dataUrl, reason },
-        crypto.randomUUID()
+        idempotencyKey
       );
       void message.success(`课堂编号 ${selectedCode} 的作品已补充`);
       setFile(null);
       setPreviewUrl('');
       setSelectedCode('');
+      setIdempotencyKey(crypto.randomUUID());
       await loadPending();
       onChanged();
     } finally {
@@ -129,7 +131,10 @@ export function TeacherArtworkUpload({
         rowSelection={{
           type: 'radio',
           selectedRowKeys: selectedCode ? [selectedCode] : [],
-          onChange: (keys) => setSelectedCode(String(keys[0] ?? '')),
+          onChange: (keys) => {
+            setSelectedCode(String(keys[0] ?? ''));
+            setIdempotencyKey(crypto.randomUUID());
+          },
         }}
         columns={[
           { title: '课堂编号', dataIndex: 'classroomCode' },
@@ -144,6 +149,17 @@ export function TeacherArtworkUpload({
             render: (value: boolean) => (value ? '已提交' : '缺失'),
           },
           { title: '当前阶段', dataIndex: 'currentStage' },
+          { title: '作品状态', dataIndex: 'artworkStatus' },
+          {
+            title: '进入时间',
+            dataIndex: 'joinedAt',
+            render: (value: string) => new Date(value).toLocaleTimeString('zh-CN'),
+          },
+          {
+            title: '最后活动',
+            dataIndex: 'lastActiveAt',
+            render: (value: string) => new Date(value).toLocaleTimeString('zh-CN'),
+          },
         ]}
       />
       <Form layout="vertical" style={{ marginTop: 22 }}>

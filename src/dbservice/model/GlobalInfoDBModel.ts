@@ -29,6 +29,10 @@ import {
   TeacherDataExportAuditSchema,
   type ITeacherDataExportAudit,
 } from '../../apps/mandis/entity/teacherDataExportAudit.entity';
+import {
+  ClassroomArtworkCorrectionAuditSchema,
+  type IClassroomArtworkCorrectionAudit,
+} from '../../apps/mandis/entity/classroomArtworkCorrectionAudit.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -42,6 +46,7 @@ class GlobalModelManager {
   private classroomParticipationModel!: Model<IClassroomParticipation>;
   private teacherProfileModel!: Model<ITeacherProfile>;
   private teacherDataExportAuditModel!: Model<ITeacherDataExportAudit>;
+  private classroomArtworkCorrectionAuditModel!: Model<IClassroomArtworkCorrectionAudit>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -85,6 +90,12 @@ class GlobalModelManager {
       TeacherDataExportAuditSchema,
     );
     this.teacherDataExportAuditModel.createIndexes().catch(() => {});
+    this.classroomArtworkCorrectionAuditModel =
+      this.connection.model<IClassroomArtworkCorrectionAudit>(
+        'ClassroomArtworkCorrectionAudit',
+        ClassroomArtworkCorrectionAuditSchema
+      );
+    this.classroomArtworkCorrectionAuditModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -125,6 +136,10 @@ class GlobalModelManager {
 
   public getTeacherDataExportAuditModel(): Model<ITeacherDataExportAudit> {
     return this.teacherDataExportAuditModel;
+  }
+
+  public getClassroomArtworkCorrectionAuditModel(): Model<IClassroomArtworkCorrectionAudit> {
+    return this.classroomArtworkCorrectionAuditModel;
   }
 
   public async stopConnection() {
@@ -188,4 +203,8 @@ export function getTeacherProfileModel(): Model<ITeacherProfile> {
 
 export function getTeacherDataExportAuditModel(): Model<ITeacherDataExportAudit> {
   return getGlobalModelManager().getTeacherDataExportAuditModel();
+}
+
+export function getClassroomArtworkCorrectionAuditModel(): Model<IClassroomArtworkCorrectionAudit> {
+  return getGlobalModelManager().getClassroomArtworkCorrectionAuditModel();
 }

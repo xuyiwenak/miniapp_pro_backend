@@ -37,33 +37,39 @@ async function classroomRequest<T>(
   return payload.data;
 }
 
-function post<T>(path: string, body: unknown, token?: string): Promise<T> {
+function post<T>(path: string, body: unknown, token?: string, idempotencyKey?: string): Promise<T> {
   return classroomRequest<T>(
     path,
     { method: 'POST', body: JSON.stringify(body) },
     token,
-    crypto.randomUUID()
+    idempotencyKey
   );
 }
 
 export const studentClassroomApi = {
   classroom: (accessCode: string) =>
     classroomRequest<ClassroomInfo>(`/classrooms/${accessCode}`),
-  start: (accessCode: string, resumeToken?: string) =>
-    classroomRequest<ParticipationState>('/classroom-participation/start', {
-      method: 'POST',
-      body: JSON.stringify({ accessCode, resumeToken: resumeToken || undefined }),
-    }),
+  start: (accessCode: string, resumeToken: string, idempotencyKey: string) =>
+    classroomRequest<ParticipationState>(
+      '/classroom-participation/start',
+      {
+        method: 'POST',
+        body: JSON.stringify({ accessCode, resumeToken }),
+      },
+      undefined,
+      idempotencyKey
+    ),
   state: (token: string) => classroomRequest<ParticipationState>('/classroom-participation/state', {}, token),
   heartbeat: (token: string) => post('/classroom-participation/heartbeat', {}, token),
-  consent: (token: string) =>
+  consent: (token: string, idempotencyKey: string) =>
     post<ParticipationState>(
       '/classroom-participation/consent',
       { consentVersion: 'classroom-consent-v1' },
-      token
+      token,
+      idempotencyKey
     ),
-  profile: (token: string, profile: Record<string, string>) =>
-    post<ParticipationState>('/classroom-participation/profile', profile, token),
+  profile: (token: string, profile: Record<string, string>, idempotencyKey: string) =>
+    post<ParticipationState>('/classroom-participation/profile', profile, token, idempotencyKey),
   saveDraft: (
     token: string,
     timepoint: 'pre' | 'post',
@@ -84,19 +90,26 @@ export const studentClassroomApi = {
     locale: Locale,
     answers: AssessmentAnswers,
     durationMs: number,
-    clientRecovered: boolean
+    clientRecovered: boolean,
+    idempotencyKey: string
   ) =>
     post<ParticipationState>(
       `/classroom-participation/assessment/${timepoint}/submit`,
       { page, locale, ...answers, durationMs, clientRecovered },
-      token
+      token,
+      idempotencyKey
     ),
-  completeActivity: (token: string) =>
-    post<ParticipationState>('/classroom-participation/activity/complete', {}, token),
-  requestTeacherUpload: (token: string) =>
-    post<ParticipationState>('/classroom-participation/artwork/request-teacher-upload', {}, token),
-  uploadArtwork: (token: string, dataUrl: string) =>
-    post<ParticipationState>('/classroom-participation/artwork', { dataUrl }, token),
+  completeActivity: (token: string, idempotencyKey: string) =>
+    post<ParticipationState>('/classroom-participation/activity/complete', {}, token, idempotencyKey),
+  requestTeacherUpload: (token: string, idempotencyKey: string) =>
+    post<ParticipationState>(
+      '/classroom-participation/artwork/request-teacher-upload',
+      {},
+      token,
+      idempotencyKey
+    ),
+  uploadArtwork: (token: string, dataUrl: string, idempotencyKey: string) =>
+    post<ParticipationState>('/classroom-participation/artwork', { dataUrl }, token, idempotencyKey),
   artworkStatus: (token: string) =>
     classroomRequest<{ artworkStatus: string; healingStatus: string }>(
       '/classroom-participation/artwork/status',
@@ -104,6 +117,6 @@ export const studentClassroomApi = {
       token
     ),
   echo: (token: string) => classroomRequest<EchoResult>('/classroom-participation/echo', {}, token),
-  feedback: (token: string, input: Record<string, unknown>) =>
-    post<ParticipationState>('/classroom-participation/feedback', input, token),
+  feedback: (token: string, input: Record<string, unknown>, idempotencyKey: string) =>
+    post<ParticipationState>('/classroom-participation/feedback', input, token, idempotencyKey),
 };

@@ -11,6 +11,7 @@ import {
   FileImageOutlined,
   FileTextOutlined,
   FormOutlined,
+  EditOutlined,
   LinkOutlined,
   ManOutlined,
   PlayCircleOutlined,
@@ -22,7 +23,9 @@ import {
   TeamOutlined,
   UploadOutlined,
   UserOutlined,
+  UsergroupAddOutlined,
   UserSwitchOutlined,
+  AuditOutlined,
 } from '@ant-design/icons';
 import QRCode from 'qrcode';
 import {
@@ -33,13 +36,20 @@ import {
 } from '@/api/classroomApi';
 import { ClassroomAssessmentResults } from './ClassroomAssessmentResults';
 import { TeacherArtworkUpload } from './TeacherArtworkUpload';
+import { ClassroomCollaborators } from './ClassroomCollaborators';
+import { ClassroomArtworkCorrection } from './ClassroomArtworkCorrection';
 
 const { Text, Title } = Typography;
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_INTERVAL_MS = 60000;
 const TOTAL_ASSESSMENT_ITEMS = 13;
 
-type Props = { classroom: ClassroomRecord; onChanged: () => void };
+type Props = {
+  classroom: ClassroomRecord;
+  teacherId: string;
+  onEdit: () => void;
+  onChanged: () => void;
+};
 type DashboardView = 'progress' | 'results';
 
 const STAGES: Array<{
@@ -267,17 +277,20 @@ function LiveProgress({ progress, qrDataUrl, studentUrl }: {
   );
 }
 
-export function ClassroomDashboard({ classroom, onChanged }: Props) {
+export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: Props) {
   const [progress, setProgress] = useState<ClassroomProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>('progress');
   const studentUrl = useMemo(() => classroomUrl(classroom), [classroom]);
   const effectiveStatus = progress?.classStatus ?? classroom.status;
   const resultsAvailable = ['closing', 'closed'].includes(effectiveStatus);
   const shownView = resultsAvailable && activeView === 'results' ? 'results' : 'progress';
+  const isOwner = classroom.createdByTeacherId === teacherId;
 
   const loadProgress = useCallback(async (): Promise<boolean> => {
     try {
@@ -341,9 +354,25 @@ export function ClassroomDashboard({ classroom, onChanged }: Props) {
   }
 
   function confirmClose(): void {
+    const graceDeadline = new Date(Date.now() + classroom.gracePeriodMinutes * 60_000);
+    const incomplete = Math.max((progress?.joinedTotal ?? 0) - (progress?.completedTotal ?? 0), 0);
     Modal.confirm({
       title: '关闭课堂？',
-      content: `当前已完成 ${progress?.completedTotal ?? 0} 人。关闭后禁止新学生进入，已有学生仍可继续 ${classroom.gracePeriodMinutes} 分钟。`,
+      content: (
+        <div className="classroom-close-summary">
+          <p>关闭后禁止新学生进入，已有学生仍可继续 {classroom.gracePeriodMinutes} 分钟。</p>
+          <dl>
+            <div><dt>已进入</dt><dd>{progress?.joinedTotal ?? 0}</dd></div>
+            <div><dt>已完成</dt><dd>{progress?.completedTotal ?? 0}</dd></div>
+            <div><dt>未完成</dt><dd>{incomplete}</dd></div>
+            <div><dt>待教师代传</dt><dd>{progress?.artworkCounts.teacherPending ?? 0}</dd></div>
+            <div><dt>缺少前测</dt><dd>{progress?.issueCounts.missingPre ?? 0}</dd></div>
+            <div><dt>缺少后测</dt><dd>{progress?.issueCounts.missingPost ?? 0}</dd></div>
+            <div><dt>完整配对</dt><dd>{progress?.researchCounts.completePairs ?? 0}</dd></div>
+          </dl>
+          <p>预计宽限期截止：{graceDeadline.toLocaleString('zh-CN')}</p>
+        </div>
+      ),
       okText: '关闭并开始宽限期',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -381,6 +410,11 @@ export function ClassroomDashboard({ classroom, onChanged }: Props) {
         </div>
         <Space wrap className="classroom-dashboard__actions">
           <Button icon={<ReloadOutlined />} onClick={() => void loadProgress()}>刷新</Button>
+          {isOwner && (
+            <Button icon={<UsergroupAddOutlined />} onClick={() => setCollaboratorsOpen(true)}>
+              协作权限
+            </Button>
+          )}
           {resultsAvailable && (
             <Button
               icon={<BarChartOutlined />}
@@ -389,19 +423,25 @@ export function ClassroomDashboard({ classroom, onChanged }: Props) {
               {shownView === 'progress' ? '测评结果' : '实时进度'}
             </Button>
           )}
-          {effectiveStatus === 'draft' && (
+          {effectiveStatus === 'draft' && isOwner && (
+            <Button icon={<EditOutlined />} onClick={onEdit}>编辑课堂</Button>
+          )}
+          {effectiveStatus === 'draft' && isOwner && (
             <Button type="primary" icon={<QrcodeOutlined />} onClick={() => void openClassroom()}>
               开放课堂
             </Button>
           )}
-          {effectiveStatus === 'open' && (
+          {effectiveStatus === 'open' && isOwner && (
             <Button icon={<PlayCircleOutlined />} onClick={confirmClose}>关闭课堂</Button>
           )}
-          {effectiveStatus === 'closing' && (
+          {effectiveStatus === 'closing' && isOwner && (
             <Button icon={<PlayCircleOutlined />} onClick={confirmFinalize}>提前结束宽限期</Button>
           )}
           {['open', 'closing'].includes(effectiveStatus) && (
             <Button icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>教师代上传</Button>
+          )}
+          {['closing', 'closed'].includes(effectiveStatus) && (
+            <Button icon={<AuditOutlined />} onClick={() => setCorrectionOpen(true)}>研究修正</Button>
           )}
         </Space>
       </header>
@@ -424,6 +464,20 @@ export function ClassroomDashboard({ classroom, onChanged }: Props) {
         classId={classroom.classId}
         open={uploadOpen}
         onCancel={() => setUploadOpen(false)}
+        onChanged={() => void loadProgress()}
+      />
+      {isOwner && (
+        <ClassroomCollaborators
+          classId={classroom.classId}
+          teacherId={teacherId}
+          open={collaboratorsOpen}
+          onCancel={() => setCollaboratorsOpen(false)}
+        />
+      )}
+      <ClassroomArtworkCorrection
+        classId={classroom.classId}
+        open={correctionOpen}
+        onCancel={() => setCorrectionOpen(false)}
         onChanged={() => void loadProgress()}
       />
     </div>

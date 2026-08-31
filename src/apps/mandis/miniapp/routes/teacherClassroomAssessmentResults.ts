@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
-  getClassroomModel,
   getClassroomParticipationModel,
   getTeacherDataExportAuditModel,
   getWorkModel,
@@ -20,6 +19,7 @@ import {
   CLASSROOM_ASSESSMENT_DATASET_VERSION,
 } from '../services/classroomAssessmentExport';
 import { finalizeClassroomIfExpired } from '../services/classroomLifecycle';
+import { findAccessibleClassroom } from '../services/classroomAccess';
 
 const router = Router({ mergeParams: true });
 const DEFAULT_PAGE_SIZE = 50;
@@ -56,23 +56,12 @@ function getClassId(req: Request): string {
   return String((req.params as Record<string, string>).classId ?? '');
 }
 
-async function findOwnedClassroom(
-  classId: string,
-  teacherId: string,
-  res: Response,
-): Promise<IClassroom | null> {
-  const Classroom = getClassroomModel();
-  const found = await Classroom.findOne({ classId, createdByTeacherId: teacherId }).lean().exec();
-  if (!found) sendErr(res, 'Classroom not found', 404);
-  return found;
-}
-
 async function loadResultBundle(
   classId: string,
   teacherId: string,
   res: Response,
 ): Promise<ResultBundle | null> {
-  const owned = await findOwnedClassroom(classId, teacherId, res);
+  const owned = await findAccessibleClassroom(classId, teacherId, res);
   if (!owned) return null;
   const classroom = await finalizeClassroomIfExpired(owned);
   const dataStatus = getAssessmentResultDataStatus(classroom);

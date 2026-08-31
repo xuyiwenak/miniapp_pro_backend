@@ -24,6 +24,9 @@ function sanitizeRow(row: ExportRow): ExportRow {
 }
 
 function manifestRows(classroom: IClassroom, result: ClassroomAssessmentResult): ExportRow[] {
+  const instrumentVersions = [...new Set(result.participants.map((row) => row.instrumentVersion))].join(',');
+  const schemaVersions = [...new Set(result.participants.map((row) => row.dataSchemaVersion))].join(',');
+  const consentVersions = [...new Set(result.participants.flatMap((row) => row.consentVersion ?? []))].join(',');
   return [
     { field: 'datasetVersion', value: DATASET_VERSION },
     { field: 'classId', value: classroom.classId },
@@ -36,6 +39,9 @@ function manifestRows(classroom: IClassroom, result: ClassroomAssessmentResult):
     { field: 'participantCount', value: result.participantCount },
     { field: 'assessmentPairedCount', value: result.assessmentPairedCount },
     { field: 'researchRecordCompleteCount', value: result.researchRecordCompleteCount },
+    { field: 'instrumentVersions', value: instrumentVersions },
+    { field: 'dataSchemaVersions', value: schemaVersions },
+    { field: 'consentVersions', value: consentVersions },
     { field: 'missingValuePolicy', value: 'not_imputed' },
   ];
 }
@@ -69,6 +75,9 @@ function participantExportRow(row: AssessmentParticipantRow): ExportRow {
   return {
     classroomCode: row.classroomCode,
     instrumentVersion: row.instrumentVersion,
+    dataSchemaVersion: row.dataSchemaVersion,
+    consentVersion: row.consentVersion,
+    source: row.source,
     gender: row.gender,
     artExperience: row.artExperience,
     preSubmitted: row.preSubmitted,
@@ -78,7 +87,12 @@ function participantExportRow(row: AssessmentParticipantRow): ExportRow {
     ...row.scores,
     artworkStatus: row.artworkStatus,
     uploaderRole: row.uploaderRole,
+    uploadReason: row.uploadReason,
     aiStatus: row.aiStatus,
+    preDurationMs: row.preDurationMs,
+    postDurationMs: row.postDurationMs,
+    preClientRecovered: row.preClientRecovered,
+    postClientRecovered: row.postClientRecovered,
   };
 }
 
@@ -103,6 +117,10 @@ function timepointRows(
     value,
     assessmentStatus: assessment.status,
     locale: assessment.locale ?? null,
+    durationMs: assessment.durationMs ?? null,
+    clientRecovered: Boolean(assessment.clientRecovered),
+    submittedAt: assessment.submittedAt?.toISOString() ?? null,
+    dataSchemaVersion: participant.dataSchemaVersion,
   }));
 }
 
@@ -117,6 +135,11 @@ function dictionaryRows(): ExportRow[] {
     { field: 'delta_*', definition: '课后得分减课前得分；缺失值不填补' },
     { field: 'assessmentPaired', definition: '前测与后测均已提交' },
     { field: 'researchRecordComplete', definition: '前测、作品、后测及版本信息完整' },
+    { field: 'dataSchemaVersion', definition: '参与数据结构版本，用于历史数据复现' },
+    { field: 'durationMs', definition: '本次测评从页面载入到最终提交的毫秒数' },
+    { field: 'clientRecovered', definition: '本次提交是否由设备本地缓存恢复' },
+    { field: 'uploaderRole', definition: '作品上传者角色：student 或 teacher' },
+    { field: 'uploadReason', definition: '教师代传或研究修正作品时记录的原因' },
   ];
 }
 

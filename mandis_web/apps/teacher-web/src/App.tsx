@@ -38,6 +38,7 @@ export default function App() {
   return (
     <div className="teacher-app">
       <ClassroomsPage
+        teacherId={profile.teacherId}
         teacherDisplayName={profile.displayName}
         onLogout={() => {
           void teacherAuthApi.logout().then(() => location.reload());

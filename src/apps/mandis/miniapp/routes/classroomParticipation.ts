@@ -24,7 +24,6 @@ import {
   countAssessmentAnswers,
   generateClassroomCode,
   generateParticipantId,
-  generateResumeToken,
   hasCompleteAssessment,
   hashToken,
   isResearchRecordComplete,
@@ -45,7 +44,7 @@ type ParticipationRequest = Request & { participation?: ParticipationDocument };
 
 const StartSchema = z.object({
   accessCode: z.string().min(8),
-  resumeToken: z.string().optional(),
+  resumeToken: z.string().min(32).max(128),
 });
 const ConsentSchema = z.object({ consentVersion: z.string().min(1).max(80) });
 const ProfileSchema = z.object({
@@ -236,16 +235,19 @@ function mapParticipationState(
 }
 
 async function createParticipation(
-  classId: string
+  classId: string,
+  joinIdempotencyKey: string,
+  requestedToken: string
 ): Promise<{ participation: ParticipationDocument; token: string }> {
   const Participation = getClassroomParticipationModel();
-  const token = generateResumeToken();
+  const token = requestedToken;
   const classroomCode = await createUniqueClassroomCode(classId);
   const participation = await Participation.create({
     participantId: generateParticipantId(),
     classId,
     classroomCode,
     resumeTokenHash: hashToken(token),
+    joinIdempotencyKey,
     source: 'student',
     currentStage: 'preparation',
     lastActiveAt: new Date(),
@@ -270,6 +272,19 @@ async function resumeExistingParticipation(
     : null;
 }
 
+async function findRepeatedJoin(
+  classId: string,
+  joinIdempotencyKey: string,
+  resumeToken: string
+): Promise<ParticipationDocument | null> {
+  const Participation = getClassroomParticipationModel();
+  return Participation.findOne({
+    classId,
+    joinIdempotencyKey,
+    resumeTokenHash: hashToken(resumeToken),
+  }).exec();
+}
+
 async function findClassroomByAccessCode(
   accessCode: string
 ): Promise<IClassroom | null> {
@@ -277,42 +292,76 @@ async function findClassroomByAccessCode(
   return Classroom.findOne({ accessCode }).lean().exec();
 }
 
-router.post('/start', async (req, res) => {
-  const parsed = StartSchema.safeParse(req.body);
-  if (!parsed.success) {
-    sendErr(res, 'Invalid classroom request', 400);
-    return;
-  }
-  const classroom = await findClassroomByAccessCode(parsed.data.accessCode);
+async function loadStartClassroom(
+  accessCode: string,
+  res: Response
+): Promise<{ classroom: IClassroom; current: IClassroom } | null> {
+  const classroom = await findClassroomByAccessCode(accessCode);
   if (!classroom) {
     sendErr(res, 'Classroom not found', 404);
-    return;
+    return null;
   }
   await closeExpiredClassroom(classroom.classId);
   const Classroom = getClassroomModel();
   const current = await Classroom.findOne({ classId: classroom.classId })
     .lean()
     .exec();
+  if (!current) {
+    sendErr(res, 'Classroom not found', 404);
+    return null;
+  }
+  return { classroom, current };
+}
+
+async function startOrResumeParticipation(
+  classroom: IClassroom,
+  current: IClassroom,
+  key: string,
+  token: string,
+  res: Response
+): Promise<ParticipationDocument | null> {
   const resumed = await resumeExistingParticipation(
     classroom.classId,
     current,
-    parsed.data.resumeToken
+    token
   );
-  if (resumed) {
-    sendSucc(res, {
-      resumeToken: parsed.data.resumeToken,
-      ...mapParticipationState(resumed),
-    });
-    return;
-  }
-  if (!current || current.status !== 'open') {
+  if (resumed) return resumed;
+  if (current.status !== 'open') {
     sendErr(res, 'Classroom is not accepting new participants', 409);
+    return null;
+  }
+  try {
+    return (await createParticipation(classroom.classId, key, token))
+      .participation;
+  } catch (error) {
+    const retried = await findRepeatedJoin(classroom.classId, key, token);
+    if (retried) return retried;
+    throw error;
+  }
+}
+
+router.post('/start', async (req, res) => {
+  const key = getIdempotencyKey(req, res);
+  if (!key) return;
+  const parsed = StartSchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendErr(res, 'Invalid classroom request', 400);
     return;
   }
-  const created = await createParticipation(classroom.classId);
+  const context = await loadStartClassroom(parsed.data.accessCode, res);
+  if (!context) return;
+  const { classroom, current } = context;
+  const participation = await startOrResumeParticipation(
+    classroom,
+    current,
+    key,
+    parsed.data.resumeToken,
+    res
+  );
+  if (!participation) return;
   sendSucc(res, {
-    resumeToken: created.token,
-    ...mapParticipationState(created.participation),
+    resumeToken: parsed.data.resumeToken,
+    ...mapParticipationState(participation),
   });
 });
 
@@ -335,8 +384,13 @@ router.post('/consent', async (req: ParticipationRequest, res) => {
     return;
   }
   const participation = getParticipation(req);
+  if (participation.consentedAt) {
+    sendSucc(res, mapParticipationState(participation));
+    return;
+  }
   participation.consentedAt ??= new Date();
   participation.consentVersion = parsed.data.consentVersion;
+  participation.consentIdempotencyKey = key;
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
 });
@@ -354,7 +408,16 @@ router.post('/profile', async (req: ParticipationRequest, res) => {
     sendErr(res, 'Consent required', 409);
     return;
   }
+  if (participation.profile) {
+    if (participation.profileIdempotencyKey === key) {
+      sendSucc(res, mapParticipationState(participation));
+      return;
+    }
+    sendErr(res, 'Profile already submitted', 409);
+    return;
+  }
   participation.profile = parsed.data;
+  participation.profileIdempotencyKey = key;
   participation.currentStage = 'pre_assessment';
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
@@ -456,6 +519,7 @@ router.post('/activity/complete', async (req: ParticipationRequest, res) => {
     return;
   }
   participation.activityCompletedAt = new Date();
+  participation.activityIdempotencyKey = key;
   participation.currentStage = 'artwork_upload';
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
@@ -498,6 +562,7 @@ async function saveStudentArtwork(
   });
   participation.artworkStatus = 'student_uploaded';
   participation.uploadIdempotencyKey = idempotencyKey;
+  participation.syncStatus = 'synced';
   participation.currentStage = 'post_assessment';
   await participation.save();
 }
@@ -587,6 +652,18 @@ router.get('/echo', async (req: ParticipationRequest, res) => {
   });
 });
 
+async function hasReadyArtworkEcho(
+  participation: IClassroomParticipation
+): Promise<boolean> {
+  if (!participation.artworkId) return false;
+  const Work = getWorkModel();
+  const work = await Work.findOne({ workId: participation.artworkId })
+    .select('healing.status')
+    .lean()
+    .exec();
+  return work?.healing?.status === 'success';
+}
+
 router.post('/feedback', async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
@@ -600,7 +677,20 @@ router.post('/feedback', async (req: ParticipationRequest, res) => {
     sendErr(res, 'Post assessment required', 409);
     return;
   }
+  if (participation.feedbackIdempotencyKey === key && participation.feedback) {
+    sendSucc(res, mapParticipationState(participation));
+    return;
+  }
+  if (participation.participantFlowCompleted) {
+    sendErr(res, 'Feedback already submitted', 409);
+    return;
+  }
+  if (!(await hasReadyArtworkEcho(participation))) {
+    sendErr(res, 'Artwork reflection is not ready', 409);
+    return;
+  }
   participation.feedback = parsed.data;
+  participation.feedbackIdempotencyKey = key;
   participation.participantFlowCompleted = true;
   participation.researchRecordComplete =
     isResearchRecordComplete(participation);

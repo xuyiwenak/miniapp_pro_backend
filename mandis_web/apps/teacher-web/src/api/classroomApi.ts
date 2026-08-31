@@ -5,6 +5,8 @@ import type {
   AssessmentParticipantPage,
   ClassroomProgress,
   ClassroomRecord,
+  ClassroomCollaborator,
+  ArtworkCorrectionAudit,
   PendingArtwork,
 } from '@mandis/common/classroom-types';
 export type {
@@ -16,6 +18,8 @@ export type {
   ClassroomInput,
   ClassroomProgress,
   ClassroomRecord,
+  ClassroomCollaborator,
+  ArtworkCorrectionAudit,
   PendingArtwork,
 } from '@mandis/common/classroom-types';
 
@@ -67,6 +71,25 @@ export const classroomApi = {
   ) =>
     http.post<{ artworkId: string }>(
       `${BASE_PATH}/${classId}/participants/${classroomCode}/artwork`,
+      input,
+      { headers: { 'Idempotency-Key': idempotencyKey } }
+    ),
+  collaborators: (classId: string) =>
+    http.get<{ list: ClassroomCollaborator[] }>(`${BASE_PATH}/${classId}/collaborators`),
+  addCollaborator: (classId: string, teacherId: string) =>
+    http.post<ClassroomCollaborator>(`${BASE_PATH}/${classId}/collaborators`, { teacherId }),
+  removeCollaborator: (classId: string, teacherId: string) =>
+    http.delete<{ removed: boolean }>(`${BASE_PATH}/${classId}/collaborators/${teacherId}`),
+  corrections: (classId: string) =>
+    http.get<{ list: ArtworkCorrectionAudit[] }>(`${BASE_PATH}/${classId}/artwork-corrections`),
+  correctArtwork: (
+    classId: string,
+    classroomCode: string,
+    input: { dataUrl: string; correctionType: 'late_upload' | 'replace'; reason: string },
+    idempotencyKey: string
+  ) =>
+    http.post<{ correctionId: string; artworkId: string }>(
+      `${BASE_PATH}/${classId}/artwork-corrections/${classroomCode}`,
       input,
       { headers: { 'Idempotency-Key': idempotencyKey } }
     ),

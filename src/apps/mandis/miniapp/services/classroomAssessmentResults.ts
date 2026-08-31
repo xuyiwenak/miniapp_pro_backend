@@ -45,6 +45,9 @@ export type AssessmentMeasureSummary = {
 export type AssessmentParticipantRow = {
   classroomCode: string;
   instrumentVersion: string;
+  dataSchemaVersion: string;
+  consentVersion: string | null;
+  source: IClassroomParticipation['source'];
   gender: string | null;
   artExperience: string | null;
   preSubmitted: boolean;
@@ -55,6 +58,11 @@ export type AssessmentParticipantRow = {
   artworkStatus: IClassroomParticipation['artworkStatus'];
   uploaderRole: NonNullable<IWork['uploaderRole']> | null;
   aiStatus: 'none' | 'pending' | 'success' | 'failed';
+  uploadReason: string | null;
+  preDurationMs: number | null;
+  postDurationMs: number | null;
+  preClientRecovered: boolean;
+  postClientRecovered: boolean;
 };
 
 export type InstrumentResultGroup = {
@@ -195,6 +203,9 @@ function participantRow(
   return {
     classroomCode: participant.classroomCode,
     instrumentVersion: participant.instrumentVersion,
+    dataSchemaVersion: participant.dataSchemaVersion,
+    consentVersion: participant.consentVersion ?? null,
+    source: participant.source,
     gender: participant.profile?.gender ?? null,
     artExperience: participant.profile?.artExperience ?? null,
     preSubmitted: participant.preAssessment.status === 'submitted',
@@ -206,6 +217,11 @@ function participantRow(
     artworkStatus: participant.artworkStatus,
     uploaderRole: work?.uploaderRole ?? null,
     aiStatus: work?.healing?.status ?? 'none',
+    uploadReason: participant.uploadReason ?? null,
+    preDurationMs: participant.preAssessment.durationMs ?? null,
+    postDurationMs: participant.postAssessment.durationMs ?? null,
+    preClientRecovered: Boolean(participant.preAssessment.clientRecovered),
+    postClientRecovered: Boolean(participant.postAssessment.clientRecovered),
   };
 }
 

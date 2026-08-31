@@ -61,6 +61,8 @@ export type ClassroomStatus = 'draft' | 'open' | 'closing' | 'closed';
 
 export type ClassroomRecord = ClassroomInfo & {
   classId: string;
+  createdByTeacherId: string;
+  authorizedTeacherIds: string[];
   accessCode?: string;
   timezone: 'Asia/Shanghai';
   status: ClassroomStatus;
@@ -71,8 +73,30 @@ export type ClassroomRecord = ClassroomInfo & {
 
 export type ClassroomInput = Omit<
   ClassroomRecord,
-  'classId' | 'accessCode' | 'status' | 'gracePeriodEndsAt' | 'createdAt'
+  | 'classId'
+  | 'createdByTeacherId'
+  | 'authorizedTeacherIds'
+  | 'accessCode'
+  | 'status'
+  | 'gracePeriodEndsAt'
+  | 'createdAt'
 >;
+
+export type ClassroomCollaborator = {
+  teacherId: string;
+  displayName: string;
+  organization?: string;
+};
+
+export type ArtworkCorrectionAudit = {
+  correctionId: string;
+  classroomCode: string;
+  correctedByTeacherId: string;
+  correctionType: 'late_upload' | 'replace';
+  reason: string;
+  artworkId: string;
+  createdAt: string;
+};
 
 export type AssessmentCounts = {
   notStarted: number;
@@ -161,6 +185,9 @@ export type ClassroomAssessmentSummary = {
 export type AssessmentParticipantRow = {
   classroomCode: string;
   instrumentVersion: string;
+  dataSchemaVersion: string;
+  consentVersion: string | null;
+  source: 'student' | 'artwork_only';
   gender: string | null;
   artExperience: string | null;
   preSubmitted: boolean;
@@ -171,6 +198,11 @@ export type AssessmentParticipantRow = {
   artworkStatus: string;
   uploaderRole: 'student' | 'teacher' | null;
   aiStatus: 'none' | 'pending' | 'success' | 'failed';
+  uploadReason: string | null;
+  preDurationMs: number | null;
+  postDurationMs: number | null;
+  preClientRecovered: boolean;
+  postClientRecovered: boolean;
 };
 
 export type AssessmentParticipantPage = {

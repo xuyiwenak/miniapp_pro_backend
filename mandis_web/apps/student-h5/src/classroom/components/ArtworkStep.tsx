@@ -50,9 +50,18 @@ export function ArtworkStep({
     setError('');
   }
 
+  async function upload(): Promise<void> {
+    setError('');
+    try {
+      await onUpload(dataUrl);
+    } catch {
+      setError(zh ? '上传失败，请检查网络后重新点击上传' : 'Upload failed. Reconnect and tap upload again.');
+    }
+  }
+
   return (
     <main className="course-step-screen">
-      <CourseProgress locale={locale} currentStep={3} />
+      <CourseProgress locale={locale} currentStep={3} failedStep={error ? 3 : undefined} />
       <section className="classroom-card artwork-card">
         <p className="classroom-eyebrow">{zh ? '第 3 步 · 上传作品' : 'STEP 3 · UPLOAD'}</p>
         <h1>{zh ? '记录你的课堂作品' : 'Capture your classroom artwork'}</h1>
@@ -92,7 +101,7 @@ export function ArtworkStep({
             type="button"
             disabled={saving}
             onClick={() => {
-              void onUpload(dataUrl);
+              void upload();
             }}
           >
             {zh ? '确认上传' : 'Upload artwork'}

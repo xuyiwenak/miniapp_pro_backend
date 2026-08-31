@@ -16,6 +16,30 @@ export function saveResumeToken(accessCode: string, token: string): void {
   localStorage.setItem(`${STORAGE_PREFIX}:${accessCode}:token`, token);
 }
 
+function createSecureKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+export function ensureResumeToken(accessCode: string): string {
+  const existing = getResumeToken(accessCode);
+  if (existing) return existing;
+  const token = createSecureKey();
+  saveResumeToken(accessCode, token);
+  localStorage.removeItem(cacheKey(accessCode, 'idempotency:join'));
+  return token;
+}
+
+export function getActionIdempotencyKey(accessCode: string, action: string): string {
+  const key = cacheKey(accessCode, `idempotency:${action}`);
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const value = createSecureKey();
+  localStorage.setItem(key, value);
+  return value;
+}
+
 function cacheKey(accessCode: string, name: string): string {
   return `${STORAGE_PREFIX}:${accessCode}:${name}`;
 }

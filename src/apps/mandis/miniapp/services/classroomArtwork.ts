@@ -1,11 +1,14 @@
 import { createHash, randomUUID } from 'crypto';
+import sharp from 'sharp';
 import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { checkImage } from '../../../../util/wxContentSecurity';
 import { uploadToStorage } from '../../../../util/imageUploader';
 import { getOssUploadPrefixes } from '../../../../util/ossUploader';
-import { stripJpegExif } from './classroomResearch';
 
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
+const MIN_ARTWORK_DIMENSION = 100;
+const MAX_ARTWORK_DIMENSION = 12_000;
+const MAX_ARTWORK_PIXELS = 40_000_000;
 const DATA_URL_PATTERN = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/;
 const EXTENSION_BY_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -21,81 +24,147 @@ export type ClassroomArtworkInput = {
   uploadReason?: string;
 };
 
-function decodeImage(dataUrl: string): { buffer: Buffer; contentType: string } {
+export type ClassroomArtworkReplacement = {
+  artworkId: string;
+  previousImageUrl?: string;
+  replacementImageUrl: string;
+  previousContentHash?: string;
+  replacementContentHash: string;
+};
+
+export type NormalizedClassroomImage = {
+  buffer: Buffer;
+  contentType: string;
+  width: number;
+  height: number;
+};
+
+type StoredImage = NormalizedClassroomImage & {
+  contentHash: string;
+  url: string;
+  filename: string;
+};
+
+function decodeDataUrl(dataUrl: string): { buffer: Buffer; contentType: string } {
   const match = DATA_URL_PATTERN.exec(dataUrl);
   if (!match) throw new Error('INVALID_IMAGE_FORMAT');
-  const contentType = match[1];
-  const rawBuffer = Buffer.from(match[2], 'base64');
-  if (rawBuffer.length === 0 || rawBuffer.length > MAX_ARTWORK_BYTES) {
+  const buffer = Buffer.from(match[2], 'base64');
+  if (buffer.length === 0 || buffer.length > MAX_ARTWORK_BYTES) {
     throw new Error('INVALID_IMAGE_SIZE');
   }
-  if (!hasExpectedSignature(rawBuffer, contentType))
-    throw new Error('INVALID_IMAGE_CONTENT');
-  const buffer =
-    contentType === 'image/jpeg' ? stripJpegExif(rawBuffer) : rawBuffer;
-  return { buffer, contentType };
+  return { buffer, contentType: match[1] };
 }
 
-function hasExpectedSignature(buffer: Buffer, contentType: string): boolean {
-  if (contentType === 'image/jpeg') {
-    return (
-      buffer.length >= 3 &&
-      buffer[0] === 0xff &&
-      buffer[1] === 0xd8 &&
-      buffer[2] === 0xff
-    );
+function validateDimensions(width: number, height: number): void {
+  const dimensionInvalid = width < MIN_ARTWORK_DIMENSION
+    || height < MIN_ARTWORK_DIMENSION
+    || width > MAX_ARTWORK_DIMENSION
+    || height > MAX_ARTWORK_DIMENSION;
+  if (dimensionInvalid || width * height > MAX_ARTWORK_PIXELS) {
+    throw new Error('INVALID_IMAGE_DIMENSIONS');
   }
-  if (contentType === 'image/png') {
-    return (
-      buffer.length >= 8 &&
-      buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
-    );
-  }
-  return (
-    buffer.length >= 12 &&
-    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
-    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
-  );
+}
+
+export async function normalizeClassroomImage(
+  dataUrl: string
+): Promise<NormalizedClassroomImage> {
+  const decoded = decodeDataUrl(dataUrl);
+  const pipeline = sharp(decoded.buffer, { failOn: 'error' }).rotate();
+  if (decoded.contentType === 'image/jpeg') pipeline.jpeg({ quality: 92 });
+  if (decoded.contentType === 'image/png') pipeline.png();
+  if (decoded.contentType === 'image/webp') pipeline.webp({ quality: 92 });
+  const normalized = await pipeline.toBuffer({ resolveWithObject: true });
+  validateDimensions(normalized.info.width, normalized.info.height);
+  if (normalized.data.length > MAX_ARTWORK_BYTES) throw new Error('INVALID_IMAGE_SIZE');
+  return {
+    buffer: normalized.data,
+    contentType: decoded.contentType,
+    width: normalized.info.width,
+    height: normalized.info.height,
+  };
 }
 
 async function ensureUniqueArtwork(
   classId: string,
-  contentHash: string
+  contentHash: string,
+  excludedWorkId?: string
 ): Promise<void> {
   const Work = getWorkModel();
-  const duplicate = await Work.exists({
-    classroomId: classId,
-    contentHash,
-  }).exec();
-  if (duplicate) throw new Error('DUPLICATE_ARTWORK');
+  const query: Record<string, unknown> = { classroomId: classId, contentHash };
+  if (excludedWorkId) query.workId = { $ne: excludedWorkId };
+  if (await Work.exists(query).exec()) throw new Error('DUPLICATE_ARTWORK');
+}
+
+async function storeImage(
+  input: ClassroomArtworkInput,
+  workId: string,
+  excludedWorkId?: string
+): Promise<StoredImage> {
+  const image = await normalizeClassroomImage(input.dataUrl);
+  const security = await checkImage(image.buffer, image.contentType);
+  if (!security.safe) throw new Error('UNSAFE_IMAGE');
+  const contentHash = createHash('sha256').update(image.buffer).digest('hex');
+  await ensureUniqueArtwork(input.classId, contentHash, excludedWorkId);
+  const extension = EXTENSION_BY_TYPE[image.contentType];
+  const filename = `${workId}.${extension}`;
+  const { worksObjectPrefix } = getOssUploadPrefixes();
+  const key = `${worksObjectPrefix}/classrooms/${input.classId}/${filename}`;
+  const url = await uploadToStorage(image.buffer, key, image.contentType);
+  return { ...image, contentHash, url, filename };
 }
 
 export async function createClassroomArtwork(
   input: ClassroomArtworkInput
 ): Promise<string> {
-  const { buffer, contentType } = decodeImage(input.dataUrl);
-  const security = await checkImage(buffer, contentType);
-  if (!security.safe) throw new Error('UNSAFE_IMAGE');
-  const contentHash = createHash('sha256').update(buffer).digest('hex');
-  await ensureUniqueArtwork(input.classId, contentHash);
   const workId = randomUUID();
-  const extension = EXTENSION_BY_TYPE[contentType];
-  const { worksObjectPrefix } = getOssUploadPrefixes();
-  const key = `${worksObjectPrefix}/classrooms/${input.classId}/${workId}.${extension}`;
-  const url = await uploadToStorage(buffer, key, contentType);
+  const image = await storeImage(input, workId);
   const Work = getWorkModel();
   await Work.create({
     workId,
     authorId: null,
     desc: '',
-    images: [{ url, name: `${workId}.${extension}`, type: contentType }],
+    images: [{ url: image.url, name: image.filename, type: image.contentType }],
     tags: [],
     status: 'published',
     classroomId: input.classId,
     participantId: input.participantId,
     uploaderRole: input.uploaderRole,
     uploadReason: input.uploadReason,
-    contentHash,
+    contentHash: image.contentHash,
   });
   return workId;
+}
+
+export async function replaceClassroomArtwork(
+  input: ClassroomArtworkInput,
+  artworkId: string
+): Promise<ClassroomArtworkReplacement> {
+  const Work = getWorkModel();
+  const current = await Work.findOne({
+    workId: artworkId,
+    classroomId: input.classId,
+    participantId: input.participantId,
+  }).lean().exec();
+  if (!current) throw new Error('ARTWORK_NOT_FOUND');
+  const replacementId = `${artworkId}-correction-${randomUUID()}`;
+  const image = await storeImage(input, replacementId, artworkId);
+  await Work.updateOne(
+    { workId: artworkId },
+    {
+      $set: {
+        images: [{ url: image.url, name: image.filename, type: image.contentType }],
+        uploaderRole: input.uploaderRole,
+        uploadReason: input.uploadReason,
+        contentHash: image.contentHash,
+      },
+      $unset: { healing: 1 },
+    }
+  ).exec();
+  return {
+    artworkId,
+    previousImageUrl: current.images[0]?.url,
+    replacementImageUrl: image.url,
+    previousContentHash: current.contentHash,
+    replacementContentHash: image.contentHash,
+  };
 }

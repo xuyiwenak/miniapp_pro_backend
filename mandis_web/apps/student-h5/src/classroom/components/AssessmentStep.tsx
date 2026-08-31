@@ -18,6 +18,7 @@ type Props = {
   locale: Locale;
   timepoint: 'pre' | 'post';
   saved: AssessmentRecord;
+  pendingArtwork?: boolean;
   onDraft: (page: number, answers: AssessmentAnswers, clientRecovered: boolean) => Promise<void>;
   onSubmit: (page: number, answers: AssessmentAnswers, durationMs: number, clientRecovered: boolean) => Promise<void>;
 };
@@ -134,11 +135,20 @@ function isPageComplete(page: number, answers: AssessmentAnswers): boolean {
   return PANAS_ITEMS.slice(start, start + PANAS_PAGE_SIZE).every((item) => answers.panas[item.code] !== undefined);
 }
 
-export function AssessmentStep({ accessCode, locale, timepoint, saved, onDraft, onSubmit }: Props) {
+export function AssessmentStep({
+  accessCode,
+  locale,
+  timepoint,
+  saved,
+  pendingArtwork = false,
+  onDraft,
+  onSubmit,
+}: Props) {
   const localDraft = useMemo(() => loadAssessmentDraft(accessCode, timepoint), [accessCode, timepoint]);
   const [page, setPage] = useState<1 | 2 | 3>(localDraft?.page ?? saved.currentPage ?? 1);
   const [answers, setAnswers] = useState(() => initialAnswers(saved, localDraft));
   const [message, setMessage] = useState('');
+  const [operationFailed, setOperationFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const startedAt = useRef(Date.now());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -149,6 +159,7 @@ export function AssessmentStep({ accessCode, locale, timepoint, saved, onDraft, 
     setAnswers(next);
     saveAssessmentDraft(accessCode, timepoint, page, next);
     setMessage('');
+    setOperationFailed(false);
   }
 
   async function moveTo(nextPage: 1 | 2 | 3): Promise<void> {
@@ -160,7 +171,8 @@ export function AssessmentStep({ accessCode, locale, timepoint, saved, onDraft, 
     try {
       await onDraft(nextPage, answers, Boolean(localDraft));
     } catch {
-      setMessage(zh ? '答案已保存在本机，联网后会继续同步' : 'Saved on this device; sync will retry online');
+      setOperationFailed(true);
+      setMessage(zh ? '答案已保存在本机，请联网后再次点击继续' : 'Saved on this device. Reconnect and tap again.');
     } finally {
       setSaving(false);
     }
@@ -179,6 +191,7 @@ export function AssessmentStep({ accessCode, locale, timepoint, saved, onDraft, 
       await onSubmit(3, answers, Date.now() - startedAt.current, Boolean(localDraft));
       clearAssessmentDraft(accessCode, timepoint);
     } catch {
+      setOperationFailed(true);
       setMessage(
         zh ? '提交失败，答案仍保存在本机，请检查网络后重试' : 'Submission failed. Your answers remain on this device.'
       );
@@ -208,7 +221,12 @@ export function AssessmentStep({ accessCode, locale, timepoint, saved, onDraft, 
       }}
       onTouchEnd={handleTouchEnd}
     >
-      <CourseProgress locale={locale} currentStep={timepoint === 'pre' ? 1 : 4} />
+      <CourseProgress
+        locale={locale}
+        currentStep={timepoint === 'pre' ? 1 : 4}
+        pendingArtwork={pendingArtwork}
+        failedStep={operationFailed ? (timepoint === 'pre' ? 1 : 4) : undefined}
+      />
       <section className="classroom-card assessment-card">
         <header className="assessment-heading">
           <span>{phaseTitle}</span>

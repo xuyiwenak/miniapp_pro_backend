@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { DatePicker, Form, Input, Modal, Select, TimePicker } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import type { ClassroomInput } from '@/api/classroomApi';
+import type { ClassroomInput, ClassroomRecord } from '@/api/classroomApi';
 
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
 const CLASSROOM_TIMEZONE = 'Asia/Shanghai';
@@ -19,6 +20,7 @@ type ClassroomFormValues = {
 type Props = {
   open: boolean;
   saving: boolean;
+  classroom?: ClassroomRecord;
   onCancel: () => void;
   onSubmit: (input: ClassroomInput) => Promise<void>;
 };
@@ -66,10 +68,27 @@ function todayInShanghai(): Dayjs {
 export function ClassroomCreateModal({
   open,
   saving,
+  classroom,
   onCancel,
   onSubmit,
 }: Props) {
   const [form] = Form.useForm<ClassroomFormValues>();
+
+  useEffect(() => {
+    if (!open) return;
+    if (!classroom) {
+      form.setFieldsValue({
+        classDate: todayInShanghai(),
+        gradeLevel: 'undergraduate_2',
+      });
+      return;
+    }
+    form.setFieldsValue({
+      ...classroom,
+      classDate: dayjs(classroom.classDate),
+      classTime: [dayjs(`2000-01-01 ${classroom.startTime}`), dayjs(`2000-01-01 ${classroom.endTime}`)],
+    });
+  }, [classroom, form, open]);
 
   async function submit(values: ClassroomFormValues): Promise<void> {
     await onSubmit(toClassroomInput(values));
@@ -79,8 +98,8 @@ export function ClassroomCreateModal({
   return (
     <Modal
       open={open}
-      title="创建课堂"
-      okText="保存课堂"
+      title={classroom ? '编辑课堂草稿' : '创建课堂'}
+      okText={classroom ? '保存修改' : '保存课堂'}
       cancelText="取消"
       confirmLoading={saving}
       onCancel={onCancel}
@@ -91,10 +110,6 @@ export function ClassroomCreateModal({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{
-          classDate: todayInShanghai(),
-          gradeLevel: 'undergraduate_2',
-        }}
         onFinish={(values) => {
           void submit(values);
         }}
