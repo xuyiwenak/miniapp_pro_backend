@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Locale } from '@mandis/common/classroom-types';
 import { CourseProgress } from './CourseProgress';
+
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const IMAGE_ACCEPT = ACCEPTED_IMAGE_TYPES.join(',');
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 
 type Props = {
   locale: Locale;
@@ -33,7 +37,8 @@ export function ArtworkStep({
   onCancel,
 }: Props) {
   const zh = locale === 'zh-CN';
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const albumInputRef = useRef<HTMLInputElement>(null);
   const [dataUrl, setDataUrl] = useState('');
   const [error, setError] = useState('');
 
@@ -46,12 +51,22 @@ export function ArtworkStep({
 
   async function choose(file?: File): Promise<void> {
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
-      setError(zh ? '请选择10MB以内的JPG、PNG或WEBP图片' : 'Choose a JPG, PNG or WEBP image under 10 MB');
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_SIZE_BYTES) {
+      setError(
+        zh
+          ? '请选择10MB以内的JPG、PNG或WEBP图片'
+          : 'Choose a JPG, PNG or WEBP image under 10 MB'
+      );
       return;
     }
     setDataUrl(await readFile(file));
     setError('');
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
+    const input = event.currentTarget;
+    void choose(input.files?.[0]);
+    input.value = '';
   }
 
   async function upload(): Promise<void> {
@@ -59,7 +74,11 @@ export function ArtworkStep({
     try {
       await onUpload(dataUrl);
     } catch {
-      setError(zh ? '上传失败，请检查网络后重新点击上传' : 'Upload failed. Reconnect and tap upload again.');
+      setError(
+        zh
+          ? '上传失败，请检查网络后重新点击上传'
+          : 'Upload failed. Reconnect and tap upload again.'
+      );
     }
   }
 
@@ -92,25 +111,48 @@ export function ArtworkStep({
             : 'Take a photo or choose one. If you cannot upload, your teacher can add it using an anonymous code.'}
         </p>
         <input
-          ref={inputRef}
+          ref={cameraInputRef}
           className="sr-only"
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={IMAGE_ACCEPT}
           capture="environment"
-          onChange={(event) => {
-            void choose(event.target.files?.[0]);
-          }}
+          onChange={handleFileChange}
         />
-        <button className="artwork-picker" type="button" onClick={() => inputRef.current?.click()}>
+        <input
+          ref={albumInputRef}
+          className="sr-only"
+          type="file"
+          accept={IMAGE_ACCEPT}
+          onChange={handleFileChange}
+        />
+        <div className="artwork-picker">
           {dataUrl ? (
             <img src={dataUrl} alt={zh ? '作品预览' : 'Artwork preview'} />
           ) : (
             <>
               <span aria-hidden="true">＋</span>
-              <strong>{zh ? '拍摄或选择作品' : 'Take or choose a photo'}</strong>
+              <strong>{zh ? '选择作品照片' : 'Choose an artwork photo'}</strong>
             </>
           )}
-        </button>
+        </div>
+        <div className="artwork-source-actions">
+          <button
+            className="classroom-primary"
+            type="button"
+            disabled={saving}
+            onClick={() => cameraInputRef.current?.click()}
+          >
+            {zh ? '拍照' : 'Take photo'}
+          </button>
+          <button
+            className="classroom-secondary"
+            type="button"
+            disabled={saving}
+            onClick={() => albumInputRef.current?.click()}
+          >
+            {zh ? '从相册选择' : 'Choose from library'}
+          </button>
+        </div>
         {error && (
           <p className="form-error" role="alert">
             {error}

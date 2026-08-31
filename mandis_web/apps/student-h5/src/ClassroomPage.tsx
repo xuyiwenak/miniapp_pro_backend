@@ -6,7 +6,7 @@ import { ConsentStep, ProfileStep } from './classroom/components/PreparationStep
 import { AssessmentStep } from './classroom/components/AssessmentStep';
 import { ActivityStep } from './classroom/components/ActivityStep';
 import { ArtworkStep } from './classroom/components/ArtworkStep';
-import { CompleteStep, EchoStep } from './classroom/components/EchoStep';
+import { EchoStep } from './classroom/components/EchoStep';
 import { useClassroomFlow } from './classroom/useClassroomFlow';
 
 export function ClassroomPage() {
@@ -105,14 +105,13 @@ export function ClassroomPage() {
         }
       />
     );
-  } else if (flow.participation.currentStage === 'completed') {
-    content = <CompleteStep locale={flow.locale} researchComplete={flow.participation.researchRecordComplete} />;
   } else {
     content = (
       <EchoStep
         locale={flow.locale}
-        pendingArtwork={flow.participation.artworkStatus === 'teacher_upload_pending'}
-        classroomCode={flow.participation.classroomCode}
+        classroom={flow.classroom}
+        participation={flow.participation}
+        completed={flow.participation.currentStage === 'completed'}
         loadEcho={flow.loadEcho}
         onReviseArtwork={() => setRevisitingArtwork(true)}
         onComplete={flow.completeWithoutEcho}

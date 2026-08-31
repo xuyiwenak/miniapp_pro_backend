@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Empty, List, message, Tooltip, Typography } from 'antd';
 import {
+  BookOutlined,
   DoubleLeftOutlined,
   DoubleRightOutlined,
   LogoutOutlined,
@@ -99,30 +100,45 @@ export default function ClassroomsPage({ teacherId, teacherDisplayName, onLogout
             <ReadOutlined />
             <Title level={4}>教育课堂</Title>
           </div>
-          <Button
-            type="primary"
-            shape="circle"
-            icon={<PlusOutlined />}
-            aria-label="创建课堂"
-            onClick={() => setCreateOpen(true)}
-          />
+          <Tooltip title="创建课堂">
+            <Button
+              type="primary"
+              shape="circle"
+              icon={<PlusOutlined />}
+              aria-label="创建课堂"
+              onClick={() => setCreateOpen(true)}
+            />
+          </Tooltip>
         </header>
         {error && <Alert type="error" message={error} />}
         <List
           dataSource={classrooms}
           locale={{ emptyText: <Empty description="尚未创建课堂" /> }}
           renderItem={(item) => (
-            <List.Item
-              className={selectedId === item.classId ? 'is-selected' : ''}
-              onClick={() => setSelectedId(item.classId)}
-            >
-              <div>
-                <i aria-hidden="true" />
-                <strong>{item.sessionTitle}</strong>
-                <small>
-                  {item.classDate} · {item.status}
-                </small>
-              </div>
+            <List.Item className={selectedId === item.classId ? 'is-selected' : ''}>
+              <Tooltip
+                placement="right"
+                title={sidebarCollapsed ? `${item.sessionTitle} · ${item.classDate}` : undefined}
+              >
+                <button
+                  type="button"
+                  className="classrooms-page__classroom-button"
+                  aria-current={selectedId === item.classId ? 'page' : undefined}
+                  aria-label={`打开课堂：${item.sessionTitle}`}
+                  onClick={() => setSelectedId(item.classId)}
+                >
+                  <span className="classrooms-page__classroom-icon" aria-hidden="true">
+                    <BookOutlined />
+                    <i />
+                  </span>
+                  <span className="classrooms-page__classroom-copy">
+                    <strong>{item.sessionTitle}</strong>
+                    <small>
+                      {item.classDate} · {item.status}
+                    </small>
+                  </span>
+                </button>
+              </Tooltip>
             </List.Item>
           )}
         />

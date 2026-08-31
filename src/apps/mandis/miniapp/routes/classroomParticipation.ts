@@ -487,6 +487,7 @@ async function saveStudentArtwork(
   participation.syncStatus = 'synced';
   participation.currentStage = getStageAfterArtworkUpload(participation);
   await participation.save();
+  void triggerAnalysisIfReady(participation);
 }
 
 router.post('/artwork', async (req: ParticipationRequest, res) => {
