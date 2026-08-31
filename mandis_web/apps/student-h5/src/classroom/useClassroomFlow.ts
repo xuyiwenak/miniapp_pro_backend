@@ -182,12 +182,12 @@ export function useClassroomFlow(accessCode: string) {
           ),
         true
       ),
-    completeActivity: () =>
-      run(() => studentClassroomApi.completeActivity(token, actionKey('activity-complete'))),
+    completeActivity: () => run(() => studentClassroomApi.completeActivity(token, actionKey('activity-complete'))),
     uploadArtwork: (dataUrl: string) =>
       run(() => studentClassroomApi.uploadArtwork(token, dataUrl, actionKey('student-artwork-upload')), true),
     requestTeacherUpload,
     confirmTeacherUpload,
+    completeWithoutEcho: () => run(() => studentClassroomApi.complete(token, actionKey('complete-without-echo'))),
     submitFeedback: (input: Record<string, unknown>) =>
       run(() => studentClassroomApi.feedback(token, input, actionKey('feedback'))),
   };

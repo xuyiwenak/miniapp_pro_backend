@@ -12,11 +12,13 @@ showUsage() {
   printf '%s\n' '  ./deploy.sh creator-web'
   printf '%s\n' '  ./deploy.sh student-h5'
   printf '%s\n' '  ./deploy.sh teacher-web'
+  printf '%s\n' '  ./deploy.sh smart [--execute]'
   printf '\n%s\n' '发布单元：'
   printf '%s\n' '  commander   BeGreat + Mandis 共用管理后台'
   printf '%s\n' '  creator-web  Mandis 个人创作端'
   printf '%s\n' '  student-h5   学生课堂 H5'
   printf '%s\n' '  teacher-web  多教师课堂端'
+  printf '%s\n' '  smart        按 Git 变更自动生成或执行最小发布计划'
 }
 
 deployCommander() {
@@ -31,6 +33,11 @@ deployMandisWeb() {
   exec ./scripts/deploy_web.sh "$appName"
 }
 
+deploySmart() {
+  cd "$BACKEND_DIR"
+  exec ./scripts/deploy_smart.sh "${@:2}"
+}
+
 main() {
   local target="${1:-}"
 
@@ -40,6 +47,9 @@ main() {
       ;;
     creator-web|student-h5|teacher-web)
       deployMandisWeb "$target"
+      ;;
+    smart)
+      deploySmart "$@"
       ;;
     -h|--help|help|'')
       showUsage

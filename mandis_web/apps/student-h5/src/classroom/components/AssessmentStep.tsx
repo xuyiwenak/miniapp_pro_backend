@@ -7,6 +7,7 @@ import type {
 } from '@mandis/common/classroom-types';
 import { clearAssessmentDraft, loadAssessmentDraft, saveAssessmentDraft } from '../storage';
 import { CourseProgress } from './CourseProgress';
+import { VAD_ASSETS, type VadDimension } from './vadAssets';
 
 const FIRST_PANAS_INDEX = 0;
 const SECOND_PANAS_INDEX = 5;
@@ -28,26 +29,14 @@ function initialAnswers(saved: AssessmentRecord, local: ReturnType<typeof loadAs
   return { vad: saved.vad ?? {}, panas: saved.panas ?? {} };
 }
 
-function VadFigure({ dimension, level }: { dimension: string; level: number }) {
-  const smile = dimension === 'valence' ? (level - 5) / 4 : 0;
-  const energy = dimension === 'arousal' ? level : 5;
-  const size = dimension === 'dominance' ? 14 + level * 1.5 : 22;
-  const mouthY = 21 - smile * 2;
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true">
-      <circle cx="24" cy="18" r={Math.min(size, 19)} fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="18" cy="16" r="1.4" fill="currentColor" />
-      <circle cx="30" cy="16" r="1.4" fill="currentColor" />
-      <path
-        d={`M17 ${mouthY} Q24 ${mouthY + smile * 5} 31 ${mouthY}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path d="M15 34 Q24 27 33 34 L35 43 Q24 46 13 43 Z" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      {energy >= 7 && <path d="M7 10 l-4 -3 M41 10 l4 -3 M24 3 v-5" stroke="currentColor" strokeWidth="1.5" />}
-    </svg>
-  );
+function getVadInstruction(dimension: VadDimension, zh: boolean): string | undefined {
+  if (dimension !== 'valence') return undefined;
+  return zh ? '选择最接近此刻感受的表情或数字' : 'Choose the face or number closest to how you feel';
+}
+
+function getVadMiddleLabel(dimension: VadDimension, zh: boolean): string {
+  if (dimension === 'arousal') return '';
+  return zh ? '一般' : 'Neutral';
 }
 
 function VadQuestion({
@@ -63,33 +52,35 @@ function VadQuestion({
 }) {
   const zh = locale === 'zh-CN';
   const title = zh ? item.zh : item.en;
+  const dimension = item.code as VadDimension;
+  const instruction = getVadInstruction(dimension, zh);
+  const middleLabel = getVadMiddleLabel(dimension, zh);
   return (
-    <fieldset className="vad-question">
+    <fieldset className={`vad-question vad-question--${dimension}`}>
       <legend>
         <strong>{title}</strong>
         <span>{zh ? item.zhHelp : item.enHelp}</span>
+        {instruction && <span className="vad-instruction">{instruction}</span>}
       </legend>
-      <div className="vad-figures">
-        {[1, 3, 5, 7, 9].map((level) => (
-          <VadFigure key={level} dimension={item.code} level={level} />
-        ))}
-      </div>
-      <div className="rating-nine" role="radiogroup" aria-label={title}>
+      <div className="vad-options" role="radiogroup" aria-label={title}>
         {Array.from({ length: 9 }, (_, index) => index + 1).map((score) => (
           <button
             key={score}
             type="button"
             role="radio"
             aria-checked={value === score}
+            aria-label={`${title} ${score}`}
             className={value === score ? 'is-selected' : ''}
             onClick={() => onChange(score)}
           >
-            <span>{score}</span>
+            <img src={VAD_ASSETS[dimension][score - 1]} alt="" />
+            <span className="vad-score">{score}</span>
           </button>
         ))}
       </div>
       <div className="rating-anchors">
         <span>{zh ? item.zhLow : item.enLow}</span>
+        <span>{middleLabel}</span>
         <span>{zh ? item.zhHigh : item.enHigh}</span>
       </div>
     </fieldset>

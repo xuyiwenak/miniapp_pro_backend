@@ -6,9 +6,11 @@ type Props = {
   locale: Locale;
   saving: boolean;
   classroomCode?: string;
+  revisiting?: boolean;
   onUpload: (dataUrl: string) => Promise<void>;
   onTeacherUpload: () => Promise<void>;
   onConfirmTeacherUpload: () => void;
+  onCancel?: () => void;
 };
 
 function readFile(file: File): Promise<string> {
@@ -24,9 +26,11 @@ export function ArtworkStep({
   locale,
   saving,
   classroomCode,
+  revisiting = false,
   onUpload,
   onTeacherUpload,
   onConfirmTeacherUpload,
+  onCancel,
 }: Props) {
   const zh = locale === 'zh-CN';
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,12 +65,29 @@ export function ArtworkStep({
 
   return (
     <main className="course-step-screen">
-      <CourseProgress locale={locale} currentStep={3} failedStep={error ? 3 : undefined} />
+      <CourseProgress
+        locale={locale}
+        currentStep={revisiting ? 5 : 3}
+        pendingArtwork={revisiting}
+        failedStep={error ? 3 : undefined}
+      />
       <section className="classroom-card artwork-card">
         <p className="classroom-eyebrow">{zh ? '第 3 步 · 上传作品' : 'STEP 3 · UPLOAD'}</p>
-        <h1>{zh ? '记录你的课堂作品' : 'Capture your classroom artwork'}</h1>
+        <h1>
+          {revisiting
+            ? zh
+              ? '补充你的课堂作品'
+              : 'Add your classroom artwork'
+            : zh
+            ? '记录你的课堂作品'
+            : 'Capture your classroom artwork'}
+        </h1>
         <p>
-          {zh
+          {revisiting
+            ? zh
+              ? '上传后会直接返回作品回响，已经完成的课后测评不会重做。'
+              : 'After uploading, you will return to reflection without repeating the post assessment.'
+            : zh
             ? '拍摄或从相册选择作品。无法上传时，可以请教师通过匿名课堂编号补充。'
             : 'Take a photo or choose one. If you cannot upload, your teacher can add it using an anonymous code.'}
         </p>
@@ -107,7 +128,11 @@ export function ArtworkStep({
             {zh ? '确认上传' : 'Upload artwork'}
           </button>
         )}
-        {classroomCode ? (
+        {revisiting ? (
+          <button className="classroom-secondary revisit-artwork-back" type="button" onClick={onCancel}>
+            {zh ? '暂不上传，返回作品回响' : 'Not now, return to reflection'}
+          </button>
+        ) : classroomCode ? (
           <div className="pending-artwork teacher-upload-confirmation">
             <h2>{zh ? '请记录匿名课堂编号' : 'Save your anonymous classroom code'}</h2>
             <strong>{classroomCode}</strong>

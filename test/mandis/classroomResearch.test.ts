@@ -4,6 +4,7 @@ import type { IClassroomParticipation } from '../../src/apps/mandis/entity/class
 import {
   countAssessmentAnswers,
   generateClassroomCode,
+  getStageAfterArtworkUpload,
   hasCompleteAssessment,
   hashToken,
   isResearchRecordComplete,
@@ -26,9 +27,7 @@ function assessmentAnswers(): {
 describe('classroom research helpers', () => {
   it('generates short codes without ambiguous characters', () => {
     const codes = Array.from({ length: 100 }, generateClassroomCode);
-    codes.forEach((code) =>
-      assert.match(code, /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/)
-    );
+    codes.forEach((code) => assert.match(code, /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/));
   });
 
   it('hashes resume tokens deterministically without storing the source value', () => {
@@ -56,6 +55,16 @@ describe('classroom research helpers', () => {
     assert.equal(isResearchRecordComplete(participant), true);
     participant.artworkId = undefined;
     assert.equal(isResearchRecordComplete(participant), false);
+  });
+
+  it('returns to reflection after a late artwork upload without repeating the post assessment', () => {
+    const participant = {
+      participantFlowCompleted: false,
+      postAssessment: { status: 'submitted' },
+    } as IClassroomParticipation;
+    assert.equal(getStageAfterArtworkUpload(participant), 'ai_echo');
+    participant.participantFlowCompleted = true;
+    assert.equal(getStageAfterArtworkUpload(participant), 'completed');
   });
 
   it('allows resume only while open or before the closing grace deadline', () => {

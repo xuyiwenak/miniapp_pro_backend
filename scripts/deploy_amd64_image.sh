@@ -48,9 +48,33 @@ buildImage() {
   docker buildx build --platform "$PLATFORM" --load --tag "$imageReference" "$buildContext"
 }
 
+localImageExists() {
+  docker image inspect "$1" >/dev/null 2>&1
+}
+
+remoteImageExists() {
+  ssh "$DEPLOY_HOST" "docker image inspect '$1' >/dev/null 2>&1"
+}
+
 transferImage() {
   local imageReference="$1"
-  docker image save "$imageReference" | ssh "$DEPLOY_HOST" 'docker image load'
+  docker image save "$imageReference" | gzip -1 | ssh "$DEPLOY_HOST" 'gzip -d | docker image load'
+  remoteImageExists "$imageReference" || fail "Image verification failed on $DEPLOY_HOST"
+}
+
+prepareRemoteImage() {
+  local imageReference="$1"
+  if remoteImageExists "$imageReference"; then
+    printf 'Image %s already exists on %s; skipping build and transfer.\n' "$imageReference" "$DEPLOY_HOST"
+    return
+  fi
+  if localImageExists "$imageReference"; then
+    printf 'Reusing local image %s.\n' "$imageReference"
+  else
+    buildImage "$imageReference"
+  fi
+  printf 'Sending compressed image stream to %s...\n' "$DEPLOY_HOST"
+  transferImage "$imageReference"
 }
 
 restartServices() {
@@ -61,6 +85,7 @@ restartServices() {
 
 main() {
   requireCommand docker
+  requireCommand gzip
   requireCommand git
   requireCommand ssh
   ensureCleanWorkingTree
@@ -69,10 +94,8 @@ main() {
 
   local imageReference
   imageReference=$(createImageReference)
-  printf 'Building release commit %s as %s for %s...\n' "$releaseCommit" "$imageReference" "$PLATFORM"
-  buildImage "$imageReference"
-  printf 'Sending image to %s...\n' "$DEPLOY_HOST"
-  transferImage "$imageReference"
+  printf 'Preparing release commit %s as %s for %s...\n' "$releaseCommit" "$imageReference" "$PLATFORM"
+  prepareRemoteImage "$imageReference"
   printf 'Restarting application services without a server-side build...\n'
   restartServices "$imageReference"
 }

@@ -72,6 +72,7 @@ export interface IClassroomParticipation {
     allowArtworkUse: boolean;
   };
   feedbackIdempotencyKey?: string;
+  completionIdempotencyKey?: string;
   participantFlowCompleted: boolean;
   researchRecordComplete: boolean;
   syncStatus: 'synced' | 'pending' | 'failed';
@@ -192,6 +193,7 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
       ),
     },
     feedbackIdempotencyKey: { type: String },
+    completionIdempotencyKey: { type: String },
     participantFlowCompleted: { type: Boolean, default: false, index: true },
     researchRecordComplete: { type: Boolean, default: false, index: true },
     syncStatus: {
@@ -209,13 +211,7 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
   { timestamps: true }
 );
 
-ClassroomParticipationSchema.index(
-  { classId: 1, classroomCode: 1 },
-  { unique: true }
-);
-ClassroomParticipationSchema.index(
-  { classId: 1, joinIdempotencyKey: 1 },
-  { unique: true, sparse: true }
-);
+ClassroomParticipationSchema.index({ classId: 1, classroomCode: 1 }, { unique: true });
+ClassroomParticipationSchema.index({ classId: 1, joinIdempotencyKey: 1 }, { unique: true, sparse: true });
 ClassroomParticipationSchema.index({ classId: 1, currentStage: 1 });
 ClassroomParticipationSchema.index({ classId: 1, artworkStatus: 1 });

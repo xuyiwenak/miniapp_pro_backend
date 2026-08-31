@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ClassroomShell } from './classroom/components/ClassroomShell';
 import { ClassroomConfirm } from './classroom/components/ClassroomConfirm';
@@ -11,6 +12,7 @@ import { useClassroomFlow } from './classroom/useClassroomFlow';
 export function ClassroomPage() {
   const { accessCode = '' } = useParams();
   const flow = useClassroomFlow(accessCode);
+  const [revisitingArtwork, setRevisitingArtwork] = useState(false);
   const zh = flow.locale === 'zh-CN';
 
   if (flow.loading) return <div className="classroom-loading">{zh ? '正在读取课堂…' : 'Loading classroom…'}</div>;
@@ -73,15 +75,20 @@ export function ClassroomPage() {
         }}
       />
     );
-  } else if (flow.participation.currentStage === 'artwork_upload') {
+  } else if (flow.participation.currentStage === 'artwork_upload' || revisitingArtwork) {
     content = (
       <ArtworkStep
         locale={flow.locale}
         saving={flow.saving}
-        classroomCode={flow.teacherUploadConfirmation?.classroomCode}
-        onUpload={flow.uploadArtwork}
+        classroomCode={revisitingArtwork ? undefined : flow.teacherUploadConfirmation?.classroomCode}
+        revisiting={revisitingArtwork}
+        onUpload={async (dataUrl) => {
+          await flow.uploadArtwork(dataUrl);
+          setRevisitingArtwork(false);
+        }}
         onTeacherUpload={flow.requestTeacherUpload}
         onConfirmTeacherUpload={flow.confirmTeacherUpload}
+        onCancel={() => setRevisitingArtwork(false)}
       />
     );
   } else if (flow.participation.currentStage === 'post_assessment') {
@@ -107,6 +114,8 @@ export function ClassroomPage() {
         pendingArtwork={flow.participation.artworkStatus === 'teacher_upload_pending'}
         classroomCode={flow.participation.classroomCode}
         loadEcho={flow.loadEcho}
+        onReviseArtwork={() => setRevisitingArtwork(true)}
+        onComplete={flow.completeWithoutEcho}
         onFeedback={flow.submitFeedback}
       />
     );

@@ -8,10 +8,10 @@ import {
   ClockCircleOutlined,
   CloudUploadOutlined,
   CopyOutlined,
+  EditOutlined,
   FileImageOutlined,
   FileTextOutlined,
   FormOutlined,
-  EditOutlined,
   LinkOutlined,
   ManOutlined,
   PlayCircleOutlined,
@@ -26,6 +26,7 @@ import {
   UsergroupAddOutlined,
   UserSwitchOutlined,
   AuditOutlined,
+  ZoomInOutlined,
 } from '@ant-design/icons';
 import QRCode from 'qrcode';
 import {
@@ -78,6 +79,15 @@ function classroomUrl(classroom: ClassroomRecord): string {
   return classroom.accessCode
     ? `${window.location.origin}/classroom/${classroom.accessCode}`
     : '';
+}
+
+async function copyClassroomLink(studentUrl: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(studentUrl);
+    void message.success('课堂链接已复制');
+  } catch {
+    void message.error('复制失败，请手动复制课堂链接');
+  }
 }
 
 function assessmentRate(counts: AssessmentCounts): number {
@@ -163,10 +173,90 @@ function StatusItem({ icon, label, value, tone = 'neutral' }: {
   );
 }
 
-function LiveProgress({ progress, qrDataUrl, studentUrl }: {
+function ClassroomQrDetails({ classroom, progress, studentUrl, status }: {
+  classroom: ClassroomRecord;
+  progress: ClassroomProgress;
+  studentUrl: string;
+  status: ClassroomRecord['status'];
+}) {
+  return (
+    <div className="classroom-qr-modal__details">
+      <div className="classroom-qr-modal__title">
+        <strong>{classroom.sessionTitle}</strong>
+        <Tag className={`classroom-status-tag is-${status}`}>{STATUS_LABELS[status]}</Tag>
+      </div>
+      <dl>
+        <div><dt>上课日期</dt><dd>{classroom.classDate}</dd></div>
+        <div><dt>上课时间</dt><dd>{classroom.startTime}–{classroom.endTime}</dd></div>
+        <div><dt>已进入</dt><dd>{progress.joinedTotal} 人</dd></div>
+        <div><dt>当前活跃</dt><dd>{progress.activeNow} 人</dd></div>
+      </dl>
+      <div className="classroom-qr-modal__link">
+        <small>课堂链接</small>
+        <span>{studentUrl}</span>
+      </div>
+      <Button
+        type="primary"
+        block
+        icon={<CopyOutlined />}
+        onClick={() => void copyClassroomLink(studentUrl)}
+      >
+        复制课堂链接
+      </Button>
+    </div>
+  );
+}
+
+function ClassroomQrModal({ classroom, progress, qrDataUrl, studentUrl, status, open, onClose }: {
+  classroom: ClassroomRecord;
   progress: ClassroomProgress;
   qrDataUrl: string;
   studentUrl: string;
+  status: ClassroomRecord['status'];
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal className="classroom-qr-modal" open={open} title="学生课堂二维码" width={560}
+      footer={null} centered destroyOnHidden onCancel={onClose}>
+      <div className="classroom-qr-modal__content">
+        <div className="classroom-qr-modal__image">
+          <img src={qrDataUrl} alt={`${classroom.sessionTitle}学生课堂二维码`} />
+          <strong>微信扫码进入课堂</strong>
+        </div>
+        <ClassroomQrDetails classroom={classroom} progress={progress} studentUrl={studentUrl} status={status} />
+      </div>
+    </Modal>
+  );
+}
+
+function ClassroomQrPreview({ classroom, progress, qrDataUrl, studentUrl, status }: {
+  classroom: ClassroomRecord;
+  progress: ClassroomProgress;
+  qrDataUrl: string;
+  studentUrl: string;
+  status: ClassroomRecord['status'];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="classroom-qr-trigger" aria-label="放大学生课堂二维码"
+        disabled={!qrDataUrl} onClick={() => setOpen(true)}>
+        {qrDataUrl ? <img src={qrDataUrl} alt="学生课堂二维码" /> : <QrcodeOutlined />}
+        {qrDataUrl && <span><ZoomInOutlined /> 点击放大</span>}
+      </button>
+      <ClassroomQrModal classroom={classroom} progress={progress} qrDataUrl={qrDataUrl}
+        studentUrl={studentUrl} status={status} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+function LiveProgress({ classroom, progress, qrDataUrl, studentUrl, status }: {
+  classroom: ClassroomRecord;
+  progress: ClassroomProgress;
+  qrDataUrl: string;
+  studentUrl: string;
+  status: ClassroomRecord['status'];
 }) {
   return (
     <>
@@ -175,7 +265,13 @@ function LiveProgress({ progress, qrDataUrl, studentUrl }: {
           <ClockCircleOutlined /> 数据更新于 {new Date(progress.generatedAt).toLocaleTimeString('zh-CN')}
         </Text>
         <div className="classroom-join-panel">
-          {qrDataUrl ? <img src={qrDataUrl} alt="学生课堂二维码" /> : <QrcodeOutlined />}
+          <ClassroomQrPreview
+            classroom={classroom}
+            progress={progress}
+            qrDataUrl={qrDataUrl}
+            studentUrl={studentUrl}
+            status={status}
+          />
           <strong>学生扫码进入</strong>
           <div>
             <span>{studentUrl || '课堂开放后生成二维码'}</span>
@@ -313,7 +409,7 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
       return;
     }
     void QRCode.toDataURL(studentUrl, {
-      width: 180,
+      width: 420,
       margin: 1,
       color: { dark: '#17252d', light: '#ffffff' },
     }).then(setQrDataUrl);
@@ -450,7 +546,13 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
       {shownView === 'progress' && (
         <Spin spinning={loading}>
           {progress && (
-            <LiveProgress progress={progress} qrDataUrl={qrDataUrl} studentUrl={studentUrl} />
+            <LiveProgress
+              classroom={classroom}
+              progress={progress}
+              qrDataUrl={qrDataUrl}
+              studentUrl={studentUrl}
+              status={effectiveStatus}
+            />
           )}
         </Spin>
       )}

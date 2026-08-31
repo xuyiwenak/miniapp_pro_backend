@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type { IClassroom } from '../../entity/classroom.entity';
-import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
+import type { IClassroomParticipation, ParticipationStage } from '../../entity/classroomParticipation.entity';
 
 const CLASSROOM_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const CLASSROOM_CODE_LENGTH = 4;
@@ -26,10 +26,7 @@ export const VAD_ITEM_CODES = ['valence', 'arousal', 'dominance'] as const;
 
 export function generateClassroomCode(): string {
   const bytes = randomBytes(CLASSROOM_CODE_LENGTH);
-  return Array.from(
-    bytes,
-    (byte) => CLASSROOM_CODE_ALPHABET[byte % CLASSROOM_CODE_ALPHABET.length]
-  ).join('');
+  return Array.from(bytes, (byte) => CLASSROOM_CODE_ALPHABET[byte % CLASSROOM_CODE_ALPHABET.length]).join('');
 }
 
 export function generateAccessCode(): string {
@@ -52,9 +49,7 @@ export function buildScheduledDate(classDate: string, time: string): Date {
   return new Date(`${classDate}T${time}:00+08:00`);
 }
 
-export function isResearchRecordComplete(
-  participation: IClassroomParticipation
-): boolean {
+export function isResearchRecordComplete(participation: IClassroomParticipation): boolean {
   return (
     participation.preAssessment.status === 'submitted' &&
     participation.postAssessment.status === 'submitted' &&
@@ -64,22 +59,20 @@ export function isResearchRecordComplete(
   );
 }
 
-export function isParticipantActive(
-  participation: IClassroomParticipation,
-  now = new Date()
-): boolean {
-  return (
-    now.getTime() - participation.lastActiveAt.getTime() <= ACTIVE_WINDOW_MS
-  );
+export function getStageAfterArtworkUpload(
+  participation: Pick<IClassroomParticipation, 'participantFlowCompleted' | 'postAssessment'>
+): ParticipationStage {
+  if (participation.participantFlowCompleted) return 'completed';
+  return participation.postAssessment.status === 'submitted' ? 'ai_echo' : 'post_assessment';
 }
 
-export function isResumeAllowed(
-  classroom: IClassroom,
-  now = new Date()
-): boolean {
+export function isParticipantActive(participation: IClassroomParticipation, now = new Date()): boolean {
+  return now.getTime() - participation.lastActiveAt.getTime() <= ACTIVE_WINDOW_MS;
+}
+
+export function isResumeAllowed(classroom: IClassroom, now = new Date()): boolean {
   if (classroom.status === 'open') return true;
-  if (classroom.status !== 'closing' || !classroom.gracePeriodEndsAt)
-    return false;
+  if (classroom.status !== 'closing' || !classroom.gracePeriodEndsAt) return false;
   return classroom.gracePeriodEndsAt.getTime() > now.getTime();
 }
 
@@ -87,12 +80,8 @@ export function countAssessmentAnswers(
   vad: Record<string, number> | undefined,
   panas: Record<string, number> | undefined
 ): number {
-  const vadCount = VAD_ITEM_CODES.filter(
-    (code) => vad?.[code] !== undefined
-  ).length;
-  const panasCount = PANAS_ITEM_CODES.filter(
-    (code) => panas?.[code] !== undefined
-  ).length;
+  const vadCount = VAD_ITEM_CODES.filter((code) => vad?.[code] !== undefined).length;
+  const panasCount = PANAS_ITEM_CODES.filter((code) => panas?.[code] !== undefined).length;
   return vadCount + panasCount;
 }
 
@@ -100,15 +89,11 @@ export function hasCompleteAssessment(
   vad: Record<string, number> | undefined,
   panas: Record<string, number> | undefined
 ): boolean {
-  return (
-    countAssessmentAnswers(vad, panas) ===
-    VAD_ITEM_CODES.length + PANAS_ITEM_CODES.length
-  );
+  return countAssessmentAnswers(vad, panas) === VAD_ITEM_CODES.length + PANAS_ITEM_CODES.length;
 }
 
 export function stripJpegExif(buffer: Buffer): Buffer {
-  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8)
-    return buffer;
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return buffer;
   const chunks: Buffer[] = [buffer.subarray(0, 2)];
   let offset = 2;
   while (offset + 4 <= buffer.length && buffer[offset] === 0xff) {
@@ -116,8 +101,7 @@ export function stripJpegExif(buffer: Buffer): Buffer {
     if (marker === 0xda || marker === 0xd9) break;
     const length = buffer.readUInt16BE(offset + 2);
     if (length < 2 || offset + length + 2 > buffer.length) return buffer;
-    if (marker !== 0xe1)
-      chunks.push(buffer.subarray(offset, offset + length + 2));
+    if (marker !== 0xe1) chunks.push(buffer.subarray(offset, offset + length + 2));
     offset += length + 2;
   }
   chunks.push(buffer.subarray(offset));

@@ -38,17 +38,11 @@ async function classroomRequest<T>(
 }
 
 function post<T>(path: string, body: unknown, token?: string, idempotencyKey?: string): Promise<T> {
-  return classroomRequest<T>(
-    path,
-    { method: 'POST', body: JSON.stringify(body) },
-    token,
-    idempotencyKey
-  );
+  return classroomRequest<T>(path, { method: 'POST', body: JSON.stringify(body) }, token, idempotencyKey);
 }
 
 export const studentClassroomApi = {
-  classroom: (accessCode: string) =>
-    classroomRequest<ClassroomInfo>(`/classrooms/${accessCode}`),
+  classroom: (accessCode: string) => classroomRequest<ClassroomInfo>(`/classrooms/${accessCode}`),
   start: (accessCode: string, resumeToken: string, idempotencyKey: string) =>
     classroomRequest<ParticipationState>(
       '/classroom-participation/start',
@@ -102,12 +96,7 @@ export const studentClassroomApi = {
   completeActivity: (token: string, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/activity/complete', {}, token, idempotencyKey),
   requestTeacherUpload: (token: string, idempotencyKey: string) =>
-    post<ParticipationState>(
-      '/classroom-participation/artwork/request-teacher-upload',
-      {},
-      token,
-      idempotencyKey
-    ),
+    post<ParticipationState>('/classroom-participation/artwork/request-teacher-upload', {}, token, idempotencyKey),
   uploadArtwork: (token: string, dataUrl: string, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/artwork', { dataUrl }, token, idempotencyKey),
   artworkStatus: (token: string) =>
@@ -117,6 +106,8 @@ export const studentClassroomApi = {
       token
     ),
   echo: (token: string) => classroomRequest<EchoResult>('/classroom-participation/echo', {}, token),
+  complete: (token: string, idempotencyKey: string) =>
+    post<ParticipationState>('/classroom-participation/complete', {}, token, idempotencyKey),
   feedback: (token: string, input: Record<string, unknown>, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/feedback', input, token, idempotencyKey),
 };
