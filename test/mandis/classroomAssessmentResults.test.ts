@@ -123,7 +123,7 @@ describe('classroom assessment results', () => {
 
   it('builds the research workbook and protects spreadsheet cells', () => {
     const participant = participation('A234', 2, 4);
-    participant.profile = { gender: '=unsafe', artExperience: 'none' };
+    participant.uploadReason = '=unsafe';
     const result = buildClassroomAssessmentResult([participant]);
     const buffer = buildAssessmentWorkbook(classroom(), [participant], result);
     const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -142,5 +142,12 @@ describe('classroom assessment results', () => {
     assert.equal(participantRows[0]?.dataSchemaVersion, 'classroom-participation-v1');
     assert.equal(participantRows[0]?.preClientRecovered, false);
     assert.equal(responseRows[0]?.clientRecovered, false);
+  });
+
+  it('treats historical non-binary gender values as missing instead of rewriting them', () => {
+    const participant = participation('A234', 2, 4);
+    participant.profile = { gender: 'other' } as unknown as typeof participant.profile;
+    const result = buildClassroomAssessmentResult([participant]);
+    assert.equal(result.participants[0]?.gender, null);
   });
 });

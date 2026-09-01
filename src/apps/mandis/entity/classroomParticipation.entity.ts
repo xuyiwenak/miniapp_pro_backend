@@ -17,6 +17,14 @@ export type ArtworkSubmissionStatus =
   | 'teacher_uploaded'
   | 'not_provided';
 
+export type ClassroomGender = 'male' | 'female';
+
+export interface IClassroomParticipantProfile {
+  gender: ClassroomGender;
+  artExperience?: 'none' | 'occasional' | 'regular';
+  ageGroup?: string;
+}
+
 export interface IAssessmentRecord {
   status: 'not_started' | 'in_progress' | 'submitted';
   currentPage?: 1 | 2 | 3;
@@ -44,7 +52,7 @@ export interface IClassroomParticipation {
   consentedAt?: Date;
   consentVersion?: string;
   consentIdempotencyKey?: string;
-  profile?: Record<string, string>;
+  profile?: IClassroomParticipantProfile;
   profileIdempotencyKey?: string;
   preAssessment: IAssessmentRecord;
   postAssessment: IAssessmentRecord;

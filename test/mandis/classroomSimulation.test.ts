@@ -37,6 +37,7 @@ describe('classroom simulation', () => {
     assert.equal(bundle.works.length, PARTICIPANT_COUNT);
     assert.equal(new Set(bundle.participants.map((item) => item.classroomCode)).size, PARTICIPANT_COUNT);
     bundle.participants.forEach((participant) => {
+      assert.ok(participant.profile?.gender === 'male' || participant.profile?.gender === 'female');
       assert.equal(participant.participantFlowCompleted, true);
       assert.equal(isResearchRecordComplete(participant), true);
       assert.equal(participant.preAssessment.answeredCount, 13);

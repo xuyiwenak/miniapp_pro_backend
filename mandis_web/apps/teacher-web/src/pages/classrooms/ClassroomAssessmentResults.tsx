@@ -18,7 +18,7 @@ type Props = {
 };
 
 const PROFILE_LABELS: Record<string, string> = {
-  male: '男', female: '女', other: '其他', prefer_not: '不愿透露',
+  male: '男', female: '女',
   none: '无', occasional: '偶尔', regular: '经常',
   student_uploaded: '学生已上传', teacher_uploaded: '教师已代传',
   teacher_upload_pending: '待教师代传', not_provided: '未提供',

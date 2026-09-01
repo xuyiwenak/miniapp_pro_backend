@@ -37,8 +37,8 @@ const StartSchema = z.object({
   resumeToken: z.string().min(32).max(128),
 });
 const ConsentSchema = z.object({ consentVersion: z.string().min(1).max(80) });
-const ProfileSchema = z.object({
-  gender: z.enum(['male', 'female', 'other', 'prefer_not']).optional(),
+export const ClassroomParticipantProfileSchema = z.object({
+  gender: z.enum(['male', 'female']),
   artExperience: z.enum(['none', 'occasional', 'regular']).optional(),
 });
 const DraftSchema = z.object({
@@ -334,7 +334,7 @@ router.post('/consent', async (req: ParticipationRequest, res) => {
 router.post('/profile', async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
-  const parsed = ProfileSchema.safeParse(req.body);
+  const parsed = ClassroomParticipantProfileSchema.safeParse(req.body);
   if (!parsed.success) {
     sendErr(res, 'Invalid profile', 400);
     return;

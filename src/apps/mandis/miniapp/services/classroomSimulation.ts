@@ -3,6 +3,7 @@ import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type {
   IAssessmentRecord,
+  IClassroomParticipantProfile,
   IClassroomParticipation,
 } from '../../entity/classroomParticipation.entity';
 import {
@@ -210,13 +211,17 @@ function uniqueClassroomCodes(count: number): string[] {
   return [...codes];
 }
 
-function profile(index: number, random: RandomSource): Record<string, string> {
-  const genders = ['female', 'male', 'other', 'prefer_not_to_say'];
-  const experience = ['none', 'occasional', 'regular'];
+function profile(index: number, random: RandomSource): IClassroomParticipantProfile {
+  const genders: IClassroomParticipantProfile['gender'][] = ['female', 'male'];
+  const experience: NonNullable<IClassroomParticipantProfile['artExperience']>[] = [
+    'none',
+    'occasional',
+    'regular',
+  ];
   const genderIndex = Math.min(genders.length - 1, Math.floor(random() * genders.length));
   const experienceIndex = Math.min(experience.length - 1, Math.floor(random() * experience.length));
   return {
-    gender: genders[genderIndex] ?? 'prefer_not_to_say',
+    gender: genders[genderIndex] ?? 'female',
     artExperience: experience[experienceIndex] ?? 'none',
     ageGroup: index % 5 === 0 ? '25-34' : '18-24',
   };

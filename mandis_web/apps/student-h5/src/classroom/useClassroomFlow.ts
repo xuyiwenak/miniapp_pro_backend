@@ -4,6 +4,7 @@ import type {
   ClassroomInfo,
   EchoResult,
   Locale,
+  ParticipantProfile,
   ParticipationState,
 } from '@mandis/common/classroom-types';
 import { studentClassroomApi } from './api';
@@ -157,7 +158,7 @@ export function useClassroomFlow(accessCode: string) {
     refresh,
     loadEcho,
     consent: () => run(() => studentClassroomApi.consent(token, actionKey('consent'))),
-    saveProfile: (profile: Record<string, string>) =>
+    saveProfile: (profile: ParticipantProfile) =>
       run(() => studentClassroomApi.profile(token, profile, actionKey('profile'))),
     saveDraft: (timepoint: 'pre' | 'post', page: number, answers: AssessmentAnswers, clientRecovered: boolean) =>
       run(() => studentClassroomApi.saveDraft(token, timepoint, page, locale, answers, clientRecovered), true),

@@ -3,6 +3,7 @@ import type {
   ClassroomInfo,
   EchoResult,
   Locale,
+  ParticipantProfile,
   ParticipationState,
 } from '@mandis/common/classroom-types';
 
@@ -62,7 +63,7 @@ export const studentClassroomApi = {
       token,
       idempotencyKey
     ),
-  profile: (token: string, profile: Record<string, string>, idempotencyKey: string) =>
+  profile: (token: string, profile: ParticipantProfile, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/profile', profile, token, idempotencyKey),
   saveDraft: (
     token: string,

@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import type { Locale } from '@mandis/common/classroom-types';
+import type {
+  Locale,
+  ParticipantGender,
+  ParticipantProfile,
+} from '@mandis/common/classroom-types';
 
 export function ConsentStep({ locale, saving, onConsent }: { locale: Locale; saving: boolean; onConsent: () => void }) {
   const zh = locale === 'zh-CN';
@@ -38,11 +42,11 @@ export function ProfileStep({
 }: {
   locale: Locale;
   saving: boolean;
-  onSubmit: (profile: Record<string, string>) => void;
+  onSubmit: (profile: ParticipantProfile) => void;
 }) {
   const zh = locale === 'zh-CN';
-  const [gender, setGender] = useState('prefer_not');
-  const [artExperience, setArtExperience] = useState('none');
+  const [gender, setGender] = useState<ParticipantGender | ''>('');
+  const [artExperience, setArtExperience] = useState<ParticipantProfile['artExperience']>('none');
   return (
     <main className="classroom-card preparation-card">
       <p className="classroom-eyebrow">{zh ? '参与准备' : 'BEFORE YOU BEGIN'}</p>
@@ -52,16 +56,21 @@ export function ProfileStep({
       </p>
       <label>
         {zh ? '性别' : 'Gender'}
-        <select value={gender} onChange={(event) => setGender(event.target.value)}>
+        <select
+          value={gender}
+          onChange={(event) => setGender(event.target.value as ParticipantGender)}
+        >
+          <option value="" disabled>{zh ? '请选择' : 'Select'}</option>
           <option value="female">{zh ? '女' : 'Woman'}</option>
           <option value="male">{zh ? '男' : 'Man'}</option>
-          <option value="other">{zh ? '其他' : 'Other'}</option>
-          <option value="prefer_not">{zh ? '不愿透露' : 'Prefer not to say'}</option>
         </select>
       </label>
       <label>
         {zh ? '艺术创作经验' : 'Art-making experience'}
-        <select value={artExperience} onChange={(event) => setArtExperience(event.target.value)}>
+        <select
+          value={artExperience}
+          onChange={(event) => setArtExperience(event.target.value as ParticipantProfile['artExperience'])}
+        >
           <option value="none">{zh ? '几乎没有' : 'Little or none'}</option>
           <option value="occasional">{zh ? '偶尔创作' : 'Occasional'}</option>
           <option value="regular">{zh ? '经常创作' : 'Regular'}</option>
@@ -70,8 +79,10 @@ export function ProfileStep({
       <button
         className="classroom-primary"
         type="button"
-        disabled={saving}
-        onClick={() => onSubmit({ gender, artExperience })}
+        disabled={saving || !gender}
+        onClick={() => {
+          if (gender) onSubmit({ gender, artExperience });
+        }}
       >
         {zh ? '进入课前测评' : 'Continue to pre-test'}
       </button>

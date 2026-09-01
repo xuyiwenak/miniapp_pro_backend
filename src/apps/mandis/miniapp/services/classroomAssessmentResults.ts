@@ -1,5 +1,8 @@
 import type { IWork } from '../../../../entity/work.entity';
-import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
+import type {
+  ClassroomGender,
+  IClassroomParticipation,
+} from '../../entity/classroomParticipation.entity';
 import {
   ARTWORK_AFFECT_DIMENSION_CONFIG,
   buildArtworkAffectAssociations,
@@ -57,7 +60,7 @@ export type AssessmentParticipantRow = {
   dataSchemaVersion: string;
   consentVersion: string | null;
   source: IClassroomParticipation['source'];
-  gender: string | null;
+  gender: ClassroomGender | null;
   artExperience: string | null;
   preSubmitted: boolean;
   postSubmitted: boolean;
@@ -253,7 +256,9 @@ function participantRow(
     dataSchemaVersion: participant.dataSchemaVersion,
     consentVersion: participant.consentVersion ?? null,
     source: participant.source,
-    gender: participant.profile?.gender ?? null,
+    gender: participant.profile?.gender === 'male' || participant.profile?.gender === 'female'
+      ? participant.profile.gender
+      : null,
     artExperience: participant.profile?.artExperience ?? null,
     preSubmitted: participant.preAssessment.status === 'submitted',
     postSubmitted: participant.postAssessment.status === 'submitted',

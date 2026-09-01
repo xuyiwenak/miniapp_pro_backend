@@ -1,5 +1,12 @@
 export type Locale = 'zh-CN' | 'en';
 
+export type ParticipantGender = 'male' | 'female';
+
+export type ParticipantProfile = {
+  gender: ParticipantGender;
+  artExperience: 'none' | 'occasional' | 'regular';
+};
+
 export type ClassroomInfo = {
   courseName: string;
   sessionTitle: string;
@@ -254,7 +261,7 @@ export type AssessmentParticipantRow = {
   dataSchemaVersion: string;
   consentVersion: string | null;
   source: 'student' | 'artwork_only';
-  gender: string | null;
+  gender: ParticipantGender | null;
   artExperience: string | null;
   preSubmitted: boolean;
   postSubmitted: boolean;

@@ -13,6 +13,7 @@ import {
   stripJpegExif,
   VAD_ITEM_CODES,
 } from '../../src/apps/mandis/miniapp/services/classroomResearch';
+import { ClassroomParticipantProfileSchema } from '../../src/apps/mandis/miniapp/routes/classroomParticipation';
 
 function assessmentAnswers(): {
   vad: Record<string, number>;
@@ -25,6 +26,12 @@ function assessmentAnswers(): {
 }
 
 describe('classroom research helpers', () => {
+  it('accepts only male or female in new participant profiles', () => {
+    assert.equal(ClassroomParticipantProfileSchema.safeParse({ gender: 'male' }).success, true);
+    assert.equal(ClassroomParticipantProfileSchema.safeParse({ gender: 'female' }).success, true);
+    assert.equal(ClassroomParticipantProfileSchema.safeParse({ gender: 'other' }).success, false);
+    assert.equal(ClassroomParticipantProfileSchema.safeParse({ gender: 'prefer_not' }).success, false);
+  });
   it('generates short codes without ambiguous characters', () => {
     const codes = Array.from({ length: 100 }, generateClassroomCode);
     codes.forEach((code) => assert.match(code, /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/));
