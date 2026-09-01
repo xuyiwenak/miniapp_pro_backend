@@ -53,7 +53,7 @@
     },
     "prop_history_csv": {
       "filename": "logs/prop_history.csv",
-      "type": "src/util/LoggerCsvDateRollingAppender",
+      "type": "dist/util/LoggerCsvDateRollingAppender",
       "numBackups": 7,
       "encoding": "utf8",
       "layout": {
