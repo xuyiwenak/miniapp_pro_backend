@@ -39,6 +39,7 @@ const DEFAULT_MODEL = 'qwen-vl-plus';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_TOKENS = 4096;
+const JSON_OBJECT_RESPONSE_FORMAT = { type: 'json_object' };
 const API_KEY_PLACEHOLDER = 'YOUR_DASHSCOPE_API_KEY';
 const EDUCATION_API_KEY_PLACEHOLDER = 'YOUR_EDUCATION_DASHSCOPE_API_KEY';
 
@@ -69,7 +70,8 @@ export function buildEducationQwenPostData(
 ): Buffer {
   return Buffer.from(JSON.stringify({
     model: config.model ?? DEFAULT_MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
+    max_completion_tokens: MAX_OUTPUT_TOKENS,
+    response_format: JSON_OBJECT_RESPONSE_FORMAT,
     messages: [
       { role: 'system', content: EDUCATION_ARTWORK_SYSTEM_PROMPT },
       { role: 'user', content: buildEducationUserContent(imageUrl) },

@@ -101,6 +101,8 @@ describe('classroom artwork analysis', () => {
     const payload = JSON.parse(postData.toString('utf8')) as Record<string, unknown>;
     const serialized = JSON.stringify(payload);
     assert.equal(payload.model, 'qwen-vl-plus');
+    assert.equal(payload.max_completion_tokens, 4096);
+    assert.deepEqual(payload.response_format, { type: 'json_object' });
     assert.match(serialized, /https:\/\/example\.com\/art\.jpg/);
     assert.doesNotMatch(serialized, /创作者描述：/);
     assert.doesNotMatch(serialized, /作品标签：/);
