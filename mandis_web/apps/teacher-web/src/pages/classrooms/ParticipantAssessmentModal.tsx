@@ -173,20 +173,47 @@ function DeterministicComparison({ detail }: { detail: AssessmentParticipantDeta
   if (!comparisons.length) return null;
   return (
     <section className="participant-affect-comparison">
-      <Title level={5}>自评—作品表达关联</Title>
-      <Text type="secondary">固定语义映射，仅并列描述，不判断 AI 是否“测准”。孤独与社交抵触无直接 PANAS 对应项。</Text>
+      <Title level={5}>画面表达和课后感受，怎么一起看</Title>
+      <Text type="secondary">
+        把画面里可见的情绪线索和参与者课后填写的感受并排参考。它们来自不同量尺，不互相换算，也不代表 AI 在判断一个人。
+      </Text>
       <div>
         {comparisons.map((item) => (
-          <p key={`${item.dimensionCode}-${item.targetCode}`}>
-            <Text strong>{item.dimensionLabel} {formatScore(item.artworkScore)}</Text>
-            <span>↔</span>
-            <Text>{item.targetLabel} {formatScore(item.postSelfReportValue)}</Text>
-            <Tag>{item.direction === 'inverse' ? '预期反向' : '预期同向'} · {item.strength}</Tag>
-          </p>
+          <article key={`${item.dimensionCode}-${item.targetCode}`}>
+            <div><small>画面里看到的</small><Text strong>{item.dimensionLabel} {formatScore(item.artworkScore)} / 100</Text></div>
+            <ArrowRightOutlined aria-hidden="true" />
+            <div><small>课后填写的</small><Text>{friendlyTargetLabel(item.targetCode)} {formatScore(item.postSelfReportValue)}{targetScale(item.targetCode)}</Text></div>
+            <Tag>{directionLabel(item.direction)} · {strengthLabel(item.strength)}</Tag>
+          </article>
         ))}
       </div>
+      <Text type="secondary">“平静”通常与较低的精神活跃程度一起参考；孤独和社交抵触没有直接的 PANAS 对照项。</Text>
     </section>
   );
+}
+
+function friendlyTargetLabel(code: string): string {
+  const labels: Record<string, string> = {
+    positiveAffect: '积极感受', valence: '心情愉悦程度',
+    passionItems: '投入和干劲', arousal: '精神活跃程度', vitalityItems: '精神劲头',
+    anxietyItems: '紧张或烦躁感', negativeAffect: '不舒服的感受', fearItem: '害怕感',
+  };
+  return labels[code] ?? code;
+}
+
+function targetScale(code: string): string {
+  if (code === 'positiveAffect' || code === 'negativeAffect') return ' / 25';
+  if (code === 'valence' || code === 'arousal') return ' / 9';
+  return ' / 5';
+}
+
+function directionLabel(direction: 'same' | 'inverse'): string {
+  return direction === 'inverse' ? '一个升、一个降' : '通常一起变化';
+}
+
+function strengthLabel(strength: 'strong' | 'moderate' | 'limited'): string {
+  const labels = { strong: '对应较明确', moderate: '可作参考', limited: '仅作弱参考' };
+  return labels[strength];
 }
 
 function EvaluationState({ detail }: { detail: AssessmentParticipantDetail }) {

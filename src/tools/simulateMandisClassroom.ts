@@ -12,7 +12,10 @@ import {
   type ITeacherProfile,
 } from '../apps/mandis/entity/teacherProfile.entity';
 import { buildClassroomAssessmentResult } from '../apps/mandis/miniapp/services/classroomAssessmentResults';
-import { buildClassroomSimulation } from '../apps/mandis/miniapp/services/classroomSimulation';
+import {
+  buildClassroomSimulation,
+  type SimulationImage,
+} from '../apps/mandis/miniapp/services/classroomSimulation';
 import { WorkSchema, type IWork } from '../entity/work.entity';
 
 const DEFAULT_PARTICIPANT_COUNT = 24;
@@ -139,20 +142,42 @@ function selectTeacher(teachers: ITeacherProfile[], teacherId?: string): ITeache
   return selected;
 }
 
-async function sourceImages(Work: Model<IWork>, count: number) {
-  const candidates = await Work.aggregate<{ images: IWork['images'] }>([
+function sourceAnalysis(work: IWork): SimulationImage['userFacingAnalysis'] | null {
+  const healing = work.healing;
+  if (!healing?.summary || !healing.colorAnalysis || !healing.compositionReport || !healing.suggestion) return null;
+  return {
+    summary: healing.summary,
+    colorAnalysis: healing.colorAnalysis,
+    compositionReport: healing.compositionReport,
+    lineAnalysis: healing.lineAnalysis,
+    suggestion: healing.suggestion,
+    keyColors: healing.keyColors,
+  };
+}
+
+async function sourceImages(Work: Model<IWork>, count: number): Promise<SimulationImage[]> {
+  const candidates = await Work.aggregate<IWork>([
     {
       $match: {
         status: 'published',
+        'healing.status': 'success',
         'images.0.url': { $exists: true, $type: 'string', $ne: '' },
+        'healing.summary': { $exists: true, $type: 'string', $ne: '' },
+        'healing.colorAnalysis': { $exists: true, $type: 'string', $ne: '' },
+        'healing.compositionReport': { $exists: true, $type: 'string', $ne: '' },
+        'healing.suggestion': { $exists: true, $type: 'string', $ne: '' },
       },
     },
     { $sample: { size: count * SOURCE_IMAGE_OVERSAMPLE_FACTOR } },
-    { $project: { _id: 0, images: 1 } },
+    { $project: { _id: 0, images: 1, healing: 1 } },
   ]).exec();
-  const unique = new Map<string, IWork['images'][number]>();
-  candidates.flatMap((candidate) => candidate.images).forEach((image) => {
-    if (image.url && !unique.has(image.url)) unique.set(image.url, image);
+  const unique = new Map<string, SimulationImage>();
+  candidates.forEach((candidate) => {
+    const analysis = sourceAnalysis(candidate);
+    if (!analysis) return;
+    candidate.images.forEach((image) => {
+      if (image.url && !unique.has(image.url)) unique.set(image.url, { ...image, userFacingAnalysis: analysis });
+    });
   });
   const images = [...unique.values()].slice(0, count);
   if (images.length === 0) throw new Error('No reusable OSS artwork images were found');

@@ -1006,14 +1006,21 @@
   display: grid;
   gap: 7px;
 }
-.participant-affect-comparison p {
+.participant-affect-comparison article {
   display: grid;
-  grid-template-columns: minmax(110px, 0.7fr) 20px minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(120px, 0.7fr) 20px minmax(190px, 1fr) auto;
   gap: 8px;
   align-items: center;
   margin: 0;
   padding: 9px 0;
   border-bottom: 1px solid var(--teacher-border);
+}
+.participant-affect-comparison article > div {
+  display: grid;
+  gap: 2px;
+}
+.participant-affect-comparison article small {
+  color: var(--teacher-muted);
 }
 
 .classroom-close-summary > p {
@@ -1187,7 +1194,7 @@
   .participant-artwork-affect__dimensions {
     grid-template-columns: 1fr;
   }
-  .participant-affect-comparison p {
+  .participant-affect-comparison article {
     grid-template-columns: 1fr;
   }
   .participant-scale-measure__values {

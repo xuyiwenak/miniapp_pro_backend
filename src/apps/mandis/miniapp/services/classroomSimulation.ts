@@ -64,7 +64,16 @@ const DIMENSION_CODES = [
 type RandomSource = () => number;
 type VadScores = Record<'valence' | 'arousal' | 'dominance', number>;
 type SimulationTeacher = { teacherId: string; displayName: string };
-type SimulationImage = { url: string; name: string; type: string };
+export type UserFacingArtworkAnalysis = Pick<
+  NonNullable<IWork['healing']>,
+  'summary' | 'colorAnalysis' | 'compositionReport' | 'lineAnalysis' | 'suggestion' | 'keyColors'
+>;
+export type SimulationImage = {
+  url: string;
+  name: string;
+  type: string;
+  userFacingAnalysis: UserFacingArtworkAnalysis;
+};
 type ParticipantState = {
   preVad: VadScores;
   postVad: VadScores;
@@ -388,26 +397,24 @@ function buildArtworkAffect(state: ParticipantState, generatedAt: Date, random: 
 function buildHealing(
   state: ParticipantState,
   participant: IClassroomParticipation,
+  image: SimulationImage,
   generatedAt: Date,
   random: RandomSource,
 ): NonNullable<IWork['healing']> {
   const affect = buildArtworkAffect(state, generatedAt, random);
+  const source = image.userFacingAnalysis;
   return {
     scores: affect.scores,
-    summary: '画面通过色彩、线条和空间关系呈现可观察的情绪表达。',
-    colorAnalysis: '色彩对比与明度层次共同构成作品的情绪氛围。',
+    summary: source.summary,
+    colorAnalysis: source.colorAnalysis,
     status: 'success',
     isPublic: false,
     submittedAt: participant.activityCompletedAt,
     analyzedAt: generatedAt,
-    compositionReport: '主体、留白和视觉重心形成具有方向性的构图关系。',
-    lineAnalysis: {
-      energy_score: roundedScore(state.postVad.arousal + normal(random), 0, 10),
-      style: '混合线条',
-      interpretation: '线条疏密与方向变化形成可观察的节奏。',
-    },
-    suggestion: '可以继续观察材料、动作与当下感受之间的关系。',
-    keyColors: ['暖色', '冷色', '中性色'],
+    compositionReport: source.compositionReport,
+    lineAnalysis: source.lineAnalysis,
+    suggestion: source.suggestion,
+    keyColors: source.keyColors,
     vad: {
       valence: affect.artworkAffect.vad.valence,
       arousal: affect.artworkAffect.vad.arousal,
@@ -428,11 +435,12 @@ function buildWork(
 ): IWork {
   const generatedAt = dateAt(participant.postAssessment.submittedAt ?? classroom.scheduledEndAt, 2);
   const uploaderRole = participant.artworkStatus === 'teacher_uploaded' ? 'teacher' : 'student';
+  const { userFacingAnalysis: _userFacingAnalysis, ...imageData } = image;
   return {
     workId: participant.artworkId ?? randomUUID(),
     authorId: null,
     desc: '自由绘画课堂作品。',
-    images: [image],
+    images: [imageData],
     tags: ['自由绘画', '情绪表达', '课堂作品'],
     location: classroom.locationText,
     status: 'published',
@@ -443,7 +451,7 @@ function buildWork(
     uploaderRole,
     uploadReason: participant.uploadReason,
     contentHash: createHash('sha256').update(`${classroom.classId}:${participant.participantId}`).digest('hex'),
-    healing: buildHealing(state, participant, generatedAt, random),
+    healing: buildHealing(state, participant, image, generatedAt, random),
     createdAt: participant.activityCompletedAt ?? classroom.scheduledEndAt,
     updatedAt: generatedAt,
   };

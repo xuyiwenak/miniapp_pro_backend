@@ -20,7 +20,17 @@ function simulation() {
   return buildClassroomSimulation({
     teacher: { teacherId: 'teacher-1', displayName: '模拟教师' },
     authorizedTeacherIds: ['teacher-1', 'teacher-2'],
-    images: [{ url: 'https://oss.example.test/artwork.jpg', name: 'artwork.jpg', type: 'image/jpeg' }],
+    images: [{
+      url: 'https://oss.example.test/artwork.jpg',
+      name: 'artwork.jpg',
+      type: 'image/jpeg',
+      userFacingAnalysis: {
+        summary: '作品保留了原有的画面观察。',
+        colorAnalysis: '原有的色彩与线条描述。',
+        compositionReport: '原有的构图描述。',
+        suggestion: '原有的创作建议。',
+      },
+    }],
     participantCount: PARTICIPANT_COUNT,
     now: new Date('2026-09-01T08:00:00.000Z'),
     random: deterministicRandom(),
@@ -61,6 +71,8 @@ describe('classroom simulation', () => {
       assert.equal(work.healing?.artworkAffect?.modelVersion, 'qwen-vl-plus');
       assert.equal(work.healing?.artworkAffect?.promptVersion, 'artwork-affect-prompt-v2');
       assert.equal(work.healing?.artworkAffect?.scoreSource, 'model_direct');
+      assert.equal(work.healing?.summary, '作品保留了原有的画面观察。');
+      assert.equal(work.healing?.colorAnalysis, '原有的色彩与线条描述。');
     });
   });
 
