@@ -1,5 +1,12 @@
 import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
+import {
+  ARTWORK_AFFECT_DIMENSION_CONFIG,
+  buildArtworkAffectAssociations,
+  resolveArtworkAffect,
+  type ArtworkAffectAssociation,
+  type ArtworkAffectExclusionReason,
+} from './artworkAffect';
 
 const POSITIVE_PANAS_CODES = [
   'PANAS_ALERT',
@@ -60,6 +67,10 @@ export type AssessmentParticipantRow = {
   artworkStatus: IClassroomParticipation['artworkStatus'];
   uploaderRole: NonNullable<IWork['uploaderRole']> | null;
   aiStatus: 'none' | 'pending' | 'success' | 'failed';
+  artworkAffectScoreSource: string | null;
+  artworkAffectResearchEligible: boolean;
+  artworkAffectExclusionReason: ArtworkAffectExclusionReason | null;
+  feedbackFit: 'mostly' | 'partly' | 'not_really' | 'unsure' | null;
   uploadReason: string | null;
   preDurationMs: number | null;
   postDurationMs: number | null;
@@ -87,7 +98,26 @@ export type ClassroomAssessmentResult = {
   assessmentPairedCount: number;
   researchRecordCompleteCount: number;
   instrumentGroups: InstrumentResultGroup[];
+  artworkAffectSummary: ArtworkAffectSummary;
   participants: AssessmentParticipantRow[];
+};
+
+export type ArtworkAffectDimensionSummary = {
+  code: string;
+  label: string;
+  count: number;
+  mean: number | null;
+  dominantCount: number;
+};
+
+export type ArtworkAffectSummary = {
+  analysisSuccessCount: number;
+  researchEligibleCount: number;
+  excludedCount: number;
+  missingCount: number;
+  dimensions: ArtworkAffectDimensionSummary[];
+  associations: ArtworkAffectAssociation[];
+  feedbackCounts: Record<'mostly' | 'partly' | 'not_really' | 'unsure', number>;
 };
 
 type ScoreSet = Record<AssessmentMeasureCode, number | null>;
@@ -216,6 +246,7 @@ function participantRow(
 ): AssessmentParticipantRow {
   const pre = assessmentScores(participant.preAssessment);
   const post = assessmentScores(participant.postAssessment);
+  const artworkAffect = resolveArtworkAffect(work);
   return {
     classroomCode: participant.classroomCode,
     instrumentVersion: participant.instrumentVersion,
@@ -233,11 +264,71 @@ function participantRow(
     artworkStatus: participant.artworkStatus,
     uploaderRole: work?.uploaderRole ?? null,
     aiStatus: work?.healing?.status ?? 'none',
+    artworkAffectScoreSource: artworkAffect.data?.scoreSource ?? null,
+    artworkAffectResearchEligible: artworkAffect.researchEligible,
+    artworkAffectExclusionReason: artworkAffect.exclusionReason,
+    feedbackFit: participant.feedback?.fit ?? null,
     uploadReason: participant.uploadReason ?? null,
     preDurationMs: participant.preAssessment.durationMs ?? null,
     postDurationMs: participant.postAssessment.durationMs ?? null,
     preClientRecovered: Boolean(participant.preAssessment.clientRecovered),
     postClientRecovered: Boolean(participant.postAssessment.clientRecovered),
+  };
+}
+
+function dominantDimension(work: IWork): string | null {
+  const resolved = resolveArtworkAffect(work);
+  if (!resolved.researchEligible || !resolved.data) return null;
+  const assessed = Object.entries(resolved.data.dimensions)
+    .filter(([, dimension]) => dimension.assessable && dimension.score !== null)
+    .sort((left, right) => (right[1].score ?? 0) - (left[1].score ?? 0));
+  return assessed[0]?.[0] ?? null;
+}
+
+function dimensionSummary(works: IWork[]): ArtworkAffectDimensionSummary[] {
+  const eligible = works.filter((work) => resolveArtworkAffect(work).researchEligible);
+  const dominantCodes = eligible.flatMap((work) => dominantDimension(work) ?? []);
+  return ARTWORK_AFFECT_DIMENSION_CONFIG.map(({ code, label }) => {
+    const values = eligible.flatMap((work) => {
+      const dimension = resolveArtworkAffect(work).data?.dimensions[code];
+      return dimension?.assessable && dimension.score !== null ? [dimension.score] : [];
+    });
+    const average = values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+    return {
+      code,
+      label,
+      count: values.length,
+      mean: average,
+      dominantCount: dominantCodes.filter((item) => item === code).length,
+    };
+  });
+}
+
+function feedbackCounts(
+  participants: IClassroomParticipation[],
+): ArtworkAffectSummary['feedbackCounts'] {
+  const counts = { mostly: 0, partly: 0, not_really: 0, unsure: 0 };
+  participants.forEach((participant) => {
+    if (participant.feedback) counts[participant.feedback.fit] += 1;
+  });
+  return counts;
+}
+
+function artworkAffectSummary(
+  participants: IClassroomParticipation[],
+  works: IWork[],
+): ArtworkAffectSummary {
+  const resolved = works.map(resolveArtworkAffect);
+  const successCount = works.filter((work) => work.healing?.status === 'success').length;
+  const eligibleCount = resolved.filter((item) => item.researchEligible).length;
+  return {
+    analysisSuccessCount: successCount,
+    researchEligibleCount: eligibleCount,
+    excludedCount: successCount - eligibleCount,
+    missingCount: Math.max(0, participants.length - works.length),
+    dimensions: dimensionSummary(works),
+    associations: buildArtworkAffectAssociations(participants, works),
+    feedbackCounts: feedbackCounts(participants),
   };
 }
 
@@ -291,6 +382,7 @@ export function buildClassroomAssessmentResult(
       version,
       participants.filter((participant) => participant.instrumentVersion === version),
     )),
+    artworkAffectSummary: artworkAffectSummary(participants, works),
     participants: participants.map((participant) =>
       participantRow(participant, workByParticipant.get(participant.participantId))),
   };

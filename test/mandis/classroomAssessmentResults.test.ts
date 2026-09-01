@@ -128,7 +128,8 @@ describe('classroom assessment results', () => {
     const buffer = buildAssessmentWorkbook(classroom(), [participant], result);
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     assert.deepEqual(workbook.SheetNames, [
-      'manifest', 'summary', 'participant_wide', 'responses_long', 'data_dictionary',
+      'manifest', 'summary', 'participant_wide', 'responses_long', 'artwork_affect',
+      'affect_associations', 'data_dictionary',
     ]);
     assert.equal(sanitizeSpreadsheetCell('+formula'), "'+formula");
     assert.match(buildAssessmentCsv(result).toString('utf8'), /'=unsafe/);

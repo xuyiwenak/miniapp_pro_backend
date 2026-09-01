@@ -751,6 +751,72 @@
 .classroom-results__toolbar h4 {
   margin: 0 0 4px;
 }
+.classroom-affect-summary {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--teacher-border);
+  border-radius: 12px;
+  background: #fffefa;
+}
+.classroom-affect-summary > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.classroom-affect-summary h5 {
+  margin: 0 0 3px;
+}
+.classroom-affect-summary__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.classroom-affect-summary__grid > div {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+.classroom-affect-summary__grid p,
+.classroom-affect-summary__grid dl {
+  margin: 0;
+}
+.classroom-affect-summary__grid > div > p {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.classroom-affect-summary__grid p span {
+  display: grid;
+}
+.classroom-affect-summary__grid small {
+  color: var(--teacher-muted);
+}
+.classroom-affect-summary__grid dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.classroom-affect-summary__grid dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #f3f7f5;
+}
+.classroom-affect-summary__associations {
+  display: grid;
+  max-height: 250px;
+  overflow: auto;
+}
+.classroom-affect-summary__associations p {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--teacher-border);
+}
 .participant-assessment-detail {
   display: grid;
   gap: 20px;
@@ -872,6 +938,82 @@
   color: var(--teacher-muted);
   font-size: 12px;
   line-height: 1.65;
+}
+.participant-artwork-affect,
+.participant-three-source,
+.participant-affect-comparison {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--teacher-border);
+}
+.participant-artwork-affect > header,
+.participant-artwork-affect > header > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.participant-artwork-affect > header > div {
+  flex-direction: column;
+  gap: 2px;
+}
+.participant-artwork-affect__dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+.participant-artwork-affect__dimension {
+  display: grid;
+  gap: 4px;
+}
+.participant-artwork-affect__dimension > span {
+  display: flex;
+  justify-content: space-between;
+}
+.participant-three-source {
+  padding: 18px;
+  border: 1px solid var(--teacher-border);
+  border-radius: 12px;
+  background: #f8fbfa;
+}
+.participant-three-source h5,
+.participant-affect-comparison h5 {
+  margin: 0;
+}
+.participant-three-source > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.participant-three-source article {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #dfe9e5;
+  border-radius: 9px;
+  background: #fff;
+}
+.participant-three-source article header,
+.participant-three-source article span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.participant-three-source article small {
+  color: var(--teacher-muted);
+}
+.participant-affect-comparison > div {
+  display: grid;
+  gap: 7px;
+}
+.participant-affect-comparison p {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) 20px minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--teacher-border);
 }
 
 .classroom-close-summary > p {
@@ -1013,9 +1155,16 @@
   .classroom-results__toolbar {
     flex-direction: column;
   }
+  .classroom-affect-summary > header {
+    flex-direction: column;
+  }
+  .classroom-affect-summary__grid {
+    grid-template-columns: 1fr;
+  }
   .participant-assessment-detail__meta,
   .participant-scale-grid,
-  .participant-artwork-evaluation__body {
+  .participant-artwork-evaluation__body,
+  .participant-three-source > div {
     grid-template-columns: 1fr;
   }
   .participant-assessment-detail__meta > span {
@@ -1034,6 +1183,12 @@
   .participant-artwork-evaluation,
   .participant-scale-card {
     padding: 14px;
+  }
+  .participant-artwork-affect__dimensions {
+    grid-template-columns: 1fr;
+  }
+  .participant-affect-comparison p {
+    grid-template-columns: 1fr;
   }
   .participant-scale-measure__values {
     grid-template-columns: 52px 16px 52px minmax(0, 1fr);

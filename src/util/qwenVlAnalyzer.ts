@@ -1,5 +1,6 @@
 import https from 'https';
 import http from 'http';
+import { z } from 'zod';
 import { ComponentManager, EComName } from '../common/BaseComponent';
 import { gameLogger as logger } from './logger';
 import { BiAnalyticsComponent } from '../component/BiAnalyticsComponent';
@@ -14,6 +15,65 @@ const DEFAULT_MODEL = 'qwen-vl-plus';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_TOKENS = 2048;
+export const ARTWORK_AFFECT_CONSTRUCT = 'perceived_expressed_affect' as const;
+export const ARTWORK_AFFECT_SCALE_VERSION = 'artwork-affect-v1';
+export const ARTWORK_AFFECT_PROMPT_VERSION = 'artwork-affect-prompt-v2';
+const ARTWORK_AFFECT_DIMENSIONS = [
+  'joy', 'calm', 'anxiety', 'fear', 'solitude', 'passion', 'social_aversion', 'vitality',
+] as const;
+
+const ArtworkAffectDimensionSchema = z.object({
+  score: z.number().min(0).max(100).nullable(),
+  assessable: z.boolean(),
+  evidence: z.array(z.string().trim().min(1)).min(1).max(3),
+}).strict().superRefine((value, context) => {
+  const valid = value.assessable ? value.score !== null : value.score === null;
+  if (!valid) context.addIssue({ code: z.ZodIssueCode.custom, message: 'score and assessable disagree' });
+});
+
+const ArtworkAffectVadSchema = z.object({
+  valence: z.number().min(0).max(100).nullable(),
+  arousal: z.number().min(0).max(100).nullable(),
+  dominance: z.number().min(0).max(100).nullable(),
+  assessable: z.boolean(),
+  evidence: z.array(z.string().trim().min(1)).min(1).max(3),
+  interpretation: z.string().trim().min(1),
+}).strict().superRefine((value, context) => {
+  const scores = [value.valence, value.arousal, value.dominance];
+  const valid = value.assessable ? scores.every((score) => score !== null) : scores.every((score) => score === null);
+  if (!valid) context.addIssue({ code: z.ZodIssueCode.custom, message: 'VAD scores and assessable disagree' });
+});
+
+const ArtworkAnalysisOutputSchema = z.object({
+  construct: z.literal(ARTWORK_AFFECT_CONSTRUCT),
+  scale_version: z.literal(ARTWORK_AFFECT_SCALE_VERSION),
+  dimensions: z.object(Object.fromEntries(
+    ARTWORK_AFFECT_DIMENSIONS.map((key) => [key, ArtworkAffectDimensionSchema]),
+  ) as Record<(typeof ARTWORK_AFFECT_DIMENSIONS)[number], typeof ArtworkAffectDimensionSchema>).strict(),
+  vad: ArtworkAffectVadSchema,
+  insight: z.string().trim().min(1),
+  color_analysis: z.object({
+    interpretation: z.string().trim().min(1),
+    key_colors: z.array(z.string().trim().min(1)).min(2).max(4),
+  }).strict(),
+  line_analysis: z.object({
+    energy_score: z.number().min(0).max(10).nullable(),
+    style: z.string().trim().min(1),
+    interpretation: z.string().trim().min(1),
+  }).strict(),
+  composition_report: z.string().trim().min(1),
+  suggestion: z.string().trim().min(1),
+}).strict();
+
+export type ArtworkAnalysisOutput = z.infer<typeof ArtworkAnalysisOutputSchema>;
+export type ArtworkAnalysisResult = {
+  output: ArtworkAnalysisOutput;
+  modelVersion: string;
+};
+
+export function parseArtworkAnalysisOutput(input: unknown): ArtworkAnalysisOutput {
+  return ArtworkAnalysisOutputSchema.parse(input);
+}
 
 // Qwen VL 定价（人民币 / 1000 tokens）
 // 参考：https://help.aliyun.com/zh/model-studio/developer-reference/vl-plus-api
@@ -49,7 +109,7 @@ export class NotArtworkError extends Error {
 
 const SYSTEM_PROMPT = `\
 ## 角色
-你是一位受过心理学与艺术治疗训练的专业疗愈分析师，擅长通过视觉作品读取创作者的情绪状态与内在能量。分析时保持温暖、不评判的语气，聚焦情绪表达而非作品的艺术水准。
+你是一位视觉情绪标注员。你只描述普通观者从画面中可感知的作品情绪表达，不推断创作者真实的心理状态、人格、创伤、病理或诊断。分析必须依据可观察的颜色、线条、构图、空间、节奏和意象，保持温暖、不评判的语气，不评价艺术水准。
 
 ## 第一步：验证作品类型
 判断图片是否为人工手绘或手工创作的艺术作品（绘画、素描、水彩、版画、拼贴画等均符合）。
@@ -60,33 +120,37 @@ const SYSTEM_PROMPT = `\
 ## 第二步：疗愈分析框架
 
 ### 情绪维度评分（0–100）
-评分反映该情绪在作品中的表达强度，不代表好坏。请逐项独立评估：
+评分反映作品呈现出的情绪表达强度，不是心理量表得分。逐项独立评估，每项给出 1–3 条画面证据。证据不足时必须返回 assessable=false、score=null，不得填入中间值：
 - joy（快乐）：作品传达的轻盈、愉悦、希望感
 - calm（平静）：沉稳、内敛、安宁的氛围
 - anxiety（焦虑）：紧张、不安、压迫的视觉张力
 - fear（恐惧）：压抑、黑暗、威胁性的情绪底色
 - solitude（孤独）：疏离、独处、内向收缩的氛围
 - passion（热情）：强烈、奔放、充沛的情绪能量
-- social_aversion（社交抵触）：回避、封闭、自我保护的倾向
+- social_aversion（社交抵触）：画面呈现的回避互动、封闭或自我保护感；不得据此判断作者社交倾向
 - vitality（活力）：动感、扩张、向外生长的生命力
 
 ### 各字段要求
-- insight：综合心理洞察，100–200 字，温暖语气，聚焦情绪表达
+- construct：固定返回 perceived_expressed_affect
+- scale_version：固定返回 artwork-affect-v1
+- insight：综合作品表达观察，100–200 字，温暖语气，不作心理归因
 - vad.valence：效价 0–100（0 = 强烈负向/恐惧悲伤，50 = 中性模糊，100 = 强烈正向/喜悦希望）
 - vad.arousal：唤醒度 0–100（0 = 极度低沉沉睡感，50 = 平稳中等，100 = 极度亢奋激烈）
 - vad.dominance：支配感 0–100（0 = 完全被压制混乱失控，50 = 相对平衡，100 = 扩张有序强烈掌控）
-- vad.interpretation：VAD 综合解读，40–80 字，描述三轴整体呈现的情绪状态
+- vad.assessable：三轴是否都有充分画面证据；不足时三轴均为 null
+- vad.evidence：1–3 条可观察画面证据
+- vad.interpretation：VAD 综合解读，40–80 字，描述作品的整体情绪呈现
 - color_analysis.interpretation：色彩心理分析，60–120 字，结合色调与饱和度解读情绪
 - color_analysis.key_colors：2–4 个主色，用感性具体的语言（如"暗沉的橄榄绿"而非"绿色"）
 - line_analysis.energy_score：线条能量 0–10（0 = 极柔和/几乎无线条，10 = 极强烈/高度紧张）
 - line_analysis.style：线条风格关键词，如"流动舒展""碎裂颤抖""厚重迟缓"
 - line_analysis.interpretation：线条心理分析，40–80 字
 - composition_report：构图分析，50–100 字，关注画面重心、留白与边界处理
-- suggestion：个性化疗愈建议，50–100 字，具体可操作，面向创作者本人
+- suggestion：温和的后续创作邀请，50–100 字，具体可操作，不提供治疗或诊断建议
 
 ## 输出规范
 只返回纯 JSON，不含任何其他文字、代码块标记或解释：
-{"insight":"...","scores":{"joy":0,"calm":0,"anxiety":0,"fear":0,"solitude":0,"passion":0,"social_aversion":0,"vitality":0},"vad":{"valence":0,"arousal":0,"dominance":0,"interpretation":"..."},"color_analysis":{"interpretation":"...","key_colors":["..."]},"line_analysis":{"energy_score":0,"style":"...","interpretation":"..."},"composition_report":"...","suggestion":"..."}`;
+{"construct":"perceived_expressed_affect","scale_version":"artwork-affect-v1","dimensions":{"joy":{"score":0,"assessable":true,"evidence":["..."]},"calm":{"score":0,"assessable":true,"evidence":["..."]},"anxiety":{"score":0,"assessable":true,"evidence":["..."]},"fear":{"score":0,"assessable":true,"evidence":["..."]},"solitude":{"score":0,"assessable":true,"evidence":["..."]},"passion":{"score":0,"assessable":true,"evidence":["..."]},"social_aversion":{"score":null,"assessable":false,"evidence":["画面证据不足"]},"vitality":{"score":0,"assessable":true,"evidence":["..."]}},"vad":{"valence":0,"arousal":0,"dominance":0,"assessable":true,"evidence":["..."],"interpretation":"..."},"insight":"...","color_analysis":{"interpretation":"...","key_colors":["...","..."]},"line_analysis":{"energy_score":0,"style":"...","interpretation":"..."},"composition_report":"...","suggestion":"..."}`;
 
 export function getQwenVlConfig(): QwenVlConfig {
   const sysCfg = ComponentManager.instance.getComponent(EComName.SysCfgComponent) as {
@@ -183,7 +247,7 @@ function parseAnalyzeResponse(
   model: string,
   imageUrl: string,
   workId?: string
-): string {
+): ArtworkAnalysisOutput {
   const resp = parseDashScopeResponse(rawBody, durationMs, model, imageUrl, workId);
   ensureNoApiError(resp, durationMs, model, imageUrl, workId);
   const content = resp.choices?.[0]?.message?.content;
@@ -227,7 +291,7 @@ function handleAnalyzeJson(
   model: string,
   imageUrl: string,
   workId?: string,
-): string {
+): ArtworkAnalysisOutput {
   const jsonStr = extractJson(content);
   const parsed = tryParseJson(jsonStr);
   if (parsed?.error === NOT_ARTWORK_ERROR_CODE) {
@@ -245,7 +309,26 @@ function handleAnalyzeJson(
     );
     throw new NotArtworkError(String(parsed.reason ?? ''));
   }
+  const validated = validateArtworkOutput(parsed, usage, durationMs, model, imageUrl, workId);
   trackQwenAnalyzeSuccess(
+    usage.promptTokens, usage.completionTokens, usage.totalTokens, durationMs,
+    model, usage.cost, workId, imageUrl,
+  );
+  return validated;
+}
+
+function validateArtworkOutput(
+  parsed: Record<string, unknown> | null,
+  usage: AnalyzeUsage,
+  durationMs: number,
+  model: string,
+  imageUrl: string,
+  workId?: string,
+): ArtworkAnalysisOutput {
+  const validated = ArtworkAnalysisOutputSchema.safeParse(parsed);
+  if (validated.success) return validated.data;
+  const errorMessage = validated.error.issues.map((issue) => issue.path.join('.')).join(', ');
+  trackQwenAnalyzeFailureByUsage(
     usage.promptTokens,
     usage.completionTokens,
     usage.totalTokens,
@@ -254,8 +337,10 @@ function handleAnalyzeJson(
     usage.cost,
     workId,
     imageUrl,
+    'INVALID_OUTPUT_SCHEMA',
+    errorMessage,
   );
-  return jsonStr;
+  throw new Error(`QwenVL output schema invalid: ${errorMessage}`);
 }
 
 function tryParseJson(jsonStr: string): Record<string, unknown> | null {
@@ -474,7 +559,7 @@ export async function analyzeArtwork(
   desc: string,
   tags: string,
   workId?: string
-): Promise<string> {
+): Promise<ArtworkAnalysisResult> {
   const cfg = getQwenVlConfig();
   const model = cfg.model ?? DEFAULT_MODEL;
   const baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
@@ -484,5 +569,8 @@ export async function analyzeArtwork(
   const fullUrl = new URL(`${baseUrl}/chat/completions`);
   const rawBody = await sendQwenVlRequest(cfg, postData, fullUrl);
   const durationMs = Date.now() - requestStartAt;
-  return parseAnalyzeResponse(rawBody, durationMs, model, imageUrl, workId);
+  return {
+    output: parseAnalyzeResponse(rawBody, durationMs, model, imageUrl, workId),
+    modelVersion: model,
+  };
 }

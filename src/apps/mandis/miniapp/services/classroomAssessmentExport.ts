@@ -1,12 +1,14 @@
 import * as XLSX from 'xlsx';
+import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
 import type {
   AssessmentParticipantRow,
   ClassroomAssessmentResult,
 } from './classroomAssessmentResults';
+import { ARTWORK_AFFECT_DIMENSION_CONFIG, resolveArtworkAffect } from './artworkAffect';
 
-const DATASET_VERSION = 'classroom-assessment-results-v1';
+const DATASET_VERSION = 'classroom-assessment-results-v2';
 const FORMULA_PREFIX_PATTERN = /^[=+\-@]/;
 
 type ExportCell = string | number | boolean | null;
@@ -89,11 +91,51 @@ function participantExportRow(row: AssessmentParticipantRow): ExportRow {
     uploaderRole: row.uploaderRole,
     uploadReason: row.uploadReason,
     aiStatus: row.aiStatus,
+    artworkAffectScoreSource: row.artworkAffectScoreSource,
+    artworkAffectResearchEligible: row.artworkAffectResearchEligible,
+    artworkAffectExclusionReason: row.artworkAffectExclusionReason,
+    feedbackFit: row.feedbackFit,
     preDurationMs: row.preDurationMs,
     postDurationMs: row.postDurationMs,
     preClientRecovered: row.preClientRecovered,
     postClientRecovered: row.postClientRecovered,
   };
+}
+
+function artworkAffectRows(
+  works: IWork[],
+  participants: IClassroomParticipation[],
+): ExportRow[] {
+  const classroomCodeByParticipant = new Map(
+    participants.map((participant) => [participant.participantId, participant.classroomCode]),
+  );
+  return works.flatMap((work) => {
+    const resolved = resolveArtworkAffect(work);
+    return ARTWORK_AFFECT_DIMENSION_CONFIG.map(({ code, label }) => {
+      const dimension = resolved.data?.dimensions[code];
+      return {
+        classroomCode: work.participantId ? classroomCodeByParticipant.get(work.participantId) ?? null : null,
+        workId: work.workId,
+        dimensionCode: code,
+        dimensionLabel: label,
+        score: dimension?.score ?? null,
+        assessable: dimension?.assessable ?? false,
+        evidence: dimension?.evidence.join(' | ') ?? null,
+        scoreSource: resolved.data?.scoreSource ?? null,
+        construct: resolved.data?.construct ?? null,
+        modelVersion: resolved.data?.modelVersion ?? null,
+        promptVersion: resolved.data?.promptVersion ?? null,
+        scaleVersion: resolved.data?.scaleVersion ?? null,
+        generatedAt: resolved.data?.generatedAt.toISOString() ?? null,
+        researchEligible: resolved.researchEligible,
+        exclusionReason: resolved.exclusionReason,
+      };
+    });
+  });
+}
+
+function associationRows(result: ClassroomAssessmentResult): ExportRow[] {
+  return result.artworkAffectSummary.associations.map((association) => ({ ...association }));
 }
 
 function responseRows(participants: IClassroomParticipation[]): ExportRow[] {
@@ -140,6 +182,10 @@ function dictionaryRows(): ExportRow[] {
     { field: 'clientRecovered', definition: '本次提交是否由设备本地缓存恢复' },
     { field: 'uploaderRole', definition: '作品上传者角色：student 或 teacher' },
     { field: 'uploadReason', definition: '教师代传或研究修正作品时记录的原因' },
+    { field: 'artworkAffect', definition: 'AI 对作品可感知情绪表达的视觉标注，不代表作者心理状态' },
+    { field: 'scoreSource', definition: 'model_direct 才进入研究关联；旧版、推导值与默认值均排除' },
+    { field: 'correlation', definition: '不同量尺原始值之间的描述性 Pearson 相关；样本少于3或无方差时为空' },
+    { field: 'evidence', definition: '支持该作品情绪标注的可观察画面线索' },
   ];
 }
 
@@ -152,12 +198,15 @@ export function buildAssessmentWorkbook(
   classroom: IClassroom,
   participants: IClassroomParticipation[],
   result: ClassroomAssessmentResult,
+  works: IWork[] = [],
 ): Buffer {
   const workbook = XLSX.utils.book_new();
   appendSheet(workbook, 'manifest', manifestRows(classroom, result));
   appendSheet(workbook, 'summary', summaryRows(result));
   appendSheet(workbook, 'participant_wide', result.participants.map(participantExportRow));
   appendSheet(workbook, 'responses_long', responseRows(participants));
+  appendSheet(workbook, 'artwork_affect', artworkAffectRows(works, participants));
+  appendSheet(workbook, 'affect_associations', associationRows(result));
   appendSheet(workbook, 'data_dictionary', dictionaryRows());
   return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 }

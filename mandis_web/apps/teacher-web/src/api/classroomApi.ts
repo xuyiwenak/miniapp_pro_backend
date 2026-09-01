@@ -9,6 +9,8 @@ import type {
   ClassroomCollaborator,
   ArtworkCorrectionAudit,
   PendingArtwork,
+  ArtworkAffect,
+  ArtworkAffectExclusionReason,
 } from '@mandis/common/classroom-types';
 export type {
   AssessmentMeasureSummary,
@@ -36,6 +38,20 @@ export type AssessmentParticipantDetail = AssessmentParticipantRow & {
     colorAnalysis?: string;
     compositionReport?: string;
     suggestion?: string;
+    artworkAffect: ArtworkAffect | null;
+    researchEligible: boolean;
+    exclusionReason: ArtworkAffectExclusionReason | null;
+    selfReportComparison: Array<{
+      dimensionCode: string;
+      dimensionLabel: string;
+      artworkScore: number | null;
+      targetCode: string;
+      targetLabel: string;
+      postSelfReportValue: number | null;
+      strength: 'strong' | 'moderate' | 'limited';
+      direction: 'same' | 'inverse';
+    }>;
+    feedbackFit: 'mostly' | 'partly' | 'not_really' | 'unsure' | null;
   };
 };
 

@@ -8,6 +8,7 @@ import {
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
 import { resolveImageUrl } from '../../../../util/imageUploader';
+import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
 import {
@@ -22,6 +23,10 @@ import {
 } from '../services/classroomAssessmentExport';
 import { finalizeClassroomIfExpired } from '../services/classroomLifecycle';
 import { findAccessibleClassroom } from '../services/classroomAccess';
+import {
+  buildArtworkSelfReportComparison,
+  resolveArtworkAffect,
+} from '../services/artworkAffect';
 
 const router = Router({ mergeParams: true });
 const DEFAULT_PAGE_SIZE = 50;
@@ -39,6 +44,7 @@ type AssessmentDataStatus = 'provisional' | 'final';
 type ResultBundle = {
   classroom: IClassroom;
   participants: IClassroomParticipation[];
+  works: IWork[];
   result: ClassroomAssessmentResult;
   dataStatus: AssessmentDataStatus;
 };
@@ -79,13 +85,14 @@ async function loadResultBundle(
   const [participants, works] = await Promise.all([
     Participation.find({ classId }).sort({ createdAt: 1 }).lean().exec(),
     Work.find({ classroomId: classId })
-      .select('participantId uploaderRole healing.status')
+      .select('participantId uploaderRole healing')
       .lean()
       .exec(),
   ]);
   return {
     classroom,
     participants,
+    works,
     result: buildClassroomAssessmentResult(participants, works),
     dataStatus,
   };
@@ -121,6 +128,7 @@ async function participantDetailPayload(
   }).select('images healing uploaderRole').lean().exec();
   const healing = work?.healing;
   const isSuccessful = healing?.status === 'success';
+  const artworkAffect = resolveArtworkAffect(work ?? undefined);
   return {
     ...participantRow,
     instrumentVersions: splitInstrumentVersion(participant.instrumentVersion),
@@ -131,6 +139,11 @@ async function participantDetailPayload(
       colorAnalysis: isSuccessful ? healing.colorAnalysis : undefined,
       compositionReport: isSuccessful ? healing.compositionReport : undefined,
       suggestion: isSuccessful ? healing.suggestion : undefined,
+      artworkAffect: artworkAffect.data,
+      researchEligible: artworkAffect.researchEligible,
+      exclusionReason: artworkAffect.exclusionReason,
+      selfReportComparison: buildArtworkSelfReportComparison(participant, work ?? undefined),
+      feedbackFit: participant.feedback?.fit ?? null,
     },
   };
 }
@@ -224,7 +237,7 @@ router.get('/export', async (req, res) => {
   }
   const format = parsed.data.format;
   const buffer = format === 'xlsx'
-    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result)
+    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result, bundle.works)
     : buildAssessmentCsv(bundle.result);
   await saveExportAudit(bundle, teacherId, format, buffer);
   const metadata = exportMetadata(format);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
+import { Alert, Button, Progress, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
 import { DownloadOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   classroomApi,
@@ -38,6 +38,54 @@ function saveBlob(blob: Blob, filename: string): void {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function ArtworkAffectSummary({ summary }: { summary: ClassroomAssessmentSummary }) {
+  const affect = summary.artworkAffectSummary;
+  const feedbackTotal = Object.values(affect.feedbackCounts).reduce((sum, value) => sum + value, 0);
+  return (
+    <section className="classroom-affect-summary">
+      <header>
+        <div><Title level={5}>作品表达与 AI 回响</Title><Text type="secondary">仅纳入模型直出且证据充分的标注。</Text></div>
+        <Space wrap>
+          <Tag color="green">有效 {affect.researchEligibleCount}</Tag>
+          <Tag color="orange">排除 {affect.excludedCount}</Tag>
+          <Tag>缺少作品 {affect.missingCount}</Tag>
+        </Space>
+      </header>
+      <div className="classroom-affect-summary__grid">
+        <div>
+          <Text strong>八维作品表达</Text>
+          {affect.dimensions.map((dimension) => (
+            <p key={dimension.code}>
+              <span>{dimension.label}<small>主导 {dimension.dominantCount} · n={dimension.count}</small></span>
+              <Progress percent={dimension.mean ?? 0} showInfo={dimension.mean !== null} size="small" />
+            </p>
+          ))}
+        </div>
+        <div>
+          <Text strong>AI 回响主观贴合度</Text>
+          <dl>
+            <div><dt>比较贴合</dt><dd>{affect.feedbackCounts.mostly}</dd></div>
+            <div><dt>部分贴合</dt><dd>{affect.feedbackCounts.partly}</dd></div>
+            <div><dt>不太贴合</dt><dd>{affect.feedbackCounts.not_really}</dd></div>
+            <div><dt>不确定</dt><dd>{affect.feedbackCounts.unsure}</dd></div>
+          </dl>
+          <Text type="secondary">已反馈 {feedbackTotal} 人；未反馈不填补。</Text>
+          <Text strong>作品—课后自评描述性关联</Text>
+          <div className="classroom-affect-summary__associations">
+            {affect.associations.map((item) => (
+              <p key={`${item.dimensionCode}-${item.targetCode}`}>
+                <span>{item.dimensionLabel} ↔ {item.targetLabel}</span>
+                <Tag>{item.correlation === null ? `n=${item.sampleSize}，暂不计算` : `r=${item.correlation} · n=${item.sampleSize}`}</Tag>
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+      <Text type="secondary">相关系数仅描述共同变化，不表示量尺等价、AI 准确率或因果关系。</Text>
+    </section>
+  );
 }
 
 export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
@@ -133,6 +181,7 @@ export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
         </Space>
       </div>
       {error && <Alert type="error" showIcon message={error} />}
+      {summary && <ArtworkAffectSummary summary={summary} />}
       <Spin spinning={loading}>
         <Table<AssessmentParticipantRow>
           rowKey="classroomCode"

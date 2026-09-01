@@ -6,7 +6,7 @@ export type IHealingScores = Record<string, number>;
 export interface IHealingLineAnalysis {
   interpretation?: string;
   style?: string;
-  energy_score?: number;
+  energy_score?: number | null;
 }
 
 export interface IHealingVad {
@@ -15,6 +15,38 @@ export interface IHealingVad {
   dominance: number;
   quadrant: string;
   interpretation: string;
+}
+
+export type ArtworkAffectScoreSource =
+  | 'model_direct'
+  | 'derived_from_energy'
+  | 'default'
+  | 'legacy_unverified';
+
+export interface IArtworkAffectDimension {
+  score: number | null;
+  assessable: boolean;
+  evidence: string[];
+}
+
+export interface IArtworkAffectVad {
+  valence: number | null;
+  arousal: number | null;
+  dominance: number | null;
+  assessable: boolean;
+  evidence: string[];
+  interpretation: string;
+}
+
+export interface IArtworkAffect {
+  construct: 'perceived_expressed_affect';
+  scoreSource: ArtworkAffectScoreSource;
+  modelVersion: string;
+  promptVersion: string;
+  scaleVersion: string;
+  generatedAt: Date;
+  dimensions: Record<string, IArtworkAffectDimension>;
+  vad: IArtworkAffectVad;
 }
 
 export interface IHealingData {
@@ -32,6 +64,7 @@ export interface IHealingData {
   keyColors?: string[];
   failReason?: string;
   vad?: IHealingVad;
+  artworkAffect?: IArtworkAffect;
 }
 
 export interface IWork {
@@ -94,6 +127,7 @@ const HealingDataSubSchema = new Schema<IHealingData>(
         { _id: false },
       ),
     },
+    artworkAffect: { type: Schema.Types.Mixed },
   },
   { _id: false },
 );

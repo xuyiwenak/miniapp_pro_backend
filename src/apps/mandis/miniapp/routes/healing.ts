@@ -5,10 +5,21 @@ import { authMiddleware, type MiniappRequest } from '../../../../shared/miniapp/
 import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { logRequest, logRequestError } from '../../../../util/requestLogger';
 import { notifyHealingUpdate } from '../ws/chatServer';
-import { analyzeArtwork, NotArtworkError } from '../../../../util/qwenVlAnalyzer';
+import {
+  analyzeArtwork,
+  ARTWORK_AFFECT_PROMPT_VERSION,
+  NotArtworkError,
+  type ArtworkAnalysisOutput,
+} from '../../../../util/qwenVlAnalyzer';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 import { gameLogger as logger, reportDebugLogger } from '../../../../util/logger';
-import type { IWork, IHealingData, IHealingScores, IHealingVad } from '../../../../entity/work.entity';
+import type {
+  IArtworkAffect,
+  IHealingData,
+  IHealingScores,
+  IHealingVad,
+  IWork,
+} from '../../../../entity/work.entity';
 import { ComponentManager } from '../../../../common/BaseComponent';
 import type { PlayerComponent } from '../../../../component/PlayerComponent';
 import { getPlayerModel } from '../../../../dbservice/model/ZoneDBModel';
@@ -27,32 +38,8 @@ const OSS_PREFIX = 'oss://';
  */
 const HEALING_ESTIMATED_SECONDS = 10;
 
-/** 分数归一化：最小值阈值 */
-const SCORE_MIN_THRESHOLD = 5;
-
-/** 分数归一化：最大值阈值 */
-const SCORE_MAX_THRESHOLD = 98;
-
-/** Coze输出解包的最大递归深度 */
-const MAX_UNWRAP_DEPTH = 5;
-
-/** Coze输出截断长度（用于日志） */
-const COZE_OUTPUT_TRUNCATE_LENGTH = 1000;
-
-/** 能量分数的最小值 */
-const ENERGY_SCORE_MIN = 0;
-
-/** 能量分数的最大值 */
-const ENERGY_SCORE_MAX = 10;
-
-/** 能量分数的默认值（当无法解析时） */
-const ENERGY_SCORE_DEFAULT = 5;
-
-/** 能量分数转换为情绪分数的基础偏移 */
-const ENERGY_TO_EMOTION_OFFSET = 10;
-
-/** 能量分数转换为情绪分数的缩放系数 */
-const ENERGY_TO_EMOTION_SCALE = 80;
+/** 模型输出日志截断长度 */
+const ANALYSIS_OUTPUT_TRUNCATE_LENGTH = 1000;
 
 /** VAD 效价/唤醒高阈值（≥此值视为"高"） */
 const VAD_HIGH_THRESHOLD = 55;
@@ -66,15 +53,6 @@ const VAD_QUADRANT_TENSE_NEGATIVE = '紧张焦虑';
 const VAD_QUADRANT_SUPPRESSED = '压抑低沉';
 const VAD_QUADRANT_BALANCED = '情绪平衡';
 
-// 情绪维度系数（从能量分数推导各维度）
-const EMOTION_COEFFICIENT_JOY = 0.9;
-const EMOTION_COEFFICIENT_CALM = 0.6;
-const EMOTION_COEFFICIENT_ANXIETY = 0.3;
-const EMOTION_COEFFICIENT_FEAR = 0.2;
-const EMOTION_COEFFICIENT_SOLITUDE = 0.15;
-const EMOTION_COEFFICIENT_PASSION = 0.85;
-const EMOTION_COEFFICIENT_SOCIAL_AVERSION = 0.2;
-const EMOTION_COEFFICIENT_VITALITY = 0.95;
 
 /**
  * 情绪维度配置 —— 后端唯一配置源
@@ -138,6 +116,7 @@ function buildHealingResponse(work: IWork, viewerId?: string) {
     healingSuggestion: healing.suggestion,
     healingKeyColors: healing.keyColors,
     healingVad: healing.vad ?? null,
+    artworkAffect: healing.artworkAffect ?? null,
     isOwner,
   };
 }
@@ -173,6 +152,7 @@ function buildHealingReportResponse(work: IWork, viewerId?: string): Record<stri
     lineAnalysis: healing.lineAnalysis,
     suggestion: healing.suggestion,
     keyColors: healing.keyColors,
+    artworkAffect: healing.artworkAffect ?? null,
   };
 }
 
@@ -253,37 +233,6 @@ async function initializePendingHealing(workId: string, runId: string): Promise<
   ).exec();
 }
 
-/** Coze 新版输出中的线条分析 */
-interface CozeLineAnalysis {
-  energy_score?: number;
-  interpretation?: string;
-  style?: string;
-}
-
-/** Coze 新版输出中的色彩分析 */
-interface CozeColorAnalysis {
-  interpretation?: string;
-  key_colors?: string[];
-}
-
-/** 解析后的完整报告（含可选扩展字段） */
-export interface ParsedHealingReport {
-  scores: Record<string, number>;
-  summary: string;
-  colorAnalysis: string;
-  compositionReport?: string;
-  lineAnalysis?: CozeLineAnalysis;
-  suggestion?: string;
-  keyColors?: string[];
-  vad?: IHealingVad;
-}
-
-function clampVadScore(val: unknown): number {
-  const n = Number(val);
-  if (!Number.isFinite(n)) return 50;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
 function computeVadQuadrant(valence: number, arousal: number): string {
   const vHigh = valence >= VAD_HIGH_THRESHOLD;
   const vLow = valence < VAD_LOW_THRESHOLD;
@@ -296,220 +245,86 @@ function computeVadQuadrant(valence: number, arousal: number): string {
   return VAD_QUADRANT_BALANCED;
 }
 
-function parseVad(output: Record<string, unknown>): IHealingVad | undefined {
-  const raw = output.vad as Record<string, unknown> | undefined;
-  if (!raw || typeof raw !== 'object') return undefined;
-  const valence = clampVadScore(raw.valence);
-  const arousal = clampVadScore(raw.arousal);
-  const dominance = clampVadScore(raw.dominance);
-  const interpretation = typeof raw.interpretation === 'string' ? raw.interpretation.trim() : '';
-  return { valence, arousal, dominance, quadrant: computeVadQuadrant(valence, arousal), interpretation };
-}
-
-/**
- * 从 Coze 多层嵌套字符串中解析出最内层 output 对象
- * 格式可能为: {"Output":"\"{\\\"output\\\":\\\"{...}\\\"}\"}"} 或 {"output": {...}}
- */
-function unwrapCozeOutput(raw: string): Record<string, unknown> {
-  let obj: unknown = JSON.parse(raw);
-  for (let depth = 0; depth < MAX_UNWRAP_DEPTH && obj !== null && typeof obj === 'object'; depth++) {
-    const o = obj as Record<string, unknown>;
-    // ── [DEBUG] 每层解包结果 ───────────────────────────────────────
-    logger.info(`[report-debug] unwrap depth=${depth} keys:`, Object.keys(o));
-    const next = o.Output ?? o.output;
-    if (next === null || next === undefined) {
-      reportDebugLogger.info('[report-debug] unwrap final object summary:', {
-        keys: Object.keys(o),
-        size: JSON.stringify(o).length,
-      });
-      return o as Record<string, unknown>;
-    }
-    obj = typeof next === 'string' ? JSON.parse(next) : next;
-  }
-  return (obj as Record<string, unknown>) ?? {};
-}
-
-/**
- * 根据 line_analysis.energy_score (0-10) 推导四项情绪分数，保证雷达图有数据
- */
-function scoresFromEnergyScore(energyScore: number): Record<string, number> {
-  const e = Math.max(ENERGY_SCORE_MIN, Math.min(ENERGY_SCORE_MAX, Number(energyScore) || ENERGY_SCORE_DEFAULT));
-  const t = (e / ENERGY_SCORE_MAX) * ENERGY_TO_EMOTION_SCALE + ENERGY_TO_EMOTION_OFFSET; // 高能量 → 高活跃度
-  // 按语义推导各维度：高能量→活力/热情/快乐高，平静/焦虑/恐惧低
-  const derived: Record<string, number> = {
-    joy:             t * EMOTION_COEFFICIENT_JOY,
-    calm:            100 - t * EMOTION_COEFFICIENT_CALM,
-    anxiety:         t * EMOTION_COEFFICIENT_ANXIETY,
-    fear:            t * EMOTION_COEFFICIENT_FEAR,
-    solitude:        (100 - t) * EMOTION_COEFFICIENT_SOLITUDE,
-    passion:         t * EMOTION_COEFFICIENT_PASSION,
-    social_aversion: (100 - t) * EMOTION_COEFFICIENT_SOCIAL_AVERSION,
-    vitality:        t * EMOTION_COEFFICIENT_VITALITY,
-  };
-  const result: Record<string, number> = {};
-  SCORE_DIMENSIONS.forEach(({ key }) => {
-    result[key] = Math.max(SCORE_MIN_THRESHOLD, Math.min(SCORE_MAX_THRESHOLD, Math.round(derived[key] ?? 50)));
-  });
-  return result;
-}
-
-// ========== Helper Functions for parseCozeOutput ==========
-
-/**
- * 解析色彩分析字段
- */
-function parseColorAnalysis(colorAnalysisObj: CozeColorAnalysis | undefined): {
-  colorAnalysis: string;
-  keyColors?: string[];
-} {
-  const keyColors = Array.isArray(colorAnalysisObj?.key_colors) ? colorAnalysisObj.key_colors : undefined;
-  const interpretation = colorAnalysisObj?.interpretation ?? '';
-
-  const colorAnalysis =
-    interpretation + (keyColors?.length ? (interpretation ? ' 主色：' : '主色：') + keyColors.join('、') : '');
-
-  return { colorAnalysis, keyColors: keyColors?.length ? keyColors : undefined };
-}
-
-/**
- * 解析摘要字段
- */
-function parseSummary(output: Record<string, unknown>): string {
-  return (
-    String(output.insight ?? output.summary ?? output.healingSummary ?? '').trim() ||
-    String(output.composition_report ?? '').trim()
-  );
-}
-
-/**
- * 解析情绪分数
- */
-function parseScores(
-  output: Record<string, unknown>,
-  lineAnalysisObj: CozeLineAnalysis | undefined,
-): Record<string, number> {
-  const rawScores = output.scores as Record<string, number> | undefined;
-  const hasDimScore = SCORE_DIMENSIONS.some(
-    ({ key }) => typeof output[key] === 'number' || typeof rawScores?.[key] === 'number',
-  );
-
-  // 情况1：直接包含维度分数
-  if (hasDimScore) {
-    const scores: Record<string, number> = {};
-    SCORE_DIMENSIONS.forEach(({ key }) => {
-      scores[key] = Number(output[key] ?? rawScores?.[key] ?? 50);
-    });
-    return scores;
-  }
-
-  // 情况2：从 energy_score 推导
-  if (typeof lineAnalysisObj?.energy_score === 'number') {
-    return scoresFromEnergyScore(lineAnalysisObj.energy_score);
-  }
-
-  // 情况3：使用默认值
-  return Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50]));
-}
-
-/**
- * 解析线条分析字段
- */
-function parseLineAnalysis(lineAnalysisObj: CozeLineAnalysis | undefined): CozeLineAnalysis | undefined {
-  if (!lineAnalysisObj) return undefined;
-
-  const hasContent =
-    lineAnalysisObj.interpretation ?? lineAnalysisObj.style ?? lineAnalysisObj.energy_score !== null;
-
-  if (!hasContent) return undefined;
-
+function legacyVad(output: ArtworkAnalysisOutput): IHealingVad | undefined {
+  const { vad } = output;
+  if (!vad.assessable || vad.valence === null || vad.arousal === null || vad.dominance === null) return undefined;
   return {
-    interpretation: lineAnalysisObj.interpretation,
-    style: lineAnalysisObj.style,
-    energy_score: lineAnalysisObj.energy_score,
+    valence: vad.valence,
+    arousal: vad.arousal,
+    dominance: vad.dominance,
+    quadrant: computeVadQuadrant(vad.valence, vad.arousal),
+    interpretation: vad.interpretation,
   };
 }
 
-/**
- * 解析 Coze 工作流返回的 output JSON，兼容新版结构（insight/color_analysis/line_analysis 等）与旧版
- */
-function parseCozeOutput(raw: string): ParsedHealingReport {
-  const fallback: ParsedHealingReport = {
-    scores: Object.fromEntries(SCORE_DIMENSIONS.map(({ key }) => [key, 50])),
-    summary: raw.slice(0, 500),
-    colorAnalysis: '',
+function buildArtworkAffect(
+  output: ArtworkAnalysisOutput,
+  modelVersion: string,
+  generatedAt: Date,
+): IArtworkAffect {
+  return {
+    construct: output.construct,
+    scoreSource: 'model_direct',
+    modelVersion,
+    promptVersion: ARTWORK_AFFECT_PROMPT_VERSION,
+    scaleVersion: output.scale_version,
+    generatedAt,
+    dimensions: output.dimensions,
+    vad: output.vad,
   };
-
-  try {
-    const output = unwrapCozeOutput(raw) as Record<string, unknown>;
-
-    // 解析各个字段
-    const colorAnalysisObj = output.color_analysis as CozeColorAnalysis | undefined;
-    const lineAnalysisObj = output.line_analysis as CozeLineAnalysis | undefined;
-
-    const { colorAnalysis, keyColors } = parseColorAnalysis(colorAnalysisObj);
-    const summary = parseSummary(output);
-    const scores = parseScores(output, lineAnalysisObj);
-    const lineAnalysis = parseLineAnalysis(lineAnalysisObj);
-
-    const compositionReport =
-      typeof output.composition_report === 'string' ? output.composition_report.trim() : undefined;
-    const suggestion = typeof output.suggestion === 'string' ? output.suggestion.trim() : undefined;
-
-    return {
-      scores,
-      summary: summary || fallback.summary,
-      colorAnalysis: colorAnalysis || fallback.colorAnalysis,
-      compositionReport: compositionReport || undefined,
-      lineAnalysis,
-      suggestion,
-      keyColors,
-      vad: parseVad(output),
-    };
-  } catch (err) {
-    logger.error('healing:parseCozeOutput error', { rawSnippet: raw.slice(0, 200), error: (err as Error).message });
-    return fallback;
-  }
 }
 
-function buildHealingUpdatePayload(parsed: ParsedHealingReport): Record<string, unknown> {
+function directScores(output: ArtworkAnalysisOutput): Record<string, number> {
+  return Object.fromEntries(Object.entries(output.dimensions).flatMap(([key, dimension]) =>
+    dimension.assessable && dimension.score !== null ? [[key, dimension.score]] : []));
+}
+
+function buildHealingUpdatePayload(
+  output: ArtworkAnalysisOutput,
+  modelVersion: string,
+): Record<string, unknown> {
+  const generatedAt = new Date();
+  const vad = legacyVad(output);
   const update: Record<string, unknown> = {
-    'healing.scores': parsed.scores,
-    'healing.summary': parsed.summary,
-    'healing.colorAnalysis': parsed.colorAnalysis,
+    'healing.scores': directScores(output),
+    'healing.summary': output.insight,
+    'healing.colorAnalysis': output.color_analysis.interpretation,
     'healing.status': 'success',
-    'healing.analyzedAt': new Date(),
+    'healing.analyzedAt': generatedAt,
+    'healing.compositionReport': output.composition_report,
+    'healing.lineAnalysis': output.line_analysis,
+    'healing.suggestion': output.suggestion,
+    'healing.keyColors': output.color_analysis.key_colors,
+    'healing.artworkAffect': buildArtworkAffect(output, modelVersion, generatedAt),
   };
-  if (parsed.compositionReport !== null) update['healing.compositionReport'] = parsed.compositionReport;
-  if (parsed.lineAnalysis !== null) update['healing.lineAnalysis'] = parsed.lineAnalysis;
-  if (parsed.suggestion !== null) update['healing.suggestion'] = parsed.suggestion;
-  if (parsed.keyColors !== undefined && parsed.keyColors.length) update['healing.keyColors'] = parsed.keyColors;
-  if (parsed.vad) update['healing.vad'] = parsed.vad;
+  if (vad) update['healing.vad'] = vad;
   return update;
 }
 
-async function applyHealingSuccessFromRunId(runId: string, outputRaw: string): Promise<void> {
+async function applyHealingSuccessFromRunId(
+  runId: string,
+  output: ArtworkAnalysisOutput,
+  modelVersion: string,
+): Promise<void> {
+  const serializedOutput = JSON.stringify(output);
   reportDebugLogger.info('[report-debug] output received:', {
     runId,
-    length: outputRaw.length,
-    snippet: outputRaw.slice(0, COZE_OUTPUT_TRUNCATE_LENGTH),
+    length: serializedOutput.length,
+    snippet: serializedOutput.slice(0, ANALYSIS_OUTPUT_TRUNCATE_LENGTH),
   });
   const Work = getWorkModel();
   const work = (await Work.findOne({ 'healing.cozeRunId': runId }).lean().exec()) as IWork | null;
-  if (!work) { logger.warn('Coze webhook: no work for cozeRunId=', runId); return; }
-  if (work.healing?.status === 'success') { logger.info('Coze webhook idempotent skip, workId=', work.workId); return; }
-  const parsed = parseCozeOutput(outputRaw);
+  if (!work) { logger.warn('Artwork analysis: no work for runId=', runId); return; }
+  if (work.healing?.status === 'success') { logger.info('Artwork analysis idempotent skip workId=', work.workId); return; }
   reportDebugLogger.info('[report-debug] parse result summary:', {
-    scores: parsed.scores,
-    summary: parsed.summary?.slice(0, 100),
-    colorAnalysisLength: parsed.colorAnalysis?.length ?? 0,
-    compositionReportLength: parsed.compositionReport?.length ?? 0,
-    lineAnalysis: parsed.lineAnalysis,
-    suggestionLength: parsed.suggestion?.length ?? 0,
-    keyColors: parsed.keyColors,
+    scores: directScores(output),
+    summary: output.insight.slice(0, 100),
+    dimensions: output.dimensions,
+    vad: output.vad,
   });
   const { workId } = work;
-  await Work.updateOne({ workId }, { $set: buildHealingUpdatePayload(parsed) }).exec();
-  logger.info('Coze webhook success for workId=', workId);
+  await Work.updateOne({ workId }, { $set: buildHealingUpdatePayload(output, modelVersion) }).exec();
+  logger.info('Artwork analysis success for workId=', workId);
   if (work.authorId) {
     notifyHealingUpdate(String(work.authorId), { workId, status: 'success' });
   }
@@ -519,8 +334,8 @@ async function runQwenVlAnalysis(work: IWork, jobId: string, userId: string): Pr
   const imageUrl = resolveImageUrl(work.images?.[0]?.url ?? '');
   const desc = work.desc ?? '';
   const tags = (work.tags ?? []).join(',');
-  const output = await analyzeArtwork(imageUrl, desc, tags, work.workId);
-  await applyHealingSuccessFromRunId(jobId, output);
+  const analysis = await analyzeArtwork(imageUrl, desc, tags, work.workId);
+  await applyHealingSuccessFromRunId(jobId, analysis.output, analysis.modelVersion);
   // 仅检测通过后扣除次数，NotArtworkError 或其他失败不扣
   void incrementHealDailyUsage(userId).catch(() => {});
 }
@@ -591,6 +406,7 @@ function buildHealingStatusSuccess(workId: string, healing: IHealingData): Recor
     suggestion: healing.suggestion,
     keyColors: healing.keyColors,
     vad: healing.vad ?? null,
+    artworkAffect: healing.artworkAffect ?? null,
   };
 }
 

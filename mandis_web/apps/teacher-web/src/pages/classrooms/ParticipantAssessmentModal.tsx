@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Empty, Image, Modal, Skeleton, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Image, Modal, Progress, Skeleton, Tag, Typography } from 'antd';
 import { ArrowRightOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   classroomApi,
@@ -89,6 +89,106 @@ function SuccessfulEvaluation({ detail }: { detail: AssessmentParticipantDetail 
   );
 }
 
+function ArtworkAffectDetails({ detail }: { detail: AssessmentParticipantDetail }) {
+  const evaluation = detail.artworkEvaluation;
+  const affect = evaluation.artworkAffect;
+  if (!affect) return null;
+  const dimensions = Object.entries(affect.dimensions)
+    .filter(([, dimension]) => dimension.assessable && dimension.score !== null)
+    .sort((left, right) => (right[1].score ?? 0) - (left[1].score ?? 0));
+  return (
+    <section className="participant-artwork-affect">
+      <header>
+        <div><Text strong>作品表达标注</Text><Text type="secondary">独立量尺 0–100</Text></div>
+        <Tag color={evaluation.researchEligible ? 'green' : 'orange'}>
+          {evaluation.researchEligible ? '可进入描述性分析' : '不纳入研究关联'}
+        </Tag>
+      </header>
+      <div className="participant-artwork-affect__dimensions">
+        {dimensions.map(([code, dimension]) => (
+          <div key={code} className="participant-artwork-affect__dimension">
+            <span><Text strong>{dimensionLabel(code)}</Text><Text>{dimension.score}</Text></span>
+            <Progress percent={dimension.score ?? 0} showInfo={false} size="small" />
+            <Text type="secondary">{dimension.evidence.join('；')}</Text>
+          </div>
+        ))}
+      </div>
+      <Text type="secondary">
+        {affect.modelVersion} · {affect.promptVersion} · {affect.scaleVersion} · 来源 {affect.scoreSource}
+      </Text>
+    </section>
+  );
+}
+
+function dimensionLabel(code: string): string {
+  const labels: Record<string, string> = {
+    joy: '快乐', calm: '平静', anxiety: '焦虑', fear: '恐惧', solitude: '孤独',
+    passion: '热情', social_aversion: '社交抵触', vitality: '活力',
+  };
+  return labels[code] ?? code;
+}
+
+function SelfReportArtworkFlow({ detail }: { detail: AssessmentParticipantDetail }) {
+  const vad = detail.artworkEvaluation.artworkAffect?.vad;
+  return (
+    <section className="participant-three-source">
+      <Title level={5}>课前自评 → 作品表达 → 课后自评</Title>
+      <div>
+        <SourceCard title="课前自评" range="SAM 1–9 · PANAS 5–25" scores={[
+          ['愉悦度', detail.scores.pre_valence], ['唤醒度', detail.scores.pre_arousal],
+          ['积极 PA', detail.scores.pre_positiveAffect], ['消极 NA', detail.scores.pre_negativeAffect],
+        ]} />
+        <SourceCard title="作品表达" range="AI 视觉标注 0–100" scores={[
+          ['效价', vad?.valence], ['唤醒度', vad?.arousal], ['支配感', vad?.dominance],
+        ]} />
+        <SourceCard title="课后自评" range="SAM 1–9 · PANAS 5–25" scores={[
+          ['愉悦度', detail.scores.post_valence], ['唤醒度', detail.scores.post_arousal],
+          ['积极 PA', detail.scores.post_positiveAffect], ['消极 NA', detail.scores.post_negativeAffect],
+        ]} />
+      </div>
+      <Text type="secondary">三栏保留各自原始量尺；作品 0–100 未换算为自评量尺。</Text>
+    </section>
+  );
+}
+
+function SourceCard({ title, range, scores }: {
+  title: string;
+  range: string;
+  scores: Array<[string, number | null | undefined]>;
+}) {
+  return (
+    <article>
+      <header><Text strong>{title}</Text><small>{range}</small></header>
+      {scores.map(([label, value]) => (
+        <span key={label}><Text>{label}</Text><strong>{formatScore(value)}</strong></span>
+      ))}
+    </article>
+  );
+}
+
+function DeterministicComparison({ detail }: { detail: AssessmentParticipantDetail }) {
+  const comparisons = detail.artworkEvaluation.selfReportComparison.filter(
+    (item) => item.artworkScore !== null || item.postSelfReportValue !== null,
+  );
+  if (!comparisons.length) return null;
+  return (
+    <section className="participant-affect-comparison">
+      <Title level={5}>自评—作品表达关联</Title>
+      <Text type="secondary">固定语义映射，仅并列描述，不判断 AI 是否“测准”。孤独与社交抵触无直接 PANAS 对应项。</Text>
+      <div>
+        {comparisons.map((item) => (
+          <p key={`${item.dimensionCode}-${item.targetCode}`}>
+            <Text strong>{item.dimensionLabel} {formatScore(item.artworkScore)}</Text>
+            <span>↔</span>
+            <Text>{item.targetLabel} {formatScore(item.postSelfReportValue)}</Text>
+            <Tag>{item.direction === 'inverse' ? '预期反向' : '预期同向'} · {item.strength}</Tag>
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function EvaluationState({ detail }: { detail: AssessmentParticipantDetail }) {
   const status = detail.artworkEvaluation.status;
   if (status === 'success') return <SuccessfulEvaluation detail={detail} />;
@@ -106,6 +206,9 @@ function ArtworkEvaluation({ detail }: { detail: AssessmentParticipantDetail }) 
   const statusLabel = evaluation.status === 'success' ? '已完成'
     : evaluation.status === 'pending' ? '分析中'
       : evaluation.status === 'failed' ? '生成失败' : '暂无回响';
+  const feedbackLabels = {
+    mostly: '比较贴合', partly: '部分贴合', not_really: '不太贴合', unsure: '不确定',
+  } as const;
   return (
     <section className="participant-artwork-evaluation">
       <header>
@@ -113,7 +216,10 @@ function ArtworkEvaluation({ detail }: { detail: AssessmentParticipantDetail }) 
           <Title level={5}>作品与 AI 回响</Title>
           <Text type="secondary">AI 仅辅助整理视觉特征，不用于心理诊断或课程评分。</Text>
         </div>
-        <Tag>{statusLabel}</Tag>
+        <div>
+          <Tag>{statusLabel}</Tag>
+          {evaluation.feedbackFit && <Tag color="blue">参与者反馈：{feedbackLabels[evaluation.feedbackFit]}</Tag>}
+        </div>
       </header>
       <div className="participant-artwork-evaluation__body">
         <div className="participant-artwork-evaluation__image">
@@ -123,6 +229,7 @@ function ArtworkEvaluation({ detail }: { detail: AssessmentParticipantDetail }) 
         </div>
         <EvaluationState detail={detail} />
       </div>
+      <ArtworkAffectDetails detail={detail} />
     </section>
   );
 }
@@ -194,6 +301,8 @@ function ParticipantDetailContent({ detail }: { detail: AssessmentParticipantDet
           scores={detail.scores}
         />
       </div>
+      <SelfReportArtworkFlow detail={detail} />
+      <DeterministicComparison detail={detail} />
       <Text type="secondary">结果仅作本次课堂的描述性记录，不代表因果效应、心理诊断或课程评分。</Text>
     </div>
   );

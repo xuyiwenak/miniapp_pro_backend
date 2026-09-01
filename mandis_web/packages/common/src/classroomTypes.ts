@@ -171,7 +171,7 @@ export type ClassroomAssessmentSummary = {
   dataStatus: 'provisional' | 'final';
   classStatus: 'closing' | 'closed';
   finalizedAt?: string;
-  datasetVersion: 'classroom-assessment-results-v1';
+  datasetVersion: 'classroom-assessment-results-v2';
   missingValuePolicy: 'not_imputed';
   disclaimer: string;
   participantCount: number;
@@ -180,6 +180,72 @@ export type ClassroomAssessmentSummary = {
   assessmentPairedCount: number;
   researchRecordCompleteCount: number;
   instrumentGroups: InstrumentResultGroup[];
+  artworkAffectSummary: ArtworkAffectSummary;
+};
+
+export type ArtworkAffectScoreSource =
+  | 'model_direct'
+  | 'derived_from_energy'
+  | 'default'
+  | 'legacy_unverified';
+
+export type ArtworkAffectExclusionReason =
+  | 'missing'
+  | 'analysis_incomplete'
+  | 'default_scores'
+  | 'derived_scores'
+  | 'legacy_unverified'
+  | 'insufficient_evidence';
+
+export type ArtworkAffectDimension = {
+  score: number | null;
+  assessable: boolean;
+  evidence: string[];
+};
+
+export type ArtworkAffect = {
+  construct: 'perceived_expressed_affect';
+  scoreSource: ArtworkAffectScoreSource;
+  modelVersion: string;
+  promptVersion: string;
+  scaleVersion: string;
+  generatedAt: string;
+  dimensions: Record<string, ArtworkAffectDimension>;
+  vad: {
+    valence: number | null;
+    arousal: number | null;
+    dominance: number | null;
+    assessable: boolean;
+    evidence: string[];
+    interpretation: string;
+  };
+};
+
+export type ArtworkAffectAssociation = {
+  dimensionCode: string;
+  dimensionLabel: string;
+  targetCode: string;
+  targetLabel: string;
+  strength: 'strong' | 'moderate' | 'limited';
+  direction: 'same' | 'inverse';
+  sampleSize: number;
+  correlation: number | null;
+};
+
+export type ArtworkAffectSummary = {
+  analysisSuccessCount: number;
+  researchEligibleCount: number;
+  excludedCount: number;
+  missingCount: number;
+  dimensions: Array<{
+    code: string;
+    label: string;
+    count: number;
+    mean: number | null;
+    dominantCount: number;
+  }>;
+  associations: ArtworkAffectAssociation[];
+  feedbackCounts: Record<'mostly' | 'partly' | 'not_really' | 'unsure', number>;
 };
 
 export type AssessmentParticipantRow = {
@@ -198,6 +264,10 @@ export type AssessmentParticipantRow = {
   artworkStatus: string;
   uploaderRole: 'student' | 'teacher' | null;
   aiStatus: 'none' | 'pending' | 'success' | 'failed';
+  artworkAffectScoreSource: ArtworkAffectScoreSource | null;
+  artworkAffectResearchEligible: boolean;
+  artworkAffectExclusionReason: ArtworkAffectExclusionReason | null;
+  feedbackFit: 'mostly' | 'partly' | 'not_really' | 'unsure' | null;
   uploadReason: string | null;
   preDurationMs: number | null;
   postDurationMs: number | null;
