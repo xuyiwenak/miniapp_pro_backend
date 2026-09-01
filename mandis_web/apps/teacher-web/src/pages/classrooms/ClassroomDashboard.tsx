@@ -8,6 +8,7 @@ import {
   ClockCircleOutlined,
   CloudUploadOutlined,
   CopyOutlined,
+  DownloadOutlined,
   EditOutlined,
   FileImageOutlined,
   FileTextOutlined,
@@ -35,7 +36,10 @@ import {
   type ClassroomProgress,
   type ClassroomRecord,
 } from '@/api/classroomApi';
-import { ClassroomAssessmentResults } from './ClassroomAssessmentResults';
+import {
+  ClassroomAssessmentResults,
+  type ClassroomResultsActions,
+} from './ClassroomAssessmentResults';
 import { TeacherArtworkUpload } from './TeacherArtworkUpload';
 import { ClassroomCollaborators } from './ClassroomCollaborators';
 import { ClassroomArtworkCorrection } from './ClassroomArtworkCorrection';
@@ -382,6 +386,7 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>('progress');
+  const [resultsActions, setResultsActions] = useState<ClassroomResultsActions | null>(null);
   const studentUrl = useMemo(() => classroomUrl(classroom), [classroom]);
   const effectiveStatus = progress?.classStatus ?? classroom.status;
   const resultsAvailable = ['closing', 'closed'].includes(effectiveStatus);
@@ -505,7 +510,12 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
           <Text><ClockCircleOutlined /> {classroom.startTime}–{classroom.endTime}</Text>
         </div>
         <Space wrap className="classroom-dashboard__actions">
-          <Button icon={<ReloadOutlined />} onClick={() => void loadProgress()}>刷新</Button>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => shownView === 'results' ? resultsActions?.refresh() : void loadProgress()}
+          >
+            刷新
+          </Button>
           {isOwner && (
             <Button icon={<UsergroupAddOutlined />} onClick={() => setCollaboratorsOpen(true)}>
               协作权限
@@ -518,6 +528,20 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
             >
               {shownView === 'progress' ? '测评结果' : '实时进度'}
             </Button>
+          )}
+          {shownView === 'results' && (
+            <>
+              <Button
+                icon={<DownloadOutlined />}
+                disabled={!resultsActions?.canExport}
+                onClick={() => resultsActions?.exportXlsx()}
+              >
+                导出 Excel
+              </Button>
+              <Button disabled={!resultsActions?.canExport} onClick={() => resultsActions?.exportCsv()}>
+                导出 CSV
+              </Button>
+            </>
           )}
           {effectiveStatus === 'draft' && isOwner && (
             <Button icon={<EditOutlined />} onClick={onEdit}>编辑课堂</Button>
@@ -560,6 +584,7 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
         <ClassroomAssessmentResults
           classId={classroom.classId}
           classStatus={effectiveStatus as 'closing' | 'closed'}
+          onActionsChange={setResultsActions}
         />
       )}
       <TeacherArtworkUpload

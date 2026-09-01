@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Progress, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
-import { DownloadOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { EyeOutlined } from '@ant-design/icons';
 import {
   classroomApi,
   type AssessmentParticipantRow,
@@ -15,6 +15,14 @@ const DEFAULT_PAGE_SIZE = 50;
 type Props = {
   classId: string;
   classStatus: 'closing' | 'closed';
+  onActionsChange: (actions: ClassroomResultsActions) => void;
+};
+
+export type ClassroomResultsActions = {
+  canExport: boolean;
+  refresh: () => void;
+  exportXlsx: () => void;
+  exportCsv: () => void;
 };
 
 const PROFILE_LABELS: Record<string, string> = {
@@ -88,7 +96,7 @@ function ArtworkAffectSummary({ summary }: { summary: ClassroomAssessmentSummary
   );
 }
 
-export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
+export function ClassroomAssessmentResults({ classId, classStatus, onActionsChange }: Props) {
   const [summary, setSummary] = useState<ClassroomAssessmentSummary | null>(null);
   const [participants, setParticipants] = useState<AssessmentParticipantRow[]>([]);
   const [selectedParticipant, setSelectedParticipant] = useState<AssessmentParticipantRow | null>(null);
@@ -146,7 +154,7 @@ export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
     return () => window.clearInterval(timer);
   }, [classStatus, loadResults]);
 
-  async function exportResults(format: 'xlsx' | 'csv'): Promise<void> {
+  const exportResults = useCallback(async (format: 'xlsx' | 'csv'): Promise<void> => {
     try {
       const response = await classroomApi.exportAssessmentResults(classId, format);
       saveBlob(response.data, `classroom-assessment-results.${format}`);
@@ -154,7 +162,16 @@ export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
     } catch (nextError) {
       void message.error(nextError instanceof Error ? nextError.message : '导出失败');
     }
-  }
+  }, [classId]);
+
+  useEffect(() => {
+    onActionsChange({
+      canExport: summary?.dataStatus === 'final',
+      refresh: () => void loadResults(),
+      exportXlsx: () => void exportResults('xlsx'),
+      exportCsv: () => void exportResults('csv'),
+    });
+  }, [exportResults, loadResults, onActionsChange, summary?.dataStatus]);
 
   return (
     <section className="classroom-results">
@@ -166,19 +183,6 @@ export function ClassroomAssessmentResults({ classId, classStatus }: Props) {
           </Space>
           <Text type="secondary">点击“查看评价”查看单个参与者的作品回响与两套量表结果。</Text>
         </div>
-        <Space wrap>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadResults()}>刷新</Button>
-          <Button
-            icon={<DownloadOutlined />}
-            disabled={summary?.dataStatus !== 'final'}
-            onClick={() => void exportResults('xlsx')}
-          >
-            导出 Excel
-          </Button>
-          <Button disabled={summary?.dataStatus !== 'final'} onClick={() => void exportResults('csv')}>
-            导出 CSV
-          </Button>
-        </Space>
       </div>
       {error && <Alert type="error" showIcon message={error} />}
       {summary && <ArtworkAffectSummary summary={summary} />}
