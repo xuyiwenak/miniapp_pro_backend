@@ -781,12 +781,6 @@
 .classroom-affect-summary__grid dl {
   margin: 0;
 }
-.classroom-affect-summary__grid > div > p {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-}
 .classroom-affect-summary__grid p span {
   display: grid;
 }
@@ -804,6 +798,78 @@
   padding: 9px 11px;
   border-radius: 8px;
   background: #f3f7f5;
+}
+.artwork-affect-radar {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  padding-top: 2px;
+}
+.artwork-affect-radar svg {
+  display: block;
+  width: min(100%, 520px);
+  height: auto;
+  overflow: visible;
+}
+.artwork-affect-radar polygon,
+.artwork-affect-radar line {
+  fill: none;
+  stroke: rgba(100, 140, 130, 0.18);
+  stroke-width: 1;
+}
+.artwork-affect-radar polygon.is-outer-grid {
+  stroke: rgba(77, 191, 180, 0.3);
+  stroke-width: 1.5;
+}
+.artwork-affect-radar polygon.artwork-affect-radar__area {
+  fill: url('#artwork-affect-fill');
+  stroke: rgba(11, 148, 136, 0.85);
+  stroke-width: 2.5;
+}
+.artwork-affect-radar circle {
+  fill: var(--teacher-teal);
+  stroke: #fffefa;
+  stroke-width: 2;
+}
+.artwork-affect-radar text {
+  fill: #384442;
+  font-size: 15px;
+}
+.artwork-affect-radar__label {
+  font-weight: 600;
+}
+.artwork-affect-radar__score {
+  fill: var(--teacher-teal);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.artwork-affect-radar__empty {
+  position: absolute;
+  top: 48%;
+  color: var(--teacher-muted);
+  font-size: 13px;
+}
+.artwork-affect-radar__details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 12px;
+  width: 100%;
+}
+.artwork-affect-radar__details > span {
+  display: grid;
+  gap: 1px;
+  padding-top: 6px;
+  border-top: 1px solid var(--teacher-border);
+}
+.artwork-affect-radar__details strong {
+  color: #384442;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.artwork-affect-radar__details small {
+  color: var(--teacher-muted);
+  font-size: 11px;
 }
 .classroom-affect-summary__associations {
   display: grid;
@@ -1184,6 +1250,9 @@
 }
 
 @media (max-width: 560px) {
+  .artwork-affect-radar__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .participant-assessment-modal .ant-modal-body {
     padding-inline: 0;
   }
