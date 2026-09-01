@@ -6,6 +6,7 @@ import {
   type AssessmentParticipantDetail,
   type AssessmentParticipantRow,
 } from '@/api/classroomApi';
+import { ArtworkAffectRadar } from './ArtworkAffectRadar';
 
 const { Paragraph, Text, Title } = Typography;
 const DETAIL_POLL_INTERVAL_MS = 5000;
@@ -30,6 +31,24 @@ const PANAS_MEASURES: MeasureDefinition[] = [
   { code: 'positiveAffect', label: '积极情绪 PA' },
   { code: 'negativeAffect', label: '消极情绪 NA' },
 ];
+const ARTWORK_AFFECT_DIMENSIONS = [
+  { code: 'joy', label: '快乐' },
+  { code: 'calm', label: '平静' },
+  { code: 'anxiety', label: '焦虑' },
+  { code: 'fear', label: '恐惧' },
+  { code: 'solitude', label: '孤独' },
+  { code: 'passion', label: '热情' },
+  { code: 'social_aversion', label: '社交抵触' },
+  { code: 'vitality', label: '活力' },
+] as const;
+
+type ArtworkAffectViewDimension = {
+  code: string;
+  label: string;
+  score: number | null;
+  assessable: boolean;
+  evidence: string[];
+};
 
 function formatScore(value: number | null | undefined): string {
   return typeof value === 'number' ? value.toFixed(2) : '—';
@@ -89,13 +108,38 @@ function SuccessfulEvaluation({ detail }: { detail: AssessmentParticipantDetail 
   );
 }
 
+function ArtworkAffectDimensionList({ dimensions }: { dimensions: ArtworkAffectViewDimension[] }) {
+  return (
+    <div className="participant-artwork-affect__dimensions">
+      {dimensions.map((dimension) => (
+        <div key={dimension.code} className="participant-artwork-affect__dimension">
+          <span>
+            <Text strong>{dimension.label}</Text>
+            <Text>{dimension.assessable ? formatScore(dimension.score) : '—'}</Text>
+          </span>
+          {dimension.assessable && dimension.score !== null
+            ? <Progress percent={dimension.score} showInfo={false} size="small" />
+            : <Text type="secondary">画面证据不足，未标注分数</Text>}
+          {dimension.evidence.length > 0 && (
+            <Text type="secondary">{dimension.evidence.join('；')}</Text>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ArtworkAffectDetails({ detail }: { detail: AssessmentParticipantDetail }) {
   const evaluation = detail.artworkEvaluation;
   const affect = evaluation.artworkAffect;
   if (!affect) return null;
-  const dimensions = Object.entries(affect.dimensions)
-    .filter(([, dimension]) => dimension.assessable && dimension.score !== null)
-    .sort((left, right) => (right[1].score ?? 0) - (left[1].score ?? 0));
+  const dimensions = ARTWORK_AFFECT_DIMENSIONS.map(({ code, label }) => ({
+    code,
+    label,
+    score: affect.dimensions[code]?.score ?? null,
+    assessable: affect.dimensions[code]?.assessable ?? false,
+    evidence: affect.dimensions[code]?.evidence ?? [],
+  }));
   return (
     <section className="participant-artwork-affect">
       <header>
@@ -104,28 +148,15 @@ function ArtworkAffectDetails({ detail }: { detail: AssessmentParticipantDetail 
           {evaluation.researchEligible ? '可进入描述性分析' : '不纳入研究关联'}
         </Tag>
       </header>
-      <div className="participant-artwork-affect__dimensions">
-        {dimensions.map(([code, dimension]) => (
-          <div key={code} className="participant-artwork-affect__dimension">
-            <span><Text strong>{dimensionLabel(code)}</Text><Text>{dimension.score}</Text></span>
-            <Progress percent={dimension.score ?? 0} showInfo={false} size="small" />
-            <Text type="secondary">{dimension.evidence.join('；')}</Text>
-          </div>
-        ))}
+      <div className="participant-artwork-affect__content">
+        <ArtworkAffectRadar dimensions={dimensions} />
+        <ArtworkAffectDimensionList dimensions={dimensions} />
       </div>
       <Text type="secondary">
         {affect.modelVersion} · {affect.promptVersion} · {affect.scaleVersion} · 来源 {affect.scoreSource}
       </Text>
     </section>
   );
-}
-
-function dimensionLabel(code: string): string {
-  const labels: Record<string, string> = {
-    joy: '快乐', calm: '平静', anxiety: '焦虑', fear: '恐惧', solitude: '孤独',
-    passion: '热情', social_aversion: '社交抵触', vitality: '活力',
-  };
-  return labels[code] ?? code;
 }
 
 function SelfReportArtworkFlow({ detail }: { detail: AssessmentParticipantDetail }) {

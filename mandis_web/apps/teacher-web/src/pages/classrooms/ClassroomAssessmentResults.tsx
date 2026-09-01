@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
+import { Alert, Button, Progress, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
 import { DownloadOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   classroomApi,
@@ -7,7 +7,6 @@ import {
   type ClassroomAssessmentSummary,
 } from '@/api/classroomApi';
 import { ParticipantAssessmentModal } from './ParticipantAssessmentModal';
-import { ArtworkAffectRadar } from './ArtworkAffectRadar';
 
 const { Text, Title } = Typography;
 const RESULTS_POLL_INTERVAL_MS = 15000;
@@ -57,7 +56,12 @@ function ArtworkAffectSummary({ summary }: { summary: ClassroomAssessmentSummary
       <div className="classroom-affect-summary__grid">
         <div>
           <Text strong>八维作品表达</Text>
-          <ArtworkAffectRadar dimensions={affect.dimensions} />
+          {affect.dimensions.map((dimension) => (
+            <p key={dimension.code}>
+              <span>{dimension.label}<small>主导 {dimension.dominantCount} · n={dimension.count}</small></span>
+              <Progress percent={dimension.mean ?? 0} showInfo={dimension.mean !== null} size="small" />
+            </p>
+          ))}
         </div>
         <div>
           <Text strong>AI 回响主观贴合度</Text>
