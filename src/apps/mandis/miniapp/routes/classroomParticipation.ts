@@ -22,7 +22,7 @@ import {
   VAD_ITEM_CODES,
 } from '../services/classroomResearch';
 import { createClassroomArtwork } from '../services/classroomArtwork';
-import { startClassroomArtworkAnalysis } from './healing';
+import { startClassroomArtworkAnalysis } from '../services/classroomArtworkAnalysis/service';
 import { resolveImageUrl } from '../../../../util/imageUploader';
 
 const router = Router();

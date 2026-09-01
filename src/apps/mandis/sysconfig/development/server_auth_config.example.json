@@ -32,6 +32,11 @@
     "apiKey": "YOUR_DASHSCOPE_API_KEY",
     "model": "qwen-vl-plus",
     "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  },
+  "_comment_educationQwenVl": "教育版课堂作品独立分析；apiKey 也可使用 EDUCATION_DASHSCOPE_API_KEY 环境变量",
+  "educationQwenVl": {
+    "apiKey": "YOUR_EDUCATION_DASHSCOPE_API_KEY",
+    "model": "qwen-vl-plus",
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
   }
 }
-

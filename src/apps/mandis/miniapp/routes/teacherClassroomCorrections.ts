@@ -12,7 +12,7 @@ import type { IClassroomParticipation } from '../../entity/classroomParticipatio
 import { createClassroomArtwork, replaceClassroomArtwork } from '../services/classroomArtwork';
 import { findAccessibleClassroom } from '../services/classroomAccess';
 import { isResearchRecordComplete } from '../services/classroomResearch';
-import { startClassroomArtworkAnalysis } from './healing';
+import { startClassroomArtworkAnalysis } from '../services/classroomArtworkAnalysis/service';
 
 const router = Router({ mergeParams: true });
 const CorrectionSchema = z.object({

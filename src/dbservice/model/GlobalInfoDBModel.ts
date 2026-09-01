@@ -33,6 +33,10 @@ import {
   ClassroomArtworkCorrectionAuditSchema,
   type IClassroomArtworkCorrectionAudit,
 } from '../../apps/mandis/entity/classroomArtworkCorrectionAudit.entity';
+import {
+  ClassroomArtworkAnalysisSchema,
+  type IClassroomArtworkAnalysis,
+} from '../../apps/mandis/entity/classroomArtworkAnalysis.entity';
 
 class GlobalModelManager {
   private connection: Connection;
@@ -47,6 +51,7 @@ class GlobalModelManager {
   private teacherProfileModel!: Model<ITeacherProfile>;
   private teacherDataExportAuditModel!: Model<ITeacherDataExportAudit>;
   private classroomArtworkCorrectionAuditModel!: Model<IClassroomArtworkCorrectionAudit>;
+  private classroomArtworkAnalysisModel!: Model<IClassroomArtworkAnalysis>;
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -96,6 +101,15 @@ class GlobalModelManager {
         ClassroomArtworkCorrectionAuditSchema
       );
     this.classroomArtworkCorrectionAuditModel.createIndexes().catch(() => {});
+    this.registerClassroomArtworkAnalysisModel();
+  }
+
+  private registerClassroomArtworkAnalysisModel(): void {
+    this.classroomArtworkAnalysisModel = this.connection.model<IClassroomArtworkAnalysis>(
+      'ClassroomArtworkAnalysis',
+      ClassroomArtworkAnalysisSchema,
+    );
+    this.classroomArtworkAnalysisModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -140,6 +154,10 @@ class GlobalModelManager {
 
   public getClassroomArtworkCorrectionAuditModel(): Model<IClassroomArtworkCorrectionAudit> {
     return this.classroomArtworkCorrectionAuditModel;
+  }
+
+  public getClassroomArtworkAnalysisModel(): Model<IClassroomArtworkAnalysis> {
+    return this.classroomArtworkAnalysisModel;
   }
 
   public async stopConnection() {
@@ -207,4 +225,8 @@ export function getTeacherDataExportAuditModel(): Model<ITeacherDataExportAudit>
 
 export function getClassroomArtworkCorrectionAuditModel(): Model<IClassroomArtworkCorrectionAudit> {
   return getGlobalModelManager().getClassroomArtworkCorrectionAuditModel();
+}
+
+export function getClassroomArtworkAnalysisModel(): Model<IClassroomArtworkAnalysis> {
+  return getGlobalModelManager().getClassroomArtworkAnalysisModel();
 }

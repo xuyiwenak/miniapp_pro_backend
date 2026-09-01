@@ -37,7 +37,7 @@ import {
   finalizeClassroom,
   finalizeClassroomIfExpired,
 } from '../services/classroomLifecycle';
-import { startClassroomArtworkAnalysis } from './healing';
+import { startClassroomArtworkAnalysis } from '../services/classroomArtworkAnalysis/service';
 import teacherClassroomAssessmentResultsRouter from './teacherClassroomAssessmentResults';
 import teacherClassroomCorrectionsRouter from './teacherClassroomCorrections';
 
