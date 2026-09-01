@@ -2,13 +2,14 @@ import * as XLSX from 'xlsx';
 import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
+import { CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION } from '../../entity/teacherDataExportAudit.entity';
 import type {
   AssessmentParticipantRow,
   ClassroomAssessmentResult,
 } from './classroomAssessmentResults';
 import { ARTWORK_AFFECT_DIMENSION_CONFIG, resolveArtworkAffect } from './artworkAffect';
 
-const DATASET_VERSION = 'classroom-assessment-results-v2';
+const DATASET_VERSION = CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION;
 const FORMULA_PREFIX_PATTERN = /^[=+\-@]/;
 
 type ExportCell = string | number | boolean | null;

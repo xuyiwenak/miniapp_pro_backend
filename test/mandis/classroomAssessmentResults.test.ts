@@ -1,7 +1,9 @@
 import { strict as assert } from 'assert';
+import { model } from 'mongoose';
 import * as XLSX from 'xlsx';
 import type { IClassroom } from '../../src/apps/mandis/entity/classroom.entity';
 import type { IClassroomParticipation } from '../../src/apps/mandis/entity/classroomParticipation.entity';
+import { TeacherDataExportAuditSchema } from '../../src/apps/mandis/entity/teacherDataExportAudit.entity';
 import {
   buildClassroomAssessmentResult,
   describeValues,
@@ -80,6 +82,27 @@ function classroom(status: IClassroom['status'] = 'closed'): IClassroom {
 }
 
 describe('classroom assessment results', () => {
+  it('accepts the current dataset version when recording an export audit', () => {
+    const Audit = model('TeacherDataExportAuditVersionTest', TeacherDataExportAuditSchema.clone());
+    const common = {
+      exportId: 'export-1',
+      teacherId: 'teacher-1',
+      classId: 'class-1',
+      format: 'xlsx',
+      recordCount: 1,
+      exportedAt: new Date('2026-08-31T08:00:00.000Z'),
+      fileSha256: 'hash',
+    };
+    assert.equal(new Audit({
+      ...common,
+      datasetVersion: 'classroom-assessment-results-v2',
+    }).validateSync(), undefined);
+    assert.match(new Audit({
+      ...common,
+      datasetVersion: 'classroom-assessment-results-v3',
+    }).validateSync()?.message ?? '', /datasetVersion/);
+  });
+
   it('calculates descriptive sample statistics and preserves exact matches', () => {
     assert.deepEqual(describeValues([1, 3]), {
       count: 2, mean: 2, median: 2, standardDeviation: 1.41,

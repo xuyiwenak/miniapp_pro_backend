@@ -1,13 +1,18 @@
 import { Schema } from 'mongoose';
 
 export type TeacherDataExportFormat = 'xlsx' | 'csv';
+export const CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION =
+  'classroom-assessment-results-v2' as const;
+export type TeacherDataExportDatasetVersion =
+  | 'classroom-assessment-results-v1'
+  | typeof CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION;
 
 export interface ITeacherDataExportAudit {
   exportId: string;
   teacherId: string;
   classId: string;
   format: TeacherDataExportFormat;
-  datasetVersion: 'classroom-assessment-results-v1';
+  datasetVersion: TeacherDataExportDatasetVersion;
   recordCount: number;
   exportedAt: Date;
   fileSha256: string;
@@ -23,7 +28,10 @@ export const TeacherDataExportAuditSchema = new Schema<ITeacherDataExportAudit>(
     format: { type: String, enum: ['xlsx', 'csv'], required: true },
     datasetVersion: {
       type: String,
-      enum: ['classroom-assessment-results-v1'],
+      enum: [
+        'classroom-assessment-results-v1',
+        CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION,
+      ],
       required: true,
     },
     recordCount: { type: Number, required: true, min: 0 },
