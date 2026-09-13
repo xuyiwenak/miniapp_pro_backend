@@ -1,61 +1,6 @@
-import { useEffect, useState } from 'react';
-import {
-  EMOTION_OPTIONS, MODULE_LABELS,
-  type IntentionInput, type IntentionRecord, type EvaluationInput, type EvaluationRecord,
-  type EchoResult, type Locale,
-} from '@mandis/common/classroom-types';
-
-const VAD_SCORES = Array.from({ length: 9 }, (_, index) => index + 1);
-const LIKERT_SCORES = VAD_SCORES.slice(0, 7);
-function useDraft<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(() => {
-    try { return JSON.parse(localStorage.getItem(key) ?? 'null') as T ?? initial; } catch { return initial; }
-  });
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Keep in-memory answers. */ } },
-    [key, value]);
-  return [value, setValue] as const;
-}
-export function ScoreChoice({ label, value, onChange, vad = false, anchors }: {
-  label: string; value?: number; onChange: (score: number) => void; vad?: boolean; anchors: string;
-}) {
-  return <fieldset className="reflection-question">
-    <legend>{label}</legend>
-    <p className="reflection-anchors">{anchors}</p>
-    <div className={`reflection-scores${vad ? ' is-vad' : ''}`}>{(vad ? VAD_SCORES : LIKERT_SCORES).map((score) =>
-      <label key={score} className={value === score ? 'is-selected' : ''}>
-        <input type="radio" checked={value === score} onChange={() => onChange(score)} />{score}
-      </label>)}</div>
-  </fieldset>;
-}
-export function IntentionForm({ locale, saved, cacheKey, onSave }: {
-  locale: Locale; saved?: IntentionRecord; cacheKey: string;
-  onSave: (input: IntentionInput, submit: boolean) => Promise<void>;
-}) {
-  const zh = locale === 'zh-CN';
-  const [input, setInput] = useDraft<IntentionInput>(cacheKey, {
-    intendedEmotions: saved?.intendedEmotions ?? [], intendedValence: saved?.intendedValence,
-    intendedArousal: saved?.intendedArousal, intendedDominance: saved?.intendedDominance,
-    expressionConfidence: saved?.expressionConfidence, intentionText: saved?.intentionText,
-    otherEmotion: saved?.otherEmotion,
-  });
-  const { message, saving, save } = useSaveDraft(zh, input, onSave);
-  const update = (patch: Partial<IntentionInput>) => setInput({ ...input, ...patch });
-  const complete = input.intendedValence && input.intendedArousal && input.intendedDominance
-    && input.expressionConfidence && input.intendedEmotions.length > 0
-    && (!input.intendedEmotions.includes('other') || input.otherEmotion?.trim());
-  return <section className="reflection-form">
-    <h1>{zh ? '我想让这幅作品表达什么' : 'What I want my artwork to express'}</h1>
-    <p>{zh ? '请按创作时的意图回答，没有正确答案。默认不向教师展示；授权内容可用于研究。'
-      : 'There is no right answer. Describe your intention. Research use follows your consent.'}</p>
-    <IntentionFields zh={zh} input={input} update={update} />
-    <p>{zh ? '提交后将进入 AI 回响，请确认这是你当下的表达。' : 'Confirm your intention before viewing the AI reflection.'}</p>
-    <p role="status">{message}</p>
-    <button type="button" className="classroom-secondary" disabled={saving} onClick={() => void save(false)}>
-      {zh ? '保存草稿' : 'Save draft'}</button>
-    <button type="button" className="classroom-primary" disabled={saving || !complete} onClick={() => void save(true)}>
-      {zh ? '提交表达意图' : 'Submit intention'}</button>
-  </section>;
-}
+import { MODULE_LABELS, type EvaluationInput, type EvaluationRecord, type EchoResult, type Locale }
+  from '@mandis/common/classroom-types';
+import { ScoreChoice, useDraft, useSaveDraft } from './ReflectionInputs';
 
 const CORE_QUESTIONS = [
   ['feedbackOverallHelpful', '总体上，这份反馈对我有帮助。', 'Overall, this feedback is helpful.'],
@@ -97,44 +42,6 @@ export function EvaluationForm({ locale, echo, saved, cacheKey, onSave }: {
   </section>;
 }
 
-type IntentionFieldsProps = {
-  zh: boolean; input: IntentionInput; update: (patch: Partial<IntentionInput>) => void;
-};
-function IntentionFields({ zh, input, update }: IntentionFieldsProps) {
-  return <>
-    <ScoreChoice vad label={zh ? '希望作品呈现的愉悦程度' : 'Intended pleasure'} value={input.intendedValence}
-      anchors={zh ? '1 非常不愉悦 · 5 中性 · 9 非常愉悦' : '1 Unpleasant · 5 Neutral · 9 Pleasant'}
-      onChange={(intendedValence) => update({ intendedValence })} />
-    <ScoreChoice vad label={zh ? '希望作品呈现的激活程度' : 'Intended arousal'} value={input.intendedArousal}
-      anchors={zh ? '1 非常平静 · 5 中等 · 9 非常激活' : '1 Calm · 5 Moderate · 9 Activated'}
-      onChange={(intendedArousal) => update({ intendedArousal })} />
-    <ScoreChoice vad label={zh ? '希望作品呈现的掌控程度' : 'Intended control'} value={input.intendedDominance}
-      anchors={zh ? '1 非常受限 · 5 中等 · 9 非常有掌控感' : '1 Constrained · 5 Moderate · 9 In control'}
-      onChange={(intendedDominance) => update({ intendedDominance })} />
-    <EmotionFields zh={zh} input={input} update={update} />
-    <ScoreChoice label={zh ? '作品表达意图的充分程度' : 'How fully does the work express your intention?'}
-      value={input.expressionConfidence} onChange={(expressionConfidence) => update({ expressionConfidence })}
-      anchors={zh ? '1 完全没有 · 7 非常充分' : '1 Not at all · 7 Fully'} />
-    <label>{zh ? '一句话描述（选填，请勿填写身份信息）' : 'Optional description — no identifying details'}
-      <textarea maxLength={200} value={input.intentionText ?? ''}
-        onChange={(event) => update({ intentionText: event.target.value })} /></label>
-  </>;
-}
-function EmotionFields({ zh, input, update }: IntentionFieldsProps) {
-  return <>
-    <fieldset className="reflection-question"><legend>{zh ? '希望观看者感受到什么？选 1–3 个' : 'Select 1–3 emotions'}</legend>
-      <div className="reflection-emotions">{EMOTION_OPTIONS.map(([code, cn, en]) => <label key={code}>
-        <input type="checkbox" checked={input.intendedEmotions.includes(code)}
-          disabled={!input.intendedEmotions.includes(code) && input.intendedEmotions.length >= 3}
-          onChange={(event) => update({ intendedEmotions: event.target.checked
-            ? [...input.intendedEmotions, code] : input.intendedEmotions.filter((item) => item !== code) })} />
-        {zh ? cn : en}</label>)}</div>
-      {input.intendedEmotions.includes('other') && <input aria-label={zh ? '其他情绪' : 'Other emotion'}
-        maxLength={50} value={input.otherEmotion ?? ''} onChange={(event) => update({ otherEmotion: event.target.value })} />}
-    </fieldset>
-  </>;
-}
-
 function ModuleFields({ zh, echo, input, setInput }: {
   zh: boolean; echo: EchoResult; input: EvaluationInput; setInput: (input: EvaluationInput) => void;
 }) {
@@ -154,16 +61,4 @@ function ModuleFields({ zh, echo, input, setInput }: {
               [code]: { responseCode, missingReason: null } } })} />{zh ? cn : en}</label>)}</div>
     </fieldset>)}
   </>;
-}
-
-function useSaveDraft<T>(zh: boolean, input: T, onSave: (input: T, submit: boolean) => Promise<void>) {
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  async function save(submit: boolean) {
-    setSaving(true); setMessage('');
-    try { await onSave(input, submit); setMessage(zh ? '已保存' : 'Saved'); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to save'); }
-    finally { setSaving(false); }
-  }
-  return { saving, message, save };
 }

@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ClassroomPage } from './ClassroomPage';
 import './student.css';
 import './classroom/classroom.css';
+import './classroom/reflectionDesign.css';
 
 function StudentApp() {
   return (

@@ -193,6 +193,20 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal((await request('/echo/viewed', { analysisRunId: RUN_ID })).status, 409);
     assert.equal(JSON.stringify(stored), before);
   });
+  it('records one unified consent action as versioned AI and research grants', async () => {
+    stored.artworkId = undefined;
+    const input = { consentVersion: 'classroom-consent-v4-2026-09-13',
+      allowPrivateAi: true, allowSensitiveText: true };
+    assert.equal((await request('/consent', { ...input, allowSensitiveText: false })).status, 400);
+    const key = randomUUID();
+    assert.equal((await request('/consent', input, key)).status, 200);
+    assert.equal((await request('/consent', input, key)).status, 200);
+    assert.equal(stored.consentVersion, input.consentVersion);
+    assert.equal(stored.allowPrivateAi, true);
+    assert.equal(stored.allowSensitiveText, true);
+    assert.equal(stored.consentEvents.length, 2);
+    assert.ok(stored.consentEvents.every((event) => event.granted && event.consentTextVersion === input.consentVersion));
+  });
   it('accepts intention without an artwork and keeps the research record incomplete', async () => {
     stored.artworkId = undefined;
     assert.equal((await request('/intention/submit', INTENTION)).status, 200);

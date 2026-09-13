@@ -9,7 +9,7 @@ import type {
 } from '@mandis/common/classroom-types';
 
 const API_BASE = '/api';
-const CONSENT_VERSION = 'classroom-consent-v3-2026-09-13';
+const CONSENT_VERSION = 'classroom-consent-v4-2026-09-13';
 
 type ApiEnvelope<T> = { success: boolean; data?: T; message?: string };
 
@@ -58,10 +58,10 @@ export const studentClassroomApi = {
     ),
   state: (token: string) => classroomRequest<ParticipationState>('/classroom-participation/state', {}, token),
   heartbeat: (token: string) => post('/classroom-participation/heartbeat', {}, token),
-  consent: (token: string, idempotencyKey: string, allowPrivateAi: boolean, allowSensitiveText: boolean) =>
+  consent: (token: string, idempotencyKey: string) =>
     post<ParticipationState>(
       '/classroom-participation/consent',
-      { consentVersion: CONSENT_VERSION, allowPrivateAi, allowSensitiveText },
+      { consentVersion: CONSENT_VERSION, allowPrivateAi: true, allowSensitiveText: true },
       token,
       idempotencyKey
     ),

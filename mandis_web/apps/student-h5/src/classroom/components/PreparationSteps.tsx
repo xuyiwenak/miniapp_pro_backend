@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { UserOutlined, PictureOutlined, ExperimentOutlined, RightOutlined } from '@ant-design/icons';
 import type {
   ClassroomInfo,
   Locale,
@@ -31,7 +32,7 @@ const ZH_CONSENT_SECTIONS: ConsentSectionCopy[] = [
     title: '研究使用与公开共享',
     text: '去标识化的量表数值和派生统计可用于论文、会议，' +
       '并存入公开研究资料库。原始作品图片和自由文本不会因此公开；' +
-      '本版不提供公开作品展示；敏感文本研究使用需单独授权。' +
+      '本版不提供公开作品展示；你的作品意图文字和评价评论可供获授权的研究人员用于去标识研究。' +
       '公开数据一经去标识化发布，通常无法再定位并删除个人记录。',
   },
 ];
@@ -52,15 +53,14 @@ const EN_CONSENT_SECTIONS: ConsentSectionCopy[] = [
     title: 'Data and AI processing',
     text: 'The system does not collect your name, phone number or student ID and links records using an anonymous ' +
       'classroom code. Authorised researchers may access raw records. A configured AI service processes colour, ' +
-      'line and composition information only; it is not used for diagnosis, grading or student-management decisions.',
+      'line, composition and readable text within the artwork; it is not used for diagnosis, grading or student-management decisions.',
   },
   {
     title: 'Research use and public sharing',
     text: 'De-identified questionnaire values and derived statistics may be used in papers and conferences and ' +
       'deposited in a public research repository. Original artwork and free text are not made public ' +
-      'under this consent; sensitive text requires separate permission. Use in papers, ' +
-      'conferences ' +
-      'or teaching displays. Once de-identified data are publicly released, an individual record usually cannot be ' +
+      'under this consent. Authorised researchers may use intention text and feedback comments for de-identified ' +
+      'research. Once de-identified data are publicly released, an individual record usually cannot be ' +
       'located and removed.',
   },
 ];
@@ -80,10 +80,10 @@ function ConsentDetails({ locale, classroom }: { locale: Locale; classroom: Clas
   const purpose = zh
     ? '本研究了解艺术课堂中的活动前后感受及作品分析的一致性。' +
       `流程预计在本次课堂（${classroom.startTime}–${classroom.endTime}）内完成，` +
-      '包括基础资料、活动前后自评、作品上传和可选体验反馈。'
+      '包括基础资料、活动前后自评、作品上传、表达意图与回响评价。参与者须已满18周岁。'
     : 'This study examines pre- and post-activity feelings and the repeatability of artwork observations. ' +
       `The process takes place during this class (${classroom.startTime}–${classroom.endTime}) and includes basic ` +
-      'information, pre- and post-activity self-reports, artwork upload and optional feedback.';
+      'information, pre- and post-activity self-reports, artwork, intention and feedback. Participants must be 18 or older.';
   return (
     <div className="notice-copy">
       <section>
@@ -95,54 +95,45 @@ function ConsentDetails({ locale, classroom }: { locale: Locale; classroom: Clas
   );
 }
 
+const CONSENT_OVERVIEW = [
+  { Icon: UserOutlined, title: ['匿名参与', 'Anonymous participation'],
+    text: ['不填写姓名、学号或手机号', 'No name, student ID or phone number is collected.'] },
+  { Icon: PictureOutlined, title: ['AI 作品回响', 'AI artwork reflection'],
+    text: ['根据作品图片与画面文字提供解读，不用于心理诊断或课程评分。',
+      'Interprets your artwork and its text; not used for diagnosis or grading.'] },
+  { Icon: ExperimentOutlined, title: ['研究使用', 'Research use'],
+    text: ['参与记录、作品意图与评价将按说明用于研究。',
+      'Participation records, intentions and feedback are used for research as described.'] },
+];
+function ConsentOverview({ zh }: { zh: boolean }) {
+  return <div className="consent-overview">{CONSENT_OVERVIEW.map(({ Icon, title, text }) =>
+    <section className="consent-overview__row" key={title[1]}>
+      <span className="consent-overview__icon"><Icon aria-hidden /></span>
+      <div><h2>{title[zh ? 0 : 1]}</h2><p>{text[zh ? 0 : 1]}</p></div>
+    </section>)}</div>;
+}
 export function ConsentStep({ locale, classroom, saving, onConsent }: {
-  locale: Locale;
-  classroom: ClassroomInfo;
-  saving: boolean;
-  onConsent: (ai: boolean, text: boolean) => void;
+  locale: Locale; classroom: ClassroomInfo; saving: boolean; onConsent: () => void;
 }) {
   const zh = locale === 'zh-CN';
   const [accepted, setAccepted] = useState(false);
-  const [allowAi, setAllowAi] = useState(false);
-  const [allowText, setAllowText] = useState(false);
-  return (
-    <main className="classroom-card preparation-card consent-card">
-      <p className="classroom-eyebrow">{zh ? '参与准备' : 'BEFORE YOU BEGIN'}</p>
-      <h1>{zh ? '研究参与知情说明' : 'Research participation information'}</h1>
-      <p>
-        {zh
-          ? '请阅读以下内容后自主决定是否参加。'
-          : 'Please read this information before deciding whether to participate.'}
-      </p>
+  return <main className="classroom-card consent-card classroom-redesign">
+    <p className="redesign-step">{zh ? '入场准备' : 'Before you begin'}</p>
+    <h1>{zh ? '开始前，了解这次课堂' : 'Before we begin'}</h1>
+    <p className="redesign-intro">{zh ? '请先阅读本次课堂的参与说明。' : 'Please read the participation information.'}</p>
+    <ConsentOverview zh={zh} />
+    <details className="consent-details">
+      <summary>{zh ? '阅读完整课堂参与说明' : 'Read the full participation information'}<RightOutlined aria-hidden /></summary>
       <ConsentDetails locale={locale} classroom={classroom} />
-      <label className="consent-check">
-        <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-        <span>
-          {zh
-            ? '我确认已满18周岁，已阅读并理解上述说明，自愿参加，' +
-              '并同意按上述范围使用和公开共享' +
-              '去标识化研究数据。'
-            : 'I confirm that I am at least 18 years old, have read and understood the information above, ' +
-              'voluntarily agree to participate, and consent to the described use and public sharing of ' +
-              'de-identified research data.'}
-        </span>
-      </label>
-      <label className="consent-check"><input type="checkbox" checked={allowAi}
-        onChange={(event) => setAllowAi(event.target.checked)} />
-        {zh ? '允许私人 AI 分析作品（包括可读的画内文字）；不同意也可继续记录。'
-          : 'Allow private AI analysis of my artwork, including readable embedded text (optional).'}</label>
-      <label className="consent-check"><input type="checkbox" checked={allowText}
-        onChange={(event) => setAllowText(event.target.checked)} />
-        {zh ? '允许将我的意图文字和评价评论用于去标识研究（选填）。'
-          : 'Allow de-identified research use of my intention text and comments (optional).'}</label>
-      <button className="classroom-primary" type="button" disabled={saving || !accepted} onClick={() => onConsent(allowAi, allowText)}>
-        {saving
-          ? (zh ? '正在记录同意…' : 'Recording consent…')
-          : (zh ? '确认同意并开始' : 'I consent and wish to participate')}
-      </button>
-      <p className="consent-version">{zh ? '知情说明版本' : 'Consent information version'}: 2026-09-13</p>
-    </main>
-  );
+    </details>
+    <label className="consent-check consent-check--single">
+      <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+      <span>{zh ? '我已阅读并同意《课堂参与说明》' : 'I have read and agree to the participation information.'}</span>
+    </label>
+    <button className="classroom-primary" type="button" disabled={saving || !accepted} onClick={onConsent}>
+      {saving ? (zh ? '正在记录同意…' : 'Saving…') : (zh ? '确认并进入课堂' : 'Confirm and enter')}
+    </button>
+  </main>;
 }
 
 export function ProfileStep({

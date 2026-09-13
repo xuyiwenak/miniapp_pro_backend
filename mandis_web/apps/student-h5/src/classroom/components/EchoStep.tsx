@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   ClassroomInfo, EchoResult, Locale, ParticipationState, IntentionInput, EvaluationInput,
 } from '@mandis/common/classroom-types';
-import { SessionReview } from './SessionReview';
-import { IntentionForm, EvaluationForm } from './ReflectionForms';
+import { SessionReview, AiContent } from './SessionReview';
+import { UpOutlined, DownOutlined, BookOutlined, RightOutlined, CopyOutlined } from '@ant-design/icons';
+import { EvaluationForm } from './ReflectionForms';
+import { IntentionForm } from './IntentionWizard';
 
 const POLL_INTERVAL_MS = 5000;
 type Props = {
@@ -13,7 +15,6 @@ type Props = {
   onIntention: (input: IntentionInput, submit: boolean) => Promise<void>;
   onDraft: (input: EvaluationInput) => Promise<void>; onViewed: (runId: string) => Promise<void>;
   onRecovery: () => Promise<string>;
-  onConsent: (ai: boolean, text: boolean) => Promise<void>;
 };
 function useReport(props: Props, allowed: boolean) {
   const [echo, setEcho] = useState<EchoResult | null>(null);
@@ -73,7 +74,7 @@ type StepState = ReturnType<typeof useEchoStep>;
 export function EchoStep(props: Props) {
   const state = useEchoStep(props);
   const { locale, participation, zh, readOnly, revising, setRevising, error, notice } = state;
-  return <main className="classroom-card">
+  return <main className="classroom-card classroom-redesign echo-redesign">
     {readOnly && <p role="status">{zh ? '课堂已封存，仅可查看。未完成的环节已如实记录。'
       : 'This classroom is sealed. Your saved records are read-only.'}</p>}
     {!readOnly && (participation.intention?.status !== 'submitted' || revising) && <IntentionForm
@@ -82,38 +83,62 @@ export function EchoStep(props: Props) {
       onSave={async (input, submit) => { await props.onIntention(input, submit); if (submit) setRevising(false); }} />}
     <ReportPanel props={props} state={state} />
     <p role="alert">{error || notice}</p>
-    <ReturnControls props={props} state={state} />
+    <ReturnControls state={state} />
   </main>;
 }
 
 function ReportPanel({ props, state }: { props: Props; state: StepState }) {
-  const { locale, classroom, participation, zh, readOnly, echo, error, hidden, evaluating,
-    setHidden, setEvaluating, beginEvaluation } = state;
+  const { locale, participation, zh, readOnly, echo, evaluating, setEvaluating, beginEvaluation } = state;
+  if (!readOnly && participation.intention?.status !== 'submitted') return null;
   return <>
-    {(readOnly || participation.intention?.status === 'submitted') && <>
-      <SavedIntention state={state} />
-      {!participation.allowPrivateAi && <p>{zh ? '你未授权私人 AI 分析。已有记录已保存，本次流程尚不完整。'
-        : 'AI analysis is not authorised. Saved records are retained; the full flow is incomplete.'}</p>}
-      {!hidden && <SessionReview locale={locale} classroom={classroom} participation={participation}
-        echo={echo} initialPage={readOnly ? 1 : 4} waitExpired={false} statusQueryFailed={Boolean(error)} />}
-      {echo?.status === 'success' && <button type="button" className="classroom-secondary"
-        onClick={() => setHidden(!hidden)}>{hidden ? (zh ? '显示回响' : 'Show reflection')
-          : (zh ? '隐藏回响' : 'Hide reflection')}</button>}
-      {!readOnly && !participation.artworkId && <button type="button" onClick={props.onReviseArtwork}>
-        {zh ? '补充上传作品' : 'Upload artwork'}</button>}
-      {!readOnly && echo?.status === 'success' && !evaluating && <button type="button"
-        className="classroom-primary" onClick={() => void beginEvaluation()}>
-      {participation.evaluation?.status === 'submitted' ? (zh ? '修订评价（保留首次记录）' : 'Revise evaluation')
-          : (zh ? '我已阅读，评价这份回响' : 'I have read this reflection — respond')}</button>}
-      {!readOnly && evaluating && echo && <EvaluationForm locale={locale} echo={echo}
-        saved={participation.evaluation} cacheKey={`evaluation:${participation.participantId}:${echo.analysisRunId}`}
-        onSave={async (input, submit) => {
-          if (submit) { await props.onFeedback(input); setEvaluating(false); }
-          else await props.onDraft(input);
-        }} />}
-      <SavedEvaluation state={state} />
-    </>}
+    <ReportReader state={state} />
+    {!readOnly && !participation.artworkId && <button type="button" className="reflection-text-button"
+      onClick={props.onReviseArtwork}>{zh ? '补充上传作品' : 'Upload artwork'}</button>}
+    {!readOnly && echo?.status === 'success' && !evaluating && <div className="echo-evaluation-action">
+      <button type="button" className="classroom-primary" onClick={() => void beginEvaluation()}>
+        {participation.evaluation?.status === 'submitted' ? (zh ? '修改我的评价' : 'Edit my response')
+          : (zh ? '评价这份回响' : 'Respond to this reflection')}</button>
+      <p>{zh ? '你的评价不会改变这份回响。' : 'Your response will not change this reflection.'}</p>
+    </div>}
+    {!readOnly && evaluating && echo && <EvaluationForm locale={locale} echo={echo}
+      saved={participation.evaluation} cacheKey={`evaluation:${participation.participantId}:${echo.analysisRunId}`}
+      onSave={async (input, submit) => {
+        if (submit) { await props.onFeedback(input); setEvaluating(false); }
+        else await props.onDraft(input);
+      }} />}
+    <div className="echo-saved-records"><SavedIntention state={state} /><SavedEvaluation state={state} />
+      <details><summary>{zh ? '活动前后的自评记录' : 'Your before and after records'}</summary>
+        <SessionReview locale={locale} classroom={state.classroom} participation={participation}
+          echo={null} waitExpired={false} statusQueryFailed={false} assessmentsOnly />
+      </details>
+    </div>
   </>;
+}
+function ReportReader({ state }: { state: StepState }) {
+  const { zh, participation, echo, error, hidden, setHidden } = state;
+  const permitted = participation.allowPrivateAi && participation.intention?.status === 'submitted';
+  return <section className="echo-reader">
+    <p className="redesign-step">{zh ? '作品回响 · 阅读与评价' : 'Artwork reflection · Read and respond'}</p>
+    <h1>{zh ? '看看 AI 如何理解你的作品' : 'See how AI interprets your artwork'}</h1>
+    <p className="redesign-intro">{zh ? '这是一种解读，你的感受同样重要。' : 'One interpretation. Your own feelings matter.'}</p>
+    {echo?.coverUrl && <div className="echo-artwork"><img src={echo.coverUrl} alt={zh ? '我的作品' : 'My artwork'} />
+      <div><strong>{zh ? '我的作品' : 'My artwork'}</strong><span>{state.classroom.activityTheme}</span></div></div>}
+    {permitted ? <>
+      <button type="button" className="echo-disclosure" aria-expanded={!hidden} aria-controls="ai-reflection-content"
+        onClick={() => setHidden(!hidden)}><strong>{zh ? 'AI 回响' : 'AI reflection'}</strong>
+        <span>{hidden ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
+          {hidden ? <DownOutlined aria-hidden /> : <UpOutlined aria-hidden />}</span></button>
+      <div id="ai-reflection-content" hidden={hidden}>
+        <AiContent echo={echo} zh={zh} waitExpired={false} failed={Boolean(error)}
+          hasArtwork={Boolean(participation.artworkId)} />
+        <p className="echo-boundary">{zh ? 'AI 解读仅供参考，不用于心理诊断或课程评分。'
+          : 'AI interpretation is for reflection, not diagnosis or grading.'}</p>
+        <button className="reflection-text-button echo-collapse" type="button" onClick={() => setHidden(true)}>
+          {zh ? '收起回响' : 'Collapse reflection'}<UpOutlined aria-hidden /></button>
+      </div>
+    </> : <p>{zh ? '这份回响暂不可查看，你已保存的记录仍可查看。'
+      : 'This reflection is unavailable. Your saved records remain accessible.'}</p>}
+  </section>;
 }
 function SavedIntention({ state }: { state: StepState }) {
   const { participation, zh, readOnly, setRevising } = state;
@@ -123,7 +148,7 @@ function SavedIntention({ state }: { state: StepState }) {
           / {participation.intention.intendedDominance ?? '—'}</p>
         <p>{participation.intention.intentionText}</p>
         {!readOnly && <button type="button" onClick={() => setRevising(true)}>
-          {zh ? '补充修订（保留首次记录）' : 'Revise (first submission preserved)'}</button>}
+          {zh ? '修改表达意图' : 'Edit intention'}</button>}
       </details>}
   </>;
 }
@@ -137,26 +162,26 @@ function SavedEvaluation({ state }: { state: StepState }) {
       </details>}
   </>;
 }
-function ReturnControls({ props, state }: { props: Props; state: StepState }) {
-  const { participation, zh, readOnly, returnUrl, setNotice, saveReturn } = state;
-  return <>
-    {!readOnly && <><details><summary>{zh ? 'AI 与研究授权' : 'AI and research consent'}</summary>
-      <label><input type="checkbox" checked={Boolean(participation.allowPrivateAi)}
-        onChange={(event) => void props.onConsent(event.target.checked, Boolean(participation.allowSensitiveText))
-          .catch((failure) => setNotice(String(failure)))} />
-        {zh ? '允许私人 AI 分析（撤回后不再展示回响）' : 'Allow private AI analysis'}</label>
-      <label><input type="checkbox" checked={Boolean(participation.allowSensitiveText)}
-        onChange={(event) => void props.onConsent(Boolean(participation.allowPrivateAi), event.target.checked)
-          .catch((failure) => setNotice(String(failure)))} />
-        {zh ? '允许敏感文本研究使用' : 'Allow research use of text'}</label>
-    </details><p>{zh ? '可暂时离开，重新扫码后继续。仅完成全部必需环节才计为完整记录。'
-      : 'You may leave and scan again to continue. Only complete submissions count as complete records.'}</p>
-      {participation.gracePeriodEndsAt && <p>{zh ? '补充截止：' : 'Deadline: '}
-        {new Date(participation.gracePeriodEndsAt).toLocaleString()}</p>}
-      <button type="button" className="classroom-secondary" onClick={() => void saveReturn()}>
-        {zh ? '保存个人返回入口' : 'Save a personal return link'}</button>
-      {returnUrl && <label>{zh ? '仅自己保存；重新生成会使旧入口失效。' : 'Keep private. Generating again replaces the old link.'}
-        <input readOnly value={returnUrl} onFocus={(event) => event.target.select()} /></label>}
-    </>}
-  </>;
+function ReturnControls({ state }: { state: StepState }) {
+  const { participation, zh, readOnly, returnUrl, saveReturn } = state;
+  const [copyMessage, setCopyMessage] = useState('');
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(returnUrl); setCopyMessage(zh ? '已复制' : 'Copied'); }
+    catch { setCopyMessage(zh ? '请长按下方链接复制或收藏。' : 'Press and hold the link to copy or bookmark it.'); }
+  }
+  if (readOnly) return null;
+  return <div className="echo-return">
+    <button className="echo-return__entry" type="button" onClick={() => returnUrl ? void copyLink() : void saveReturn()}>
+      <BookOutlined aria-hidden /><span><strong>{zh ? '保存返回入口' : 'Save your return link'}</strong>
+        <small>{zh ? '稍后回来，继续查看或评价' : 'Return later to view or respond'}</small></span><RightOutlined aria-hidden />
+    </button>
+    {returnUrl && <div className="echo-return__link">
+      <button type="button" className="reflection-text-button" onClick={() => void copyLink()}>
+        <CopyOutlined aria-hidden />{zh ? '复制个人链接' : 'Copy personal link'}</button>
+      <a href={returnUrl}>{zh ? '个人返回链接（仅自己保存）' : 'Personal return link — keep private'}</a>
+      <p role="status">{copyMessage}</p>
+    </div>}
+    {participation.gracePeriodEndsAt && <p className="echo-deadline">{zh ? '可补充至：' : 'Available until: '}
+      {new Date(participation.gracePeriodEndsAt).toLocaleString()}</p>}
+  </div>;
 }

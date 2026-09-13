@@ -37,8 +37,8 @@ export function ClassroomPage() {
         locale={flow.locale}
         classroom={flow.classroom}
         saving={flow.saving}
-        onConsent={(ai, text) => {
-          void flow.consent(ai, text);
+        onConsent={() => {
+          void flow.consent();
         }}
       />
     );
@@ -122,7 +122,6 @@ export function ClassroomPage() {
         onDraft={flow.saveEvaluationDraft}
         onViewed={flow.markViewed}
         onRecovery={flow.createRecovery}
-        onConsent={flow.updateConsent}
       />
     );
   }

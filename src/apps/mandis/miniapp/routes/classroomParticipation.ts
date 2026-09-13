@@ -41,10 +41,13 @@ const StartSchema = z.object({
   accessCode: z.string().min(8),
   resumeToken: z.string().min(32).max(128),
 });
-const ConsentSchema = z.object({
+const ConsentSchema = z.discriminatedUnion('consentVersion', [z.object({
   consentVersion: z.literal('classroom-consent-v3-2026-09-13'),
   allowPrivateAi: z.boolean(), allowSensitiveText: z.boolean(),
-}).strict();
+}).strict(), z.object({
+  consentVersion: z.literal('classroom-consent-v4-2026-09-13'),
+  allowPrivateAi: z.literal(true), allowSensitiveText: z.literal(true),
+}).strict()]);
 export const ClassroomParticipantProfileSchema = z.object({
   gender: z.enum(['male', 'female']),
   artExperience: z.enum(['none', 'occasional', 'regular']).optional(),

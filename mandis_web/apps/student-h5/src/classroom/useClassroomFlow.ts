@@ -178,7 +178,7 @@ export function useClassroomFlow(accessCode: string) {
     start,
     refresh,
     loadEcho,
-    consent: (ai: boolean, text: boolean) => run(() => studentClassroomApi.consent(token, actionKey('consent'), ai, text)),
+    consent: () => run(() => studentClassroomApi.consent(token, actionKey('consent'))),
     saveProfile: (profile: ParticipantProfile) =>
       run(() => studentClassroomApi.profile(token, profile, actionKey('profile'))),
     saveDraft: (timepoint: 'pre' | 'post', page: number, answers: AssessmentAnswers, clientRecovered: boolean) =>
@@ -217,8 +217,7 @@ export function useClassroomFlow(accessCode: string) {
       run(async () => studentClassroomApi.evaluationDraft(token, input, await inputKey('evaluation-draft', input)), true),
     submitFeedback: (input: EvaluationInput) =>
       run(async () => studentClassroomApi.feedback(token, input, await inputKey('evaluation-submit', input)), true),
-    updateConsent: (ai: boolean, text: boolean) => run(async () =>
-      studentClassroomApi.consent(token, await inputKey('consent-update', { ai, text }), ai, text), true),
+
     loadArtwork: useCallback(async (): Promise<EchoResult> => {
       const artwork = await studentClassroomApi.artworkStatus(token);
       return { ...artwork, status: 'none' };

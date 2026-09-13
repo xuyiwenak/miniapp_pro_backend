@@ -19,6 +19,7 @@ type Props = {
   participation: ParticipationState;
   echo: EchoResult | null;
   initialPage?: number;
+  assessmentsOnly?: boolean;
   waitExpired: boolean;
   statusQueryFailed: boolean;
 };
@@ -117,7 +118,7 @@ function MeasuresPage({
   );
 }
 
-function AiContent({ echo, zh, waitExpired, failed, hasArtwork }: {
+export function AiContent({ echo, zh, waitExpired, failed, hasArtwork }: {
   echo: EchoResult | null;
   zh: boolean;
   waitExpired: boolean;
@@ -126,17 +127,16 @@ function AiContent({ echo, zh, waitExpired, failed, hasArtwork }: {
 }) {
   if (echo?.status === 'success') return (
     <>
-      <h2>{zh ? '作品中的颜色与线条' : 'Colour and line in your artwork'}</h2>
-      {echo.colorAnalysis && <p>{echo.colorAnalysis}</p>}
       {echo.summary && <section><h3>{zh ? '整体表达' : 'Overall expression'}</h3><p>{echo.summary}</p></section>}
-      {echo.lineAnalysis && <p>{echo.lineAnalysis}</p>}
+      {echo.colorAnalysis && <section><h3>{zh ? '色彩' : 'Colour'}</h3><p>{echo.colorAnalysis}</p></section>}
+      {(echo.lineAnalysis || echo.compositionReport) && <section><h3>{zh ? '线条与构图' : 'Line and composition'}</h3>
+        <p>{echo.lineAnalysis}</p><p>{echo.compositionReport}</p></section>}
       {echo.emotionVad?.assessable && <section><h3>{zh ? '情绪与 VAD' : 'Emotion and VAD'}</h3>
         <p>{echo.emotionVad.interpretation}</p>
         <p>V / A / D: {echo.emotionVad.valence} / {echo.emotionVad.arousal} / {echo.emotionVad.dominance} (0–100)</p>
       </section>}
       {echo.embeddedText && <section><h3>{zh ? '画内文字' : 'Embedded text'}</h3><p>{echo.embeddedText}</p></section>}
-      {echo.compositionReport && <p>{echo.compositionReport}</p>}
-      {echo.suggestion && <aside>{echo.suggestion}</aside>}
+      {echo.suggestion && <section><h3>{zh ? '可以试试' : 'You could try'}</h3><p>{echo.suggestion}</p></section>}
     </>
   );
   if (!hasArtwork) return (
@@ -209,6 +209,7 @@ export function SessionReview(props: Props) {
   const { locale, classroom, participation, echo, waitExpired, statusQueryFailed } = props;
   const [page, setPage] = useState(props.initialPage ?? 1);
   const zh = locale === 'zh-CN';
+  const pageCount = props.assessmentsOnly ? REVIEW_PAGE_COUNT - 1 : REVIEW_PAGE_COUNT;
   const pages = [
     <CoverPage key="cover" locale={locale} classroom={classroom} />,
     <MeasuresPage
@@ -233,19 +234,19 @@ export function SessionReview(props: Props) {
       <footer className="review-footer">
         <p>
           {zh
-            ? `第 ${page} / ${REVIEW_PAGE_COUNT} 页 · 可截图保存本页`
-            : `Page ${page} of ${REVIEW_PAGE_COUNT} · Screenshot to save`}
+            ? `第 ${page} / ${pageCount} 页 · 可截图保存本页`
+            : `Page ${page} of ${pageCount} · Screenshot to save`}
         </p>
         <div className="review-pagination" aria-label={zh ? '课堂回顾分页' : 'Session review pages'}>
           <button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>
             {zh ? '上一页' : 'Previous'}
           </button>
-          <span>{Array.from({ length: REVIEW_PAGE_COUNT }, (_, index) => (
+          <span>{Array.from({ length: pageCount }, (_, index) => (
             <i key={index} className={index + 1 === page ? 'is-current' : ''} />
           ))}</span>
           <button
             type="button"
-            disabled={page === REVIEW_PAGE_COUNT}
+            disabled={page === pageCount}
             onClick={() => setPage((value) => value + 1)}
           >
             {zh ? '下一页' : 'Next'}
