@@ -1,4 +1,5 @@
 import type {
+  IntentionInput, EvaluationInput,
   AssessmentAnswers,
   ClassroomInfo,
   EchoResult,
@@ -8,6 +9,7 @@ import type {
 } from '@mandis/common/classroom-types';
 
 const API_BASE = '/api';
+const CONSENT_VERSION = 'classroom-consent-v3-2026-09-13';
 
 type ApiEnvelope<T> = { success: boolean; data?: T; message?: string };
 
@@ -56,10 +58,10 @@ export const studentClassroomApi = {
     ),
   state: (token: string) => classroomRequest<ParticipationState>('/classroom-participation/state', {}, token),
   heartbeat: (token: string) => post('/classroom-participation/heartbeat', {}, token),
-  consent: (token: string, idempotencyKey: string) =>
+  consent: (token: string, idempotencyKey: string, allowPrivateAi: boolean, allowSensitiveText: boolean) =>
     post<ParticipationState>(
       '/classroom-participation/consent',
-      { consentVersion: 'classroom-consent-v1' },
+      { consentVersion: CONSENT_VERSION, allowPrivateAi, allowSensitiveText },
       token,
       idempotencyKey
     ),
@@ -101,14 +103,23 @@ export const studentClassroomApi = {
   uploadArtwork: (token: string, dataUrl: string, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/artwork', { dataUrl }, token, idempotencyKey),
   artworkStatus: (token: string) =>
-    classroomRequest<{ artworkStatus: string; healingStatus: string }>(
+    classroomRequest<{ artworkStatus: string; healingStatus: string; coverUrl?: string }>(
       '/classroom-participation/artwork/status',
       {},
       token
     ),
   echo: (token: string) => classroomRequest<EchoResult>('/classroom-participation/echo', {}, token),
+  intention: (token: string, input: IntentionInput, submit: boolean, key: string) =>
+    classroomRequest<ParticipationState>(`/classroom-participation/intention/${submit ? 'submit' : 'draft'}`,
+      { method: submit ? 'POST' : 'PUT', body: JSON.stringify(input) }, token, key),
+  evaluationDraft: (token: string, input: EvaluationInput, key: string) =>
+    classroomRequest<ParticipationState>('/classroom-participation/feedback/draft',
+      { method: 'PUT', body: JSON.stringify(input) }, token, key),
+  viewed: (token: string, analysisRunId: string) =>
+    post<ParticipationState>('/classroom-participation/echo/viewed', { analysisRunId }, token, analysisRunId),
+  recovery: (token: string) => post<{ recoveryToken: string }>('/classroom-participation/recovery', {}, token),
   complete: (token: string, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/complete', {}, token, idempotencyKey),
-  feedback: (token: string, input: Record<string, unknown>, idempotencyKey: string) =>
+  feedback: (token: string, input: EvaluationInput, idempotencyKey: string) =>
     post<ParticipationState>('/classroom-participation/feedback', input, token, idempotencyKey),
 };

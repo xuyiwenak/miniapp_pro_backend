@@ -1,3 +1,5 @@
+import { reflectionWideRow, moduleExportRows, consentExportRows, studyId } from './classroomReflectionExport';
+import type { IClassroomArtworkAnalysis } from '../../entity/classroomArtworkAnalysis.entity';
 import * as XLSX from 'xlsx';
 import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
@@ -90,7 +92,7 @@ function participantExportRow(row: AssessmentParticipantRow): ExportRow {
     ...row.scores,
     artworkStatus: row.artworkStatus,
     uploaderRole: row.uploaderRole,
-    uploadReason: row.uploadReason,
+
     aiStatus: row.aiStatus,
     artworkAffectScoreSource: row.artworkAffectScoreSource,
     artworkAffectResearchEligible: row.artworkAffectResearchEligible,
@@ -121,7 +123,7 @@ function artworkAffectRows(
         dimensionLabel: label,
         score: dimension?.score ?? null,
         assessable: dimension?.assessable ?? false,
-        evidence: dimension?.evidence.join(' | ') ?? null,
+
         scoreSource: resolved.data?.scoreSource ?? null,
         construct: resolved.data?.construct ?? null,
         modelVersion: resolved.data?.modelVersion ?? null,
@@ -169,6 +171,12 @@ function timepointRows(
 
 function dictionaryRows(): ExportRow[] {
   return [
+    { field: 'participantStudyId', definition: '跨表去标识关联键；由课堂与参与标识派生' },
+    { field: 'feedbackOverallHelpful', definition: '总体帮助度主指标，1–7；仅已提交评价有效' },
+    { field: 'feedbackReflectionHelp', definition: '反思帮助，1–7；独立报告，不合成总分' },
+    { field: 'feedbackDiscomfort', definition: '不适，1–7；独立报告，不自动解释为风险' },
+    { field: 'moduleResponses', definition: '分类回应；cannot_judge、未答与未展示分开保存，不换算评分' },
+    { field: 'missingReasons', definition: '未完成环节列表；不以0填补，文本默认排除' },
     { field: 'classroomCode', definition: '仅在本课堂有效的匿名参与编号' },
     { field: 'valence', definition: 'SAM 愉悦度，1–9' },
     { field: 'arousal', definition: 'SAM 唤醒度，1–9' },
@@ -177,16 +185,14 @@ function dictionaryRows(): ExportRow[] {
     { field: 'negativeAffect', definition: 'I-PANAS-SF 消极情绪5题总分，5–25' },
     { field: 'delta_*', definition: '课后得分减课前得分；缺失值不填补' },
     { field: 'assessmentPaired', definition: '前测与后测均已提交' },
-    { field: 'researchRecordComplete', definition: '前测、作品、后测及版本信息完整' },
+    { field: 'researchRecordComplete', definition: 'T0、T1、作品、首次意图、已展示报告及对应评价均完整' },
     { field: 'dataSchemaVersion', definition: '参与数据结构版本，用于历史数据复现' },
     { field: 'durationMs', definition: '本次测评从页面载入到最终提交的毫秒数' },
     { field: 'clientRecovered', definition: '本次提交是否由设备本地缓存恢复' },
     { field: 'uploaderRole', definition: '作品上传者角色：student 或 teacher' },
-    { field: 'uploadReason', definition: '教师代传或研究修正作品时记录的原因' },
     { field: 'artworkAffect', definition: 'AI 对作品可感知情绪表达的视觉标注，不代表作者心理状态' },
     { field: 'scoreSource', definition: 'model_direct 才进入研究关联；旧版、推导值与默认值均排除' },
     { field: 'correlation', definition: '不同量尺原始值之间的描述性 Pearson 相关；样本少于3或无方差时为空' },
-    { field: 'evidence', definition: '支持该作品情绪标注的可观察画面线索' },
   ];
 }
 
@@ -200,6 +206,8 @@ export function buildAssessmentWorkbook(
   participants: IClassroomParticipation[],
   result: ClassroomAssessmentResult,
   works: IWork[] = [],
+  analyses: IClassroomArtworkAnalysis[] = [],
+  sensitive = false,
 ): Buffer {
   const workbook = XLSX.utils.book_new();
   appendSheet(workbook, 'manifest', manifestRows(classroom, result));
@@ -208,14 +216,41 @@ export function buildAssessmentWorkbook(
   appendSheet(workbook, 'responses_long', responseRows(participants));
   appendSheet(workbook, 'artwork_affect', artworkAffectRows(works, participants));
   appendSheet(workbook, 'affect_associations', associationRows(result));
+  appendSheet(workbook, 'reflections', participants.map((p) => reflectionWideRow(p, sensitive)));
+  appendSheet(workbook, 'module_responses', moduleExportRows(participants));
+  appendSheet(workbook, 'consent_events', consentExportRows(participants));
+  appendSheet(workbook, 'ai_runs', analysisRows(analyses, participants));
   appendSheet(workbook, 'data_dictionary', dictionaryRows());
   return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 }
 
-export function buildAssessmentCsv(result: ClassroomAssessmentResult): Buffer {
-  const rows = result.participants.map((row) => sanitizeRow(participantExportRow(row)));
+export function buildAssessmentCsv(
+  result: ClassroomAssessmentResult, participants: IClassroomParticipation[] = [],
+): Buffer {
+  const rows = result.participants.map((row) => {
+    const p = participants.find((item) => item.classroomCode === row.classroomCode);
+    return sanitizeRow({ ...participantExportRow(row), ...(p ? reflectionWideRow(p) : {}) });
+  });
   const worksheet = XLSX.utils.json_to_sheet(rows);
   return Buffer.from(`\uFEFF${XLSX.utils.sheet_to_csv(worksheet)}`, 'utf8');
 }
 
 export const CLASSROOM_ASSESSMENT_DATASET_VERSION = DATASET_VERSION;
+
+function analysisRows(analyses: IClassroomArtworkAnalysis[], participants: IClassroomParticipation[]): ExportRow[] {
+  const ids = new Map(participants.map((p) => [p.participantId, studyId(p)]));
+  return analyses.map((run) => ({
+    participantStudyId: ids.get(run.participantId ?? '') ?? null, workId: run.workId,
+    analysisRunId: run.analysisId, contentHash: run.contentHash ?? null, status: run.status ?? null,
+    modelVersion: run.modelVersion, modelProvider: run.modelProvider ?? null,
+    schemaVersion: run.schemaVersion ?? null, inputManifest: run.inputManifestJson ?? null,
+    modelSnapshot: null, modelSnapshotStatus: 'unavailable',
+    promptVersion: run.promptVersion, scaleVersion: run.scaleVersion,
+    samplingParameters: run.samplingParametersJson ?? null,
+    submittedAt: run.submittedAt?.toISOString() ?? null, completedAt: run.completedAt?.toISOString() ?? null,
+    errorCode: run.errorCode ?? null, fusedValence: run.fusedVad?.valence ?? null,
+    fusedArousal: run.fusedVad?.arousal ?? null, fusedDominance: run.fusedVad?.dominance ?? null,
+    visualValence: run.visualVad?.valence ?? null, visualArousal: run.visualVad?.arousal ?? null,
+    visualDominance: run.visualVad?.dominance ?? null,
+  }));
+}

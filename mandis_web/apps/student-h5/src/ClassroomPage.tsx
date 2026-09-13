@@ -31,17 +31,18 @@ export function ClassroomPage() {
         }}
       />
     );
-  } else if (!flow.participation.consented) {
+  } else if (!flow.participation.readOnly && !flow.participation.consented) {
     content = (
       <ConsentStep
         locale={flow.locale}
+        classroom={flow.classroom}
         saving={flow.saving}
-        onConsent={() => {
-          void flow.consent();
+        onConsent={(ai, text) => {
+          void flow.consent(ai, text);
         }}
       />
     );
-  } else if (!flow.participation.profileCompleted) {
+  } else if (!flow.participation.readOnly && (!flow.participation.profileCompleted)) {
     content = (
       <ProfileStep
         locale={flow.locale}
@@ -51,7 +52,7 @@ export function ClassroomPage() {
         }}
       />
     );
-  } else if (flow.participation.currentStage === 'pre_assessment') {
+  } else if (!flow.participation.readOnly && (flow.participation.currentStage === 'pre_assessment')) {
     content = (
       <AssessmentStep
         accessCode={accessCode}
@@ -64,7 +65,7 @@ export function ClassroomPage() {
         }
       />
     );
-  } else if (flow.participation.currentStage === 'activity_in_progress') {
+  } else if (!flow.participation.readOnly && (flow.participation.currentStage === 'activity_in_progress')) {
     content = (
       <ActivityStep
         locale={flow.locale}
@@ -75,7 +76,7 @@ export function ClassroomPage() {
         }}
       />
     );
-  } else if (flow.participation.currentStage === 'artwork_upload' || revisitingArtwork) {
+  } else if (!flow.participation.readOnly && (flow.participation.currentStage === 'artwork_upload' || revisitingArtwork)) {
     content = (
       <ArtworkStep
         locale={flow.locale}
@@ -91,7 +92,7 @@ export function ClassroomPage() {
         onCancel={() => setRevisitingArtwork(false)}
       />
     );
-  } else if (flow.participation.currentStage === 'post_assessment') {
+  } else if (!flow.participation.readOnly && (flow.participation.currentStage === 'post_assessment')) {
     content = (
       <AssessmentStep
         accessCode={accessCode}
@@ -113,9 +114,15 @@ export function ClassroomPage() {
         participation={flow.participation}
         completed={flow.participation.currentStage === 'completed'}
         loadEcho={flow.loadEcho}
+        loadArtwork={flow.loadArtwork}
         onReviseArtwork={() => setRevisitingArtwork(true)}
         onComplete={flow.completeWithoutEcho}
         onFeedback={flow.submitFeedback}
+        onIntention={flow.saveIntention}
+        onDraft={flow.saveEvaluationDraft}
+        onViewed={flow.markViewed}
+        onRecovery={flow.createRecovery}
+        onConsent={flow.updateConsent}
       />
     );
   }

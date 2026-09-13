@@ -86,9 +86,9 @@ export const classroomApi = {
     http.get<AssessmentParticipantDetail>(
       `${BASE_PATH}/${classId}/assessment-results/participants/${classroomCode}`
     ),
-  exportAssessmentResults: (classId: string, format: 'xlsx' | 'csv') =>
+  exportAssessmentResults: (classId: string, format: 'xlsx' | 'csv', sensitive = false) =>
     http.get<Blob>(`${BASE_PATH}/${classId}/assessment-results/export`, {
-      params: { format },
+      params: { format, sensitive: String(sensitive) },
       responseType: 'blob',
     }),
   pendingArtworks: (classId: string) =>
@@ -111,7 +111,9 @@ export const classroomApi = {
       { headers: { 'Idempotency-Key': idempotencyKey } }
     ),
   collaborators: (classId: string) =>
-    http.get<{ list: ClassroomCollaborator[] }>(`${BASE_PATH}/${classId}/collaborators`),
+    http.get<{ list: ClassroomCollaborator[]; readOnly: boolean }>(`${BASE_PATH}/${classId}/collaborators`),
+  setCapabilities: (classId: string, teacherId: string, capabilities: string[]) =>
+    http.patch(`${BASE_PATH}/${classId}/collaborators/${teacherId}/capabilities`, { capabilities }),
   addCollaborator: (classId: string, teacherId: string) =>
     http.post<ClassroomCollaborator>(`${BASE_PATH}/${classId}/collaborators`, { teacherId }),
   removeCollaborator: (classId: string, teacherId: string) =>

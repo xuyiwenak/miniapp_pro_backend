@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Progress, Space, Spin, Table, Tag, Typography, message, type TableProps } from 'antd';
+import { MODULE_LABELS } from '@mandis/common/classroom-types';
 import { EyeOutlined } from '@ant-design/icons';
 import {
   classroomApi,
@@ -50,7 +51,7 @@ function saveBlob(blob: Blob, filename: string): void {
 
 function ArtworkAffectSummary({ summary }: { summary: ClassroomAssessmentSummary }) {
   const affect = summary.artworkAffectSummary;
-  const feedbackTotal = Object.values(affect.feedbackCounts).reduce((sum, value) => sum + value, 0);
+
   return (
     <section className="classroom-affect-summary">
       <header>
@@ -72,14 +73,18 @@ function ArtworkAffectSummary({ summary }: { summary: ClassroomAssessmentSummary
           ))}
         </div>
         <div>
-          <Text strong>AI 回响主观贴合度</Text>
-          <dl>
-            <div><dt>比较贴合</dt><dd>{affect.feedbackCounts.mostly}</dd></div>
-            <div><dt>部分贴合</dt><dd>{affect.feedbackCounts.partly}</dd></div>
-            <div><dt>不太贴合</dt><dd>{affect.feedbackCounts.not_really}</dd></div>
-            <div><dt>不确定</dt><dd>{affect.feedbackCounts.unsure}</dd></div>
-          </dl>
-          <Text type="secondary">已反馈 {feedbackTotal} 人；未反馈不填补。</Text>
+          <Text strong>AI 回响评价（三题独立报告）</Text>
+          <p>已展示 {summary.reflectionSummary?.reportShown ?? 0} 人，已评价 {summary.reflectionSummary?.evaluationSubmitted ?? 0} 人</p>
+          {summary.reflectionSummary?.questions.map((question) => <div key={question.field}>
+            <Text>{({ feedbackOverallHelpful: '总体帮助', feedbackReflectionHelp: '反思帮助',
+              feedbackDiscomfort: '不适体验' } as Record<string, string>)[question.field]}</Text>
+            <p>n={question.count} · 中位数 {question.median ?? '—'} · 四分位数 {question.q1 ?? '—'}–{question.q3 ?? '—'}</p>
+            <p>5–7分 {question.agreementCount} 人 / {question.count} 人；95%区间：
+              {question.agreementCiLow === null ? '—' : `${(question.agreementCiLow * 100).toFixed(1)}%`}–
+              {question.agreementCiHigh === null ? '—' : `${(question.agreementCiHigh * 100).toFixed(1)}%`}</p>
+            <p>1–7分人数：{Object.values(question.distribution).join(' / ')}</p>
+          </div>)}
+          <ModuleSummary modules={summary.reflectionSummary?.modules ?? []} />
           <Text strong>作品—课后自评描述性关联</Text>
           <div className="classroom-affect-summary__associations">
             {affect.associations.map((item) => (
@@ -130,13 +135,13 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
 
   const loadResults = useCallback(async (): Promise<void> => {
     try {
-      const [summaryResponse, participantsResponse] = await Promise.all([
-        classroomApi.assessmentResults(classId),
-        classroomApi.assessmentParticipants(classId, page, DEFAULT_PAGE_SIZE),
-      ]);
+      const summaryResponse = await classroomApi.assessmentResults(classId);
       setSummary(summaryResponse.data);
-      setParticipants(participantsResponse.data.list);
-      setTotal(participantsResponse.data.total);
+      if (summaryResponse.data.capabilities?.detail) {
+        const response = await classroomApi.assessmentParticipants(classId, page, DEFAULT_PAGE_SIZE);
+        setParticipants(response.data.list);
+        setTotal(response.data.total);
+      } else { setParticipants([]); setTotal(0); }
       setError('');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '测评结果读取失败');
@@ -154,9 +159,9 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
     return () => window.clearInterval(timer);
   }, [classStatus, loadResults]);
 
-  const exportResults = useCallback(async (format: 'xlsx' | 'csv'): Promise<void> => {
+  const exportResults = useCallback(async (format: 'xlsx' | 'csv', sensitive = false): Promise<void> => {
     try {
-      const response = await classroomApi.exportAssessmentResults(classId, format);
+      const response = await classroomApi.exportAssessmentResults(classId, format, sensitive);
       saveBlob(response.data, `classroom-assessment-results.${format}`);
       void message.success('匿名测评数据已导出');
     } catch (nextError) {
@@ -166,7 +171,7 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
 
   useEffect(() => {
     onActionsChange({
-      canExport: summary?.dataStatus === 'final',
+      canExport: summary?.dataStatus === 'final' && Boolean(summary.capabilities?.detail),
       refresh: () => void loadResults(),
       exportXlsx: () => void exportResults('xlsx'),
       exportCsv: () => void exportResults('csv'),
@@ -181,11 +186,13 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
             <Title level={4}>匿名参与记录</Title>
             {summary && <Tag>{summary.dataStatus === 'final' ? '最终数据' : '暂定数据'}</Tag>}
           </Space>
-          <Text type="secondary">点击“查看评价”查看单个参与者的作品回响与两套量表结果。</Text>
+          <Text type="secondary">获得明细权限后可查看去标识量表与结构化作品标注；不展示私人报告正文。</Text>
         </div>
       </div>
       {error && <Alert type="error" showIcon message={error} />}
       {summary && <ArtworkAffectSummary summary={summary} />}
+      {summary?.dataStatus === 'final' && summary.capabilities?.sensitiveExport && summary.capabilities.detail
+        && <Button onClick={() => void exportResults('xlsx', true)}>导出已授权敏感文本（含审计）</Button>}
       <Spin spinning={loading}>
         <Table<AssessmentParticipantRow>
           rowKey="classroomCode"
@@ -213,4 +220,21 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
       />
     </section>
   );
+}
+
+const MODULE_RESPONSE_LABELS: Record<string, string> = {
+  matches: '符合', partly_matches: '部分符合', does_not_match: '不符合', cannot_judge: '无法判断',
+  helpful: '有帮助', partly_helpful: '部分有帮助', not_helpful: '无帮助', not_answered: '未作答',
+  not_shown: '未展示', evaluation_not_submitted: '未提交评价',
+};
+function ModuleSummary({ modules }: {
+  modules: Array<{ moduleCode: string; counts: Record<string, number> }>;
+}) {
+  return <div>
+    <Text strong>模块回应（分类人数）</Text>
+    {modules.map(({ moduleCode, counts }) => <p key={moduleCode}>
+      <Text>{MODULE_LABELS[moduleCode as keyof typeof MODULE_LABELS]?.[0] ?? moduleCode}</Text>
+      <br />{Object.entries(counts).map(([code, count]) => `${MODULE_RESPONSE_LABELS[code] ?? code} ${count}`).join(' · ')}
+    </p>)}
+  </div>;
 }

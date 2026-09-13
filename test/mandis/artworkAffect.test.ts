@@ -84,6 +84,7 @@ function participant(participantId: string, positiveValue: number): IClassroomPa
     participantId,
     classId: 'class-1',
     classroomCode: participantId.slice(-4).toUpperCase(),
+    intentionHistory: [], evaluationHistory: [], consentEvents: [], allowPrivateAi: false, allowSensitiveText: false,
     resumeTokenHash: `hash-${participantId}`,
     source: 'student',
     instrumentVersion: 'sam-vad-ipanas-sf-v1',

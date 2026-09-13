@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  IntentionInput, EvaluationInput,
   AssessmentAnswers,
   ClassroomInfo,
   EchoResult,
@@ -27,7 +28,15 @@ export function useClassroomFlow(accessCode: string) {
   const [participation, setParticipation] = useState<ParticipationState | null>(() =>
     loadParticipationCache(accessCode)
   );
-  const [token, setToken] = useState(() => getResumeToken(accessCode));
+  const [token, setToken] = useState(() => {
+    const recovered = new URLSearchParams(window.location.hash.slice(1)).get('resume');
+    if (recovered && /^[A-Za-z0-9_-]{43}$/.test(recovered)) {
+      saveResumeToken(accessCode, recovered);
+      window.history.replaceState(null, '', window.location.pathname);
+      return recovered;
+    }
+    return getResumeToken(accessCode);
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +44,13 @@ export function useClassroomFlow(accessCode: string) {
 
   function actionKey(action: string): string {
     return getActionIdempotencyKey(accessCode, action);
+  }
+
+  async function inputKey(action: string, input: unknown): Promise<string> {
+    const bytes = new TextEncoder().encode(JSON.stringify(input));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return actionKey(`${action}:${hash}`);
   }
 
   function changeLocale(next: Locale): void {
@@ -83,7 +99,9 @@ export function useClassroomFlow(accessCode: string) {
   useEffect(() => {
     if (!token) return;
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void studentClassroomApi.heartbeat(token);
+      if (document.visibilityState === 'visible' && !participation?.readOnly) {
+        void studentClassroomApi.heartbeat(token).catch(() => undefined);
+      }
     }, 60_000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refresh();
@@ -102,6 +120,9 @@ export function useClassroomFlow(accessCode: string) {
       updateParticipation(await action());
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Request failed');
+      if (nextError instanceof Error && nextError.message === 'CLASSROOM_READ_ONLY') {
+        await refresh().catch(() => undefined);
+      }
       if (throwOnFailure) throw nextError;
     } finally {
       setSaving(false);
@@ -157,7 +178,7 @@ export function useClassroomFlow(accessCode: string) {
     start,
     refresh,
     loadEcho,
-    consent: () => run(() => studentClassroomApi.consent(token, actionKey('consent'))),
+    consent: (ai: boolean, text: boolean) => run(() => studentClassroomApi.consent(token, actionKey('consent'), ai, text)),
     saveProfile: (profile: ParticipantProfile) =>
       run(() => studentClassroomApi.profile(token, profile, actionKey('profile'))),
     saveDraft: (timepoint: 'pre' | 'post', page: number, answers: AssessmentAnswers, clientRecovered: boolean) =>
@@ -189,7 +210,22 @@ export function useClassroomFlow(accessCode: string) {
     requestTeacherUpload,
     confirmTeacherUpload,
     completeWithoutEcho: () => run(() => studentClassroomApi.complete(token, actionKey('complete-without-echo'))),
-    submitFeedback: (input: Record<string, unknown>) =>
-      run(() => studentClassroomApi.feedback(token, input, actionKey('feedback'))),
+    saveIntention: (input: IntentionInput, submit: boolean) =>
+      run(async () => studentClassroomApi.intention(token, input, submit, await inputKey(`intention:${submit}`, input)), true),
+    markViewed: (runId: string) => run(() => studentClassroomApi.viewed(token, runId), true),
+    saveEvaluationDraft: (input: EvaluationInput) =>
+      run(async () => studentClassroomApi.evaluationDraft(token, input, await inputKey('evaluation-draft', input)), true),
+    submitFeedback: (input: EvaluationInput) =>
+      run(async () => studentClassroomApi.feedback(token, input, await inputKey('evaluation-submit', input)), true),
+    updateConsent: (ai: boolean, text: boolean) => run(async () =>
+      studentClassroomApi.consent(token, await inputKey('consent-update', { ai, text }), ai, text), true),
+    loadArtwork: useCallback(async (): Promise<EchoResult> => {
+      const artwork = await studentClassroomApi.artworkStatus(token);
+      return { ...artwork, status: 'none' };
+    }, [token]),
+    createRecovery: async () => {
+      const result = await studentClassroomApi.recovery(token);
+      return `${window.location.origin}${window.location.pathname}#resume=${result.recoveryToken}`;
+    },
   };
 }

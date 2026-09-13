@@ -38,7 +38,7 @@ function simulation() {
 }
 
 describe('classroom simulation', () => {
-  it('builds a new finalized classroom with complete anonymous records', () => {
+  it('builds a new finalized classroom without inventing new intent or evaluation responses', () => {
     const bundle = simulation();
     assert.equal(bundle.classroom.status, 'closed');
     assert.equal(bundle.classroom.courseName, '艺术疗愈课堂');
@@ -48,8 +48,8 @@ describe('classroom simulation', () => {
     assert.equal(new Set(bundle.participants.map((item) => item.classroomCode)).size, PARTICIPANT_COUNT);
     bundle.participants.forEach((participant) => {
       assert.ok(participant.profile?.gender === 'male' || participant.profile?.gender === 'female');
-      assert.equal(participant.participantFlowCompleted, true);
-      assert.equal(isResearchRecordComplete(participant), true);
+      assert.equal(participant.participantFlowCompleted, false);
+      assert.equal(isResearchRecordComplete(participant), false);
       assert.equal(participant.preAssessment.answeredCount, 13);
       assert.equal(participant.postAssessment.answeredCount, 13);
       assert.deepEqual(Object.keys(participant.preAssessment.panas ?? {}).sort(), [
@@ -82,7 +82,7 @@ describe('classroom simulation', () => {
     const measures = result.instrumentGroups[0]?.measures ?? [];
     const positive = measures.find((measure) => measure.code === 'positiveAffect');
     const negative = measures.find((measure) => measure.code === 'negativeAffect');
-    assert.equal(result.researchRecordCompleteCount, PARTICIPANT_COUNT);
+    assert.equal(result.researchRecordCompleteCount, 0);
     assert.equal(result.artworkAffectSummary.researchEligibleCount, PARTICIPANT_COUNT);
     assert.ok((positive?.delta.mean ?? 0) > 0);
     assert.ok((negative?.delta.mean ?? 0) < 0);

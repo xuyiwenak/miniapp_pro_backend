@@ -2,7 +2,7 @@ import { Schema } from 'mongoose';
 
 export type TeacherDataExportFormat = 'xlsx' | 'csv';
 export const CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION =
-  'classroom-assessment-results-v2' as const;
+  'classroom-assessment-results-v3' as const;
 export type TeacherDataExportDatasetVersion =
   | 'classroom-assessment-results-v1'
   | typeof CURRENT_TEACHER_DATA_EXPORT_DATASET_VERSION;
@@ -13,6 +13,7 @@ export interface ITeacherDataExportAudit {
   classId: string;
   format: TeacherDataExportFormat;
   datasetVersion: TeacherDataExportDatasetVersion;
+  sensitiveIncluded?: boolean;
   recordCount: number;
   exportedAt: Date;
   fileSha256: string;
@@ -34,6 +35,7 @@ export const TeacherDataExportAuditSchema = new Schema<ITeacherDataExportAudit>(
       ],
       required: true,
     },
+    sensitiveIncluded: { type: Boolean, default: false },
     recordCount: { type: Number, required: true, min: 0 },
     exportedAt: { type: Date, required: true },
     fileSha256: { type: String, required: true },

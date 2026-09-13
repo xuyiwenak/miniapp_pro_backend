@@ -114,6 +114,11 @@ async function persistCorrection(
   return correctionId;
 }
 
+router.use((req, res, next) => {
+  if (req.method !== 'GET') return sendErr(res, 'CLASSROOM_READ_ONLY', 409);
+  next();
+});
+
 router.post('/:classroomCode', async (
   req: Request<{ classId: string; classroomCode: string }>,
   res

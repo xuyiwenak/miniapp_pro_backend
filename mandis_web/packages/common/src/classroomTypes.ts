@@ -1,3 +1,5 @@
+import type { IntentionRecord, EvaluationRecord, ModuleCode } from './reflectionTypes';
+export * from './reflectionTypes';
 export type Locale = 'zh-CN' | 'en';
 
 export type ParticipantGender = 'male' | 'female';
@@ -33,6 +35,13 @@ export type AssessmentRecord = {
 };
 
 export type ParticipationState = {
+  readOnly?: boolean;
+  gracePeriodEndsAt?: string;
+  intention?: IntentionRecord;
+  evaluation?: EvaluationRecord;
+  allowPrivateAi?: boolean;
+  allowSensitiveText?: boolean;
+  reportViewedAt?: string;
   resumeToken?: string;
   participantId: string;
   classroomCode?: string;
@@ -54,6 +63,14 @@ export type AssessmentAnswers = {
 };
 
 export type EchoResult = {
+  analysisRunId?: string;
+  reportVersion?: string;
+  modules?: ModuleCode[];
+  lineAnalysis?: string;
+  embeddedText?: string;
+  emotionVad?: { valence: number | null; arousal: number | null; dominance: number | null;
+    assessable: boolean; interpretation: string };
+
   status: 'none' | 'pending' | 'success' | 'failed';
   artworkStatus: string;
   classroomCode?: string;
@@ -70,6 +87,7 @@ export type ClassroomRecord = ClassroomInfo & {
   classId: string;
   createdByTeacherId: string;
   authorizedTeacherIds: string[];
+  capabilityGrants?: { teacherId: string; capabilities: ('manage' | 'summary' | 'detail' | 'sensitiveExport')[] }[];
   accessCode?: string;
   timezone: 'Asia/Shanghai';
   status: ClassroomStatus;
@@ -83,6 +101,7 @@ export type ClassroomInput = Omit<
   | 'classId'
   | 'createdByTeacherId'
   | 'authorizedTeacherIds'
+  | 'capabilityGrants'
   | 'accessCode'
   | 'status'
   | 'gracePeriodEndsAt'
@@ -90,6 +109,7 @@ export type ClassroomInput = Omit<
 >;
 
 export type ClassroomCollaborator = {
+  capabilities?: string[];
   teacherId: string;
   displayName: string;
   organization?: string;
@@ -116,6 +136,7 @@ export type AssessmentCounts = {
 };
 
 export type ClassroomProgress = {
+  reflectionProgress?: { intentionSubmitted: number; reportShown: number; evaluationSubmitted: number; aiDeclined: number };
   generatedAt: string;
   classStatus: ClassroomStatus;
   gracePeriodEndsAt?: string;
@@ -174,11 +195,19 @@ export type InstrumentResultGroup = {
 };
 
 export type ClassroomAssessmentSummary = {
+  capabilities?: { detail: boolean; sensitiveExport: boolean };
+  reflectionSummary?: {
+    reportShown: number; evaluationSubmitted: number; responseRate: number | null;
+    questions: Array<{ field: string; count: number; median: number | null; q1: number | null; q3: number | null;
+      agreementCount: number; agreementProportion: number | null; agreementCiLow: number | null;
+      agreementCiHigh: number | null; distribution: Record<string, number> }>;
+    modules: Array<{ moduleCode: string; counts: Record<string, number> }>;
+  };
   generatedAt: string;
   dataStatus: 'provisional' | 'final';
   classStatus: 'closing' | 'closed';
   finalizedAt?: string;
-  datasetVersion: 'classroom-assessment-results-v2';
+  datasetVersion: 'classroom-assessment-results-v3';
   missingValuePolicy: 'not_imputed';
   disclaimer: string;
   participantCount: number;

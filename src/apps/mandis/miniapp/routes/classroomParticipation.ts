@@ -1,8 +1,14 @@
+import { randomUUID } from 'crypto';
+import { resolveImageUrl } from '../../../../util/imageUploader';
+import { withClassroomWrite, assertClassroomWritable, ClassroomWriteError, asyncClassroomRoute } from '../services/classroomWriteBoundary';
+import { finalizeClassroomIfExpired } from '../services/classroomLifecycle';
+import { registerReflectionRoutes, reflectionState } from './classroomReflection';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { HydratedDocument } from 'mongoose';
 import { z } from 'zod';
 import {
   getClassroomModel,
+  getClassroomArtworkAnalysisModel,
   getClassroomParticipationModel,
   getWorkModel,
 } from '../../../../dbservice/model/GlobalInfoDBModel';
@@ -17,15 +23,14 @@ import {
   hasCompleteAssessment,
   hashToken,
   isResearchRecordComplete,
-  isResumeAllowed,
   PANAS_ITEM_CODES,
   VAD_ITEM_CODES,
 } from '../services/classroomResearch';
 import { createClassroomArtwork } from '../services/classroomArtwork';
 import { startClassroomArtworkAnalysis } from '../services/classroomArtworkAnalysis/service';
-import { resolveImageUrl } from '../../../../util/imageUploader';
 
 const router = Router();
+router.use((_req, res, next) => { res.set('Cache-Control', 'no-store, private'); next(); });
 const MAX_CODE_ATTEMPTS = 12;
 const PARTICIPATION_TOKEN_HEADER = 'x-participation-token';
 
@@ -36,7 +41,10 @@ const StartSchema = z.object({
   accessCode: z.string().min(8),
   resumeToken: z.string().min(32).max(128),
 });
-const ConsentSchema = z.object({ consentVersion: z.string().min(1).max(80) });
+const ConsentSchema = z.object({
+  consentVersion: z.literal('classroom-consent-v3-2026-09-13'),
+  allowPrivateAi: z.boolean(), allowSensitiveText: z.boolean(),
+}).strict();
 export const ClassroomParticipantProfileSchema = z.object({
   gender: z.enum(['male', 'female']),
   artExperience: z.enum(['none', 'occasional', 'regular']).optional(),
@@ -56,12 +64,7 @@ const SubmitSchema = DraftSchema.extend({
     .max(60 * 60 * 1000),
 });
 const UploadSchema = z.object({ dataUrl: z.string().min(64) });
-const FeedbackSchema = z.object({
-  fit: z.enum(['mostly', 'partly', 'not_really', 'unsure']),
-  comment: z.string().max(300).optional(),
-  allowCommentUse: z.boolean(),
-  allowArtworkUse: z.boolean(),
-});
+
 
 async function createUniqueClassroomCode(classId: string): Promise<string> {
   const Participation = getClassroomParticipationModel();
@@ -77,23 +80,8 @@ async function createUniqueClassroomCode(classId: string): Promise<string> {
 }
 
 async function closeExpiredClassroom(classId: string): Promise<void> {
-  const Classroom = getClassroomModel();
-  const result = await Classroom.updateOne(
-    { classId, status: 'closing', gracePeriodEndsAt: { $lte: new Date() } },
-    {
-      $set: {
-        status: 'closed',
-        finalizedAt: new Date(),
-        finalizedBy: 'system',
-      },
-    }
-  ).exec();
-  if (result.modifiedCount === 0) return;
-  const Participation = getClassroomParticipationModel();
-  await Participation.updateMany(
-    { classId, artworkId: { $exists: false } },
-    { $set: { artworkStatus: 'not_provided' } }
-  ).exec();
+  const classroom = await getClassroomModel().findOne({ classId }).lean().exec();
+  if (classroom) await finalizeClassroomIfExpired(classroom);
 }
 
 async function requireParticipation(req: ParticipationRequest, res: Response, next: NextFunction): Promise<void> {
@@ -104,7 +92,7 @@ async function requireParticipation(req: ParticipationRequest, res: Response, ne
   }
   const Participation = getClassroomParticipationModel();
   const participation = await Participation.findOne({
-    resumeTokenHash: hashToken(token),
+    $or: [{ resumeTokenHash: hashToken(token) }, { recoveryTokenHash: hashToken(token) }],
   }).exec();
   if (!participation) {
     sendErr(res, 'Invalid participation token', 401);
@@ -113,13 +101,12 @@ async function requireParticipation(req: ParticipationRequest, res: Response, ne
   await closeExpiredClassroom(participation.classId);
   const Classroom = getClassroomModel();
   const classroom = await Classroom.findOne({ classId: participation.classId }).lean().exec();
-  const mayResume = classroom && (isResumeAllowed(classroom) || participation.participantFlowCompleted);
+  const mayResume = classroom && classroom.status !== 'draft';
   if (!mayResume) {
     sendErr(res, 'Classroom is closed', 410);
     return;
   }
-  participation.lastActiveAt = new Date();
-  await participation.save();
+
   req.participation = participation;
   next();
 }
@@ -172,6 +159,7 @@ async function triggerAnalysisIfReady(participation: IClassroomParticipation): P
 
 function mapParticipationState(participation: IClassroomParticipation): Record<string, unknown> {
   return {
+    ...reflectionState(participation),
     participantId: participation.participantId,
     classroomCode: participation.artworkStatus === 'teacher_upload_pending' ? participation.classroomCode : undefined,
     currentStage: participation.currentStage,
@@ -217,10 +205,10 @@ async function resumeExistingParticipation(
   const Participation = getClassroomParticipationModel();
   const participation = await Participation.findOne({
     classId,
-    resumeTokenHash: hashToken(resumeToken),
+    $or: [{ resumeTokenHash: hashToken(resumeToken) }, { recoveryTokenHash: hashToken(resumeToken) }],
   }).exec();
   if (!participation) return null;
-  return isResumeAllowed(classroom) || participation.participantFlowCompleted ? participation : null;
+  return classroom.status !== 'draft' ? participation : null;
 }
 
 async function findRepeatedJoin(
@@ -274,7 +262,11 @@ async function startOrResumeParticipation(
     return null;
   }
   try {
-    return (await createParticipation(classroom.classId, key, token)).participation;
+    return await withClassroomWrite(classroom.classId, async () => {
+      const latest = await findClassroomByAccessCode(classroom.accessCode ?? '');
+      if (latest?.status !== 'open') throw new ClassroomWriteError('CLASSROOM_READ_ONLY');
+      return (await createParticipation(classroom.classId, key, token)).participation;
+    });
   } catch (error) {
     const retried = await findRepeatedJoin(classroom.classId, key, token);
     if (retried) return retried;
@@ -282,7 +274,27 @@ async function startOrResumeParticipation(
   }
 }
 
-router.post('/start', async (req, res) => {
+function participationWrite(
+  handler: (req: ParticipationRequest, res: Response) => Promise<void>,
+) {
+  return async (req: ParticipationRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const original = getParticipation(req);
+      await withClassroomWrite(original.classId, async () => {
+        await assertClassroomWritable(original.classId);
+        const fresh = await getClassroomParticipationModel().findOne({ participantId: original.participantId }).exec();
+        if (!fresh) throw new ClassroomWriteError('PARTICIPATION_NOT_FOUND');
+        req.participation = fresh;
+        await handler(req, res);
+      });
+    } catch (error) {
+      if (error instanceof ClassroomWriteError) sendErr(res, error.code, 409);
+      else next(error);
+    }
+  };
+}
+
+router.post('/start', asyncClassroomRoute(async (req, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const parsed = StartSchema.safeParse(req.body);
@@ -298,20 +310,42 @@ router.post('/start', async (req, res) => {
   sendSucc(res, {
     resumeToken: parsed.data.resumeToken,
     ...mapParticipationState(participation),
+    readOnly: current.status === 'closed',
   });
-});
+}));
 
-router.use(requireParticipation);
+router.use(asyncClassroomRoute(requireParticipation));
 
-router.get('/state', (req: ParticipationRequest, res) => {
-  sendSucc(res, mapParticipationState(getParticipation(req)));
-});
+router.get('/state', asyncClassroomRoute(async (req: ParticipationRequest, res) => {
+  const participation = getParticipation(req);
+  const classroom = await getClassroomModel().findOne({ classId: participation.classId }).lean().exec();
+  sendSucc(res, { ...mapParticipationState(participation), readOnly: classroom?.status === 'closed',
+    gracePeriodEndsAt: classroom?.gracePeriodEndsAt });
+}));
 
-router.post('/heartbeat', (_req: ParticipationRequest, res) => {
-  sendSucc(res, { active: true, serverTime: new Date().toISOString() });
-});
+router.post('/heartbeat', participationWrite(async (req: ParticipationRequest, res) => {
+  const p = getParticipation(req);
+  p.lastActiveAt = new Date();
+  await assertClassroomWritable(p.classId);
+  await p.save();
+  sendSucc(res, { active: true });
+}));
 
-router.post('/consent', async (req: ParticipationRequest, res) => {
+async function applyConsentConsequences(participation: ParticipationDocument): Promise<void> {
+  if (!participation.allowPrivateAi && participation.artworkId) {
+    await getWorkModel().updateOne({ workId: participation.artworkId, 'healing.status': 'pending' },
+      { $set: { 'healing.status': 'failed', 'healing.failReason': 'CONSENT_REVOKED' } }).exec();
+    await getClassroomArtworkAnalysisModel().updateMany({ workId: participation.artworkId, status: 'pending' },
+      { $set: { status: 'failed', errorCode: 'CONSENT_REVOKED', completedAt: new Date() } }).exec();
+  }
+  participation.researchRecordComplete = isResearchRecordComplete(participation);
+  participation.participantFlowCompleted = participation.researchRecordComplete;
+  if (!participation.participantFlowCompleted && participation.currentStage === 'completed') {
+    participation.currentStage = 'ai_echo';
+  }
+}
+
+router.post('/consent', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const parsed = ConsentSchema.safeParse(req.body);
@@ -320,18 +354,32 @@ router.post('/consent', async (req: ParticipationRequest, res) => {
     return;
   }
   const participation = getParticipation(req);
-  if (participation.consentedAt) {
+  const previous = participation.consentEvents.filter((event) => event.requestKey === key);
+  if (previous.length) {
+    const same = previous.every((event) => event.granted === (event.consentType === 'private_ai'
+      ? parsed.data.allowPrivateAi : parsed.data.allowSensitiveText));
+    if (!same) throw new ClassroomWriteError('IDEMPOTENCY_CONFLICT');
     sendSucc(res, mapParticipationState(participation));
     return;
   }
+  participation.allowPrivateAi = parsed.data.allowPrivateAi;
+  participation.allowSensitiveText = parsed.data.allowSensitiveText;
+  for (const consentType of ['private_ai', 'sensitive_text'] as const) {
+    participation.consentEvents.push({ consentId: randomUUID(), consentType,
+      granted: consentType === 'private_ai' ? parsed.data.allowPrivateAi : parsed.data.allowSensitiveText,
+      consentTextVersion: parsed.data.consentVersion, occurredAt: new Date(), requestKey: key });
+  }
   participation.consentedAt ??= new Date();
   participation.consentVersion = parsed.data.consentVersion;
+  await applyConsentConsequences(participation);
   participation.consentIdempotencyKey = key;
+  await assertClassroomWritable(participation.classId);
   await participation.save();
+  await triggerAnalysisIfReady(participation);
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
-router.post('/profile', async (req: ParticipationRequest, res) => {
+router.post('/profile', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const parsed = ClassroomParticipantProfileSchema.safeParse(req.body);
@@ -355,11 +403,12 @@ router.post('/profile', async (req: ParticipationRequest, res) => {
   participation.profile = parsed.data;
   participation.profileIdempotencyKey = key;
   participation.currentStage = 'pre_assessment';
+  await assertClassroomWritable(participation.classId);
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
-router.put('/assessment/:timepoint/draft', async (req: ParticipationRequest, res) => {
+router.put('/assessment/:timepoint/draft', participationWrite(async (req: ParticipationRequest, res) => {
   const timepoint = req.params.timepoint;
   if (timepoint !== 'pre' && timepoint !== 'post') {
     sendErr(res, 'Invalid timepoint', 400);
@@ -377,9 +426,10 @@ router.put('/assessment/:timepoint/draft', async (req: ParticipationRequest, res
     return;
   }
   assignAssessmentDraft(assessment, parsed.data);
+  await assertClassroomWritable(participation.classId);
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
 async function saveSubmittedAssessment(
   participation: ParticipationDocument,
@@ -396,11 +446,12 @@ async function saveSubmittedAssessment(
   participation.currentStage = timepoint === 'pre' ? 'activity_in_progress' : 'ai_echo';
   if (timepoint === 'pre') participation.activityStartedAt = new Date();
   participation.researchRecordComplete = isResearchRecordComplete(participation);
+  await assertClassroomWritable(participation.classId);
   await participation.save();
-  if (timepoint === 'post') void triggerAnalysisIfReady(participation);
+  if (timepoint === 'post') await triggerAnalysisIfReady(participation);
 }
 
-router.post('/assessment/:timepoint/submit', async (req: ParticipationRequest, res) => {
+router.post('/assessment/:timepoint/submit', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const timepoint = req.params.timepoint;
@@ -429,9 +480,9 @@ router.post('/assessment/:timepoint/submit', async (req: ParticipationRequest, r
   }
   await saveSubmittedAssessment(participation, timepoint, parsed.data, key);
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
-router.post('/activity/complete', async (req: ParticipationRequest, res) => {
+router.post('/activity/complete', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const participation = getParticipation(req);
@@ -446,11 +497,12 @@ router.post('/activity/complete', async (req: ParticipationRequest, res) => {
   participation.activityCompletedAt = new Date();
   participation.activityIdempotencyKey = key;
   participation.currentStage = 'artwork_upload';
+  await assertClassroomWritable(participation.classId);
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
-router.post('/artwork/request-teacher-upload', async (req: ParticipationRequest, res) => {
+router.post('/artwork/request-teacher-upload', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const participation = getParticipation(req);
@@ -465,9 +517,10 @@ router.post('/artwork/request-teacher-upload', async (req: ParticipationRequest,
   participation.artworkStatus = 'teacher_upload_pending';
   participation.uploadIdempotencyKey = key;
   participation.currentStage = 'post_assessment';
+  await assertClassroomWritable(participation.classId);
   await participation.save();
   sendSucc(res, mapParticipationState(participation));
-});
+}));
 
 async function saveStudentArtwork(
   participation: ParticipationDocument,
@@ -475,6 +528,7 @@ async function saveStudentArtwork(
   idempotencyKey: string
 ): Promise<void> {
   participation.artworkStatus = 'student_uploading';
+  await assertClassroomWritable(participation.classId);
   await participation.save();
   participation.artworkId = await createClassroomArtwork({
     classId: participation.classId,
@@ -482,15 +536,21 @@ async function saveStudentArtwork(
     dataUrl,
     uploaderRole: 'student',
   });
+  if (participation.intention) {
+    const work = await getWorkModel().findOne({ workId: participation.artworkId }).lean().exec();
+    participation.intention.workId = participation.artworkId;
+    participation.intention.contentHash = work?.contentHash;
+  }
   participation.artworkStatus = 'student_uploaded';
   participation.uploadIdempotencyKey = idempotencyKey;
   participation.syncStatus = 'synced';
   participation.currentStage = getStageAfterArtworkUpload(participation);
+  await assertClassroomWritable(participation.classId);
   await participation.save();
-  void triggerAnalysisIfReady(participation);
+  await triggerAnalysisIfReady(participation);
 }
 
-router.post('/artwork', async (req: ParticipationRequest, res) => {
+router.post('/artwork', participationWrite(async (req: ParticipationRequest, res) => {
   const key = getIdempotencyKey(req, res);
   if (!key) return;
   const parsed = UploadSchema.safeParse(req.body);
@@ -513,113 +573,31 @@ router.post('/artwork', async (req: ParticipationRequest, res) => {
   } catch (error) {
     participation.artworkStatus = 'not_started';
     participation.syncStatus = 'failed';
+    await assertClassroomWritable(participation.classId);
     await participation.save();
     sendErr(res, error instanceof Error ? error.message : 'Artwork upload failed', 400);
   }
-});
+}));
 
-router.get('/artwork/status', async (req: ParticipationRequest, res) => {
+router.get('/artwork/status', asyncClassroomRoute(async (req: ParticipationRequest, res) => {
   const participation = getParticipation(req);
-  let healingStatus = 'none';
-  if (participation.artworkId && participation.postAssessment.status === 'submitted') {
-    const Work = getWorkModel();
-    const work = await Work.findOne({ workId: participation.artworkId }).select('healing').lean().exec();
-    healingStatus = work?.healing?.status ?? 'none';
-  }
-  sendSucc(res, { artworkStatus: participation.artworkStatus, healingStatus });
-});
+  const work = participation.artworkId ? await getWorkModel().findOne({
+    workId: participation.artworkId, participantId: participation.participantId,
+  }).lean().exec() : null;
+  sendSucc(res, { artworkStatus: participation.artworkStatus, healingStatus: work?.healing?.status ?? 'none',
+    coverUrl: work?.images[0]?.url ? resolveImageUrl(work.images[0].url) : undefined });
+}));
 
-router.get('/echo', async (req: ParticipationRequest, res) => {
-  const participation = getParticipation(req);
-  if (participation.postAssessment.status !== 'submitted') {
-    sendErr(res, 'Post assessment required', 409);
-    return;
-  }
-  if (!participation.artworkId) {
-    sendSucc(res, {
-      status: 'none',
-      artworkStatus: participation.artworkStatus,
-      classroomCode: participation.classroomCode,
-    });
-    return;
-  }
-  const Work = getWorkModel();
-  const work = await Work.findOne({ workId: participation.artworkId }).lean().exec();
-  if (!work) {
-    sendErr(res, 'Artwork not found', 404);
-    return;
-  }
-  const healing = work.healing;
-  sendSucc(res, {
-    status: healing?.status ?? 'none',
-    artworkStatus: participation.artworkStatus,
-    coverUrl: resolveImageUrl(work.images[0]?.url ?? ''),
-    summary: healing?.status === 'success' ? healing.summary : undefined,
-    colorAnalysis: healing?.status === 'success' ? healing.colorAnalysis : undefined,
-    compositionReport: healing?.status === 'success' ? healing.compositionReport : undefined,
-    suggestion: healing?.status === 'success' ? healing.suggestion : undefined,
-  });
-});
+registerReflectionRoutes(router, getParticipation, mapParticipationState, participationWrite);
 
-async function hasReadyArtworkEcho(participation: IClassroomParticipation): Promise<boolean> {
-  if (!participation.artworkId) return false;
-  const Work = getWorkModel();
-  const work = await Work.findOne({ workId: participation.artworkId }).select('healing.status').lean().exec();
-  return work?.healing?.status === 'success';
-}
+router.post('/complete', participationWrite(async (req: ParticipationRequest, res) => {
+  sendSucc(res, mapParticipationState(getParticipation(req)));
+}));
 
-router.post('/complete', async (req: ParticipationRequest, res) => {
-  const key = getIdempotencyKey(req, res);
-  if (!key) return;
-  const participation = getParticipation(req);
-  if (participation.participantFlowCompleted) {
-    sendSucc(res, mapParticipationState(participation));
-    return;
-  }
-  if (participation.postAssessment.status !== 'submitted') {
-    sendErr(res, 'Post assessment required', 409);
-    return;
-  }
-  participation.completionIdempotencyKey = key;
-  participation.participantFlowCompleted = true;
-  participation.researchRecordComplete = isResearchRecordComplete(participation);
-  participation.currentStage = 'completed';
-  await participation.save();
-  sendSucc(res, mapParticipationState(participation));
-});
-
-router.post('/feedback', async (req: ParticipationRequest, res) => {
-  const key = getIdempotencyKey(req, res);
-  if (!key) return;
-  const parsed = FeedbackSchema.safeParse(req.body);
-  if (!parsed.success) {
-    sendErr(res, 'Invalid feedback', 400);
-    return;
-  }
-  const participation = getParticipation(req);
-  if (participation.postAssessment.status !== 'submitted') {
-    sendErr(res, 'Post assessment required', 409);
-    return;
-  }
-  if (participation.feedbackIdempotencyKey === key && participation.feedback) {
-    sendSucc(res, mapParticipationState(participation));
-    return;
-  }
-  if (participation.participantFlowCompleted) {
-    sendErr(res, 'Feedback already submitted', 409);
-    return;
-  }
-  if (!(await hasReadyArtworkEcho(participation))) {
-    sendErr(res, 'Artwork reflection is not ready', 409);
-    return;
-  }
-  participation.feedback = parsed.data;
-  participation.feedbackIdempotencyKey = key;
-  participation.participantFlowCompleted = true;
-  participation.researchRecordComplete = isResearchRecordComplete(participation);
-  participation.currentStage = 'completed';
-  await participation.save();
-  sendSucc(res, mapParticipationState(participation));
+router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (error instanceof ClassroomWriteError) return sendErr(res, error.code, 409);
+  if (error instanceof z.ZodError) return sendErr(res, 'INVALID_REFLECTION_INPUT', 400);
+  next(error);
 });
 
 export default router;

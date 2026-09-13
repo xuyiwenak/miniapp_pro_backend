@@ -89,11 +89,12 @@ function hmacSha1Base64(key: string, data: string): string {
   return crypto.createHmac('sha1', key).update(data).digest('base64');
 }
 
-function buildOssPutOptions(
-  cfg: OssConfig, key: string, contentType: string, md5: string, date: string,
+export function buildOssPutOptions(
+  cfg: OssConfig, key: string, contentType: string, md5: string, date: string, privateObject = false,
 ): https.RequestOptions {
   const host = ossHost(cfg);
-  const stringToSign = `PUT\n${md5}\n${contentType}\n${date}\n/${cfg.bucket}/${key}`;
+  const aclHeader = privateObject ? 'x-oss-object-acl:private\n' : '';
+  const stringToSign = `PUT\n${md5}\n${contentType}\n${date}\n${aclHeader}/${cfg.bucket}/${key}`;
   const signature = hmacSha1Base64(cfg.accessKeySecret, stringToSign);
   return {
     hostname: host,
@@ -105,6 +106,7 @@ function buildOssPutOptions(
       'Content-Type': contentType,
       'Content-Length': 0, // overwritten by caller
       'Content-MD5': md5,
+      ...(privateObject ? { 'x-oss-object-acl': 'private' } : {}),
       Date: date,
       Host: host,
     },
@@ -118,11 +120,12 @@ export function uploadToOss(
   buffer: Buffer,
   key: string,
   contentType: string,
+  privateObject = false,
 ): Promise<string> {
   const cfg = loadOssConfig();
   const date = new Date().toUTCString();
   const md5 = crypto.createHash('md5').update(buffer).digest('base64');
-  const options = buildOssPutOptions(cfg, key, contentType, md5, date);
+  const options = buildOssPutOptions(cfg, key, contentType, md5, date, privateObject);
   // Set actual content length after building options
   (options.headers as Record<string, unknown>)['Content-Length'] = buffer.length;
 

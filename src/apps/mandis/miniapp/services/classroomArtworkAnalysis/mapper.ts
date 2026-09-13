@@ -141,8 +141,8 @@ export function mapEducationAnalysisToAudit(
     : analysis.embedded_text.affect_cues.map(redactPotentialPii);
   const fused = sanitizeFused(analysis.fused);
   return {
-    analysisId,
-    workId,
+    ...reportSnapshot(fused, affectCues),
+    analysisId, workId,
     classroomId,
     participantId,
     contentHash,
@@ -162,5 +162,16 @@ export function mapEducationAnalysisToAudit(
     relation: analysis.relation,
     fusedDimensions: fused.dimensions,
     fusedVad: fused.vad,
+  };
+}
+
+function reportSnapshot(fused: EducationFusedArtworkAnalysis, affectCues: string[]) {
+  return {
+    reportJson: JSON.stringify({ summary: fused.insight, colorAnalysis: fused.color_analysis.interpretation,
+      compositionReport: fused.composition_report, lineAnalysis: fused.line_analysis.interpretation,
+      suggestion: fused.suggestion, emotionVad: fused.vad, dimensions: fused.dimensions,
+      embeddedText: affectCues.join('；') }),
+    shownModules: ['overallExpression', 'color', 'lineComposition', 'suggestion',
+      ...(fused.vad.assessable ? ['emotionVad'] : []), ...(affectCues.length ? ['embeddedText'] : [])],
   };
 }

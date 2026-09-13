@@ -1,4 +1,8 @@
 import { Schema } from 'mongoose';
+import {
+  IntentionSchema, FeedbackEvaluationSchema, ConsentEventSchema,
+  type IIntention, type IFeedbackEvaluation, type IConsentEvent,
+} from './classroomReflection.entity';
 
 export type ParticipationStage =
   | 'preparation'
@@ -79,6 +83,18 @@ export interface IClassroomParticipation {
     allowCommentUse: boolean;
     allowArtworkUse: boolean;
   };
+  intention?: IIntention;
+  intentionHistory: IIntention[];
+  evaluation?: IFeedbackEvaluation;
+  evaluationHistory: IFeedbackEvaluation[];
+  consentEvents: IConsentEvent[];
+  allowPrivateAi: boolean;
+  allowSensitiveText: boolean;
+  reportReturnedAt?: Date;
+  returnedAnalysisRunId?: string;
+  reportViewedAt?: Date;
+  viewedAnalysisRunId?: string;
+  recoveryTokenHash?: string;
   feedbackIdempotencyKey?: string;
   completionIdempotencyKey?: string;
   participantFlowCompleted: boolean;
@@ -200,6 +216,18 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
         { _id: false }
       ),
     },
+    intention: { type: IntentionSchema },
+    intentionHistory: { type: [IntentionSchema], default: [] },
+    evaluation: { type: FeedbackEvaluationSchema },
+    evaluationHistory: { type: [FeedbackEvaluationSchema], default: [] },
+    consentEvents: { type: [ConsentEventSchema], default: [] },
+    allowPrivateAi: { type: Boolean, default: false },
+    allowSensitiveText: { type: Boolean, default: false },
+    reportReturnedAt: Date,
+    returnedAnalysisRunId: String,
+    reportViewedAt: Date,
+    viewedAnalysisRunId: String,
+    recoveryTokenHash: { type: String, unique: true, sparse: true },
     feedbackIdempotencyKey: { type: String },
     completionIdempotencyKey: { type: String },
     participantFlowCompleted: { type: Boolean, default: false, index: true },

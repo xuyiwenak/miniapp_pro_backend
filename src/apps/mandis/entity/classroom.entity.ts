@@ -12,11 +12,15 @@ export type ClassroomGradeLevel =
   | 'mixed_adult'
   | 'other_adult';
 
+export type ClassroomCapability = 'manage' | 'summary' | 'detail' | 'sensitiveExport';
+export interface IClassroomGrant { teacherId: string; capabilities: ClassroomCapability[] }
 export interface IClassroom {
   classId: string;
+  writeLock?: string;
   accessCode?: string;
   createdByTeacherId: string;
   authorizedTeacherIds: string[];
+  capabilityGrants?: IClassroomGrant[];
   courseName: string;
   sessionTitle: string;
   activityTheme: string;
@@ -44,10 +48,15 @@ export interface IClassroom {
 
 export const ClassroomSchema = new Schema<IClassroom>(
   {
+    writeLock: { type: String, select: false },
     classId: { type: String, required: true, unique: true },
     accessCode: { type: String, unique: true, sparse: true },
     createdByTeacherId: { type: String, required: true, index: true },
     authorizedTeacherIds: [{ type: String }],
+    capabilityGrants: { type: [new Schema<IClassroomGrant>({
+      teacherId: { type: String, required: true },
+      capabilities: [{ type: String, enum: ['manage', 'summary', 'detail', 'sensitiveExport'] }],
+    }, { _id: false })], default: [] },
     courseName: { type: String, required: true, maxlength: 80 },
     sessionTitle: { type: String, required: true, maxlength: 80 },
     activityTheme: { type: String, required: true, maxlength: 120 },

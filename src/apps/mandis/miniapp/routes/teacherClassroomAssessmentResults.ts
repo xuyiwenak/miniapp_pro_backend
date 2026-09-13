@@ -1,13 +1,15 @@
+import { asyncClassroomRoute } from '../services/classroomWriteBoundary';
+import { reflectionSummary } from '../services/classroomReflectionExport';
 import { createHash, randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   getClassroomParticipationModel,
+  getClassroomArtworkAnalysisModel,
   getTeacherDataExportAuditModel,
   getWorkModel,
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
-import { resolveImageUrl } from '../../../../util/imageUploader';
 import type { IWork } from '../../../../entity/work.entity';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
@@ -22,7 +24,7 @@ import {
   CLASSROOM_ASSESSMENT_DATASET_VERSION,
 } from '../services/classroomAssessmentExport';
 import { finalizeClassroomIfExpired } from '../services/classroomLifecycle';
-import { findAccessibleClassroom } from '../services/classroomAccess';
+import { findAccessibleClassroom, hasClassroomCapability } from '../services/classroomAccess';
 import {
   buildArtworkSelfReportComparison,
   resolveArtworkAffect,
@@ -35,7 +37,7 @@ const ParticipantQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
-const ExportQuerySchema = z.object({ format: z.enum(['xlsx', 'csv']) });
+const ExportQuerySchema = z.object({ format: z.enum(['xlsx', 'csv']), sensitive: z.enum(['true', 'false']).optional() });
 const ParticipantParamsSchema = z.object({
   classroomCode: z.string().regex(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/),
 });
@@ -111,6 +113,7 @@ function summaryPayload(bundle: ResultBundle): Record<string, unknown> {
       ? '宽限期内数据仍可能变化，仅供课堂观察。'
       : '课堂数据已封存；结果为描述性统计，不代表因果效应。',
     ...summary,
+    reflectionSummary: reflectionSummary(bundle.participants),
   };
 }
 
@@ -127,19 +130,17 @@ async function participantDetailPayload(
     participantId: participant.participantId,
   }).select('images healing uploaderRole').lean().exec();
   const healing = work?.healing;
-  const isSuccessful = healing?.status === 'success';
   const artworkAffect = resolveArtworkAffect(work ?? undefined);
   return {
     ...participantRow,
     instrumentVersions: splitInstrumentVersion(participant.instrumentVersion),
     artworkEvaluation: {
       status: healing?.status ?? 'none',
-      coverUrl: work?.images[0]?.url ? resolveImageUrl(work.images[0].url) : undefined,
-      summary: isSuccessful ? healing.summary : undefined,
-      colorAnalysis: isSuccessful ? healing.colorAnalysis : undefined,
-      compositionReport: isSuccessful ? healing.compositionReport : undefined,
-      suggestion: isSuccessful ? healing.suggestion : undefined,
-      artworkAffect: artworkAffect.data,
+      artworkAffect: artworkAffect.data ? { ...artworkAffect.data,
+        dimensions: Object.fromEntries(Object.entries(artworkAffect.data.dimensions)
+          .map(([key, value]) => [key, { ...value, evidence: [] }])),
+        vad: { ...artworkAffect.data.vad, evidence: [], interpretation: '' },
+      } : undefined,
       researchEligible: artworkAffect.researchEligible,
       exclusionReason: artworkAffect.exclusionReason,
       selfReportComparison: buildArtworkSelfReportComparison(participant, work ?? undefined),
@@ -161,6 +162,7 @@ async function saveExportAudit(
   teacherId: string,
   format: 'xlsx' | 'csv',
   buffer: Buffer,
+  sensitive: boolean,
 ): Promise<void> {
   const Audit = getTeacherDataExportAuditModel();
   await Audit.create({
@@ -171,19 +173,23 @@ async function saveExportAudit(
     datasetVersion: CLASSROOM_ASSESSMENT_DATASET_VERSION,
     recordCount: bundle.result.participantCount,
     exportedAt: new Date(),
+    sensitiveIncluded: sensitive,
     fileSha256: createHash('sha256').update(buffer).digest('hex'),
   });
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const bundle = await loadResultBundle(getClassId(req), teacherId, res);
   if (!bundle) return;
-  sendSucc(res, summaryPayload(bundle));
-});
+  sendSucc(res, { ...summaryPayload(bundle), capabilities: {
+    detail: hasClassroomCapability(bundle.classroom, teacherId, 'detail'),
+    sensitiveExport: hasClassroomCapability(bundle.classroom, teacherId, 'sensitiveExport'),
+  } });
+}));
 
-router.get('/participants', async (req, res) => {
+router.get('/participants', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const parsed = ParticipantQuerySchema.safeParse(req.query);
@@ -193,6 +199,7 @@ router.get('/participants', async (req, res) => {
   }
   const bundle = await loadResultBundle(getClassId(req), teacherId, res);
   if (!bundle) return;
+  if (!hasClassroomCapability(bundle.classroom, teacherId, 'detail')) return sendErr(res, 'FORBIDDEN', 403);
   const start = (parsed.data.page - 1) * parsed.data.pageSize;
   sendSucc(res, {
     list: bundle.result.participants.slice(start, start + parsed.data.pageSize),
@@ -201,9 +208,9 @@ router.get('/participants', async (req, res) => {
     pageSize: parsed.data.pageSize,
     dataStatus: bundle.dataStatus,
   });
-});
+}));
 
-router.get('/participants/:classroomCode', async (req, res) => {
+router.get('/participants/:classroomCode', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const parsed = ParticipantParamsSchema.safeParse(req.params);
@@ -213,15 +220,16 @@ router.get('/participants/:classroomCode', async (req, res) => {
   }
   const bundle = await loadResultBundle(getClassId(req), teacherId, res);
   if (!bundle) return;
+  if (!hasClassroomCapability(bundle.classroom, teacherId, 'detail')) return sendErr(res, 'FORBIDDEN', 403);
   const payload = await participantDetailPayload(bundle, parsed.data.classroomCode);
   if (!payload) {
     sendErr(res, 'Participant not found', 404);
     return;
   }
   sendSucc(res, payload);
-});
+}));
 
-router.get('/export', async (req, res) => {
+router.get('/export', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const parsed = ExportQuerySchema.safeParse(req.query);
@@ -231,20 +239,27 @@ router.get('/export', async (req, res) => {
   }
   const bundle = await loadResultBundle(getClassId(req), teacherId, res);
   if (!bundle) return;
+  if (!hasClassroomCapability(bundle.classroom, teacherId, 'detail')) return sendErr(res, 'FORBIDDEN', 403);
   if (bundle.dataStatus !== 'final') {
     sendErr(res, 'Export is available only after the classroom is finalized', 409);
     return;
   }
+  const sensitive = parsed.data.sensitive === 'true';
+  if (sensitive && !hasClassroomCapability(bundle.classroom, teacherId, 'sensitiveExport')) {
+    return sendErr(res, 'FORBIDDEN', 403);
+  }
+  const analyses = await getClassroomArtworkAnalysisModel().find({ classroomId: bundle.classroom.classId })
+    .sort({ submittedAt: 1, analysisId: 1 }).lean().exec();
   const format = parsed.data.format;
   const buffer = format === 'xlsx'
-    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result, bundle.works)
-    : buildAssessmentCsv(bundle.result);
-  await saveExportAudit(bundle, teacherId, format, buffer);
+    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result, bundle.works, analyses, sensitive)
+    : buildAssessmentCsv(bundle.result, bundle.participants);
+  await saveExportAudit(bundle, teacherId, format, buffer, sensitive);
   const metadata = exportMetadata(format);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Content-Type', metadata.contentType);
   res.set('Content-Disposition', `attachment; filename="classroom-assessment-results.${metadata.extension}"`);
   res.status(200).send(buffer);
-});
+}));
 
 export default router;

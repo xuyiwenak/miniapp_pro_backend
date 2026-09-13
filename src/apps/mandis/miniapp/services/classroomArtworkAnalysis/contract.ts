@@ -112,6 +112,8 @@ export type EducationFusedArtworkAnalysis = z.infer<typeof FusedArtworkAnalysisS
 
 export type EducationArtworkAnalysisResult = {
   output: EducationArtworkAnalysisOutput;
+  rawOutput?: string;
+  samplingParametersJson?: string;
   modelVersion: string;
 };
 

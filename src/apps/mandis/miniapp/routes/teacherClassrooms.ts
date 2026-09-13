@@ -1,3 +1,4 @@
+import { teacherWrite, assertClassroomWritable, asyncClassroomRoute } from '../services/classroomWriteBoundary';
 import { Router, type Request, type Response } from 'express';
 import type { HydratedDocument } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,7 +30,7 @@ import {
 } from '../services/classroomResearch';
 import { createClassroomArtwork } from '../services/classroomArtwork';
 import {
-  classroomAccessQuery,
+  classroomAccessQuery, hasClassroomCapability,
   findAccessibleClassroom,
   findOwnedClassroom,
 } from '../services/classroomAccess';
@@ -271,6 +272,12 @@ function buildProgressSummary(
     artworkCounts: buildArtworkCounts(participants),
     issueCounts: { ...buildIssueCounts(participants), aiFailed },
     researchCounts: buildResearchCounts(participants),
+    reflectionProgress: {
+      intentionSubmitted: participants.filter((p) => p.intention?.status === 'submitted').length,
+      reportShown: participants.filter((p) => p.reportViewedAt).length,
+      evaluationSubmitted: participants.filter((p) => p.evaluation?.status === 'submitted').length,
+      aiDeclined: participants.filter((p) => !p.allowPrivateAi).length,
+    },
   };
 }
 
@@ -288,7 +295,7 @@ async function countAiFailures(
   }).exec();
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const Classroom = getClassroomModel();
@@ -297,7 +304,7 @@ router.get('/', async (req, res) => {
     .lean()
     .exec();
   sendSucc(res, { list: classrooms });
-});
+}));
 
 router.post('/', async (req, res) => {
   const teacherId = getTeacherId(req, res);
@@ -317,7 +324,7 @@ router.post('/', async (req, res) => {
   sendSucc(res, classroom.toObject());
 });
 
-router.patch('/:classId', async (req, res) => {
+router.patch('/:classId', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
@@ -340,9 +347,9 @@ router.patch('/:classId', async (req, res) => {
     .lean()
     .exec();
   sendSucc(res, updated);
-});
+}));
 
-router.post('/:classId/open', async (req, res) => {
+router.post('/:classId/open', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
@@ -362,9 +369,9 @@ router.post('/:classId/open', async (req, res) => {
     accessCode,
     studentUrl: buildStudentUrl(req, accessCode),
   });
-});
+}));
 
-router.post('/:classId/close', async (req, res) => {
+router.post('/:classId/close', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
@@ -388,9 +395,9 @@ router.post('/:classId/close', async (req, res) => {
     }
   ).exec();
   sendSucc(res, { status: 'closing', gracePeriodEndsAt });
-});
+}));
 
-router.post('/:classId/finalize', async (req, res) => {
+router.post('/:classId/finalize', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
@@ -410,9 +417,9 @@ router.post('/:classId/finalize', async (req, res) => {
     return;
   }
   sendSucc(res, { status: 'closed', finalizedAt, finalizedBy: 'teacher' });
-});
+}));
 
-router.get('/:classId/collaborators', async (req, res) => {
+router.get('/:classId/collaborators', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
@@ -422,13 +429,16 @@ router.get('/:classId/collaborators', async (req, res) => {
     teacherId: { $in: classroom.authorizedTeacherIds ?? [] },
     status: 'active',
   }).select('teacherId displayName organization').lean().exec();
-  sendSucc(res, { list });
-});
+  sendSucc(res, { list: list.map((item) => ({ ...item,
+    capabilities: classroom.capabilityGrants?.find((grant) => grant.teacherId === item.teacherId)?.capabilities ?? [],
+  })), readOnly: classroom.status !== 'draft' });
+}));
 
-router.post('/:classId/collaborators', async (req, res) => {
+router.post('/:classId/collaborators', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  if (classroom && classroom.status !== 'draft') return sendErr(res, 'CLASSROOM_READ_ONLY', 409);
   const parsed = CollaboratorSchema.safeParse(req.body);
   if (!classroom || !parsed.success) {
     if (classroom) sendErr(res, 'Invalid collaborator', 400);
@@ -450,22 +460,40 @@ router.post('/:classId/collaborators', async (req, res) => {
     { $addToSet: { authorizedTeacherIds: collaborator.teacherId } }
   ).exec();
   sendSucc(res, collaborator);
-});
+}));
 
-router.delete('/:classId/collaborators/:collaboratorTeacherId', async (req, res) => {
+router.patch('/:classId/collaborators/:collaboratorTeacherId/capabilities', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
   if (!classroom) return;
+  if (classroom.status !== 'draft') return sendErr(res, 'CLASSROOM_READ_ONLY', 409);
+  const parsed = z.object({ capabilities: z.array(z.enum(['manage', 'summary', 'detail', 'sensitiveExport'])) })
+    .strict().safeParse(req.body);
+  if (!parsed.success) return sendErr(res, 'INVALID_CAPABILITIES', 400);
+  const targetId = req.params.collaboratorTeacherId;
+  if (!classroom.authorizedTeacherIds.includes(targetId)) return sendErr(res, 'NOT_FOUND', 404);
+  const grants = (classroom.capabilityGrants ?? []).filter((grant) => grant.teacherId !== targetId);
+  grants.push({ teacherId: targetId, capabilities: [...new Set(parsed.data.capabilities)] });
+  await getClassroomModel().updateOne({ classId: classroom.classId }, { $set: { capabilityGrants: grants } }).exec();
+  sendSucc(res, { capabilities: parsed.data.capabilities });
+}));
+
+router.delete('/:classId/collaborators/:collaboratorTeacherId', teacherWrite(async (req, res) => {
+  const teacherId = getTeacherId(req, res);
+  if (!teacherId) return;
+  const classroom = await findOwnedClassroom(req.params.classId, teacherId, res);
+  if (!classroom) return;
+  if (classroom.status !== 'draft') return sendErr(res, 'CLASSROOM_READ_ONLY', 409);
   const Classroom = getClassroomModel();
   await Classroom.updateOne(
     { classId: classroom.classId },
     { $pull: { authorizedTeacherIds: req.params.collaboratorTeacherId } }
   ).exec();
   sendSucc(res, { removed: true });
-});
+}));
 
-router.get('/:classId/progress', async (req, res) => {
+router.get('/:classId/progress', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const ownedClassroom = await findAccessibleClassroom(
@@ -481,9 +509,9 @@ router.get('/:classId/progress', async (req, res) => {
     .exec();
   const aiFailed = await countAiFailures(participants);
   sendSucc(res, buildProgressSummary(classroom, participants, aiFailed));
-});
+}));
 
-router.get('/:classId/pending-artworks', async (req, res) => {
+router.get('/:classId/pending-artworks', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
@@ -506,9 +534,9 @@ router.get('/:classId/pending-artworks', async (req, res) => {
     lastActiveAt: participant.lastActiveAt,
   }));
   sendSucc(res, { list });
-});
+}));
 
-router.post('/:classId/artwork-placeholders', async (req, res) => {
+router.post('/:classId/artwork-placeholders', teacherWrite(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
@@ -516,6 +544,8 @@ router.post('/:classId/artwork-placeholders', async (req, res) => {
     if (classroom) sendErr(res, 'Classroom is closed', 409);
     return;
   }
+  if (!hasClassroomCapability(classroom, teacherId, 'manage')) return sendErr(res, 'FORBIDDEN', 403);
+  await assertClassroomWritable(classroom.classId);
   const token = generateResumeToken();
   const Participation = getClassroomParticipationModel();
   const participant = await Participation.create({
@@ -532,7 +562,7 @@ router.post('/:classId/artwork-placeholders', async (req, res) => {
     classroomCode: participant.classroomCode,
     source: participant.source,
   });
-});
+}));
 
 async function saveTeacherArtwork(
   participant: ParticipationDocument,
@@ -549,6 +579,11 @@ async function saveTeacherArtwork(
     uploadReason: input.reason,
   });
   participant.artworkId = artworkId;
+  if (participant.intention) {
+    const work = await getWorkModel().findOne({ workId: artworkId }).lean().exec();
+    participant.intention.workId = artworkId;
+    participant.intention.contentHash = work?.contentHash;
+  }
   participant.artworkStatus = 'teacher_uploaded';
   participant.uploadReason = input.reason;
   participant.teacherUploadAudit = {
@@ -562,9 +597,10 @@ async function saveTeacherArtwork(
     idempotencyKey,
   };
   participant.researchRecordComplete = isResearchRecordComplete(participant);
+  await assertClassroomWritable(participant.classId);
   await participant.save();
   if (participant.postAssessment.status === 'submitted')
-    void startClassroomArtworkAnalysis(artworkId);
+    await startClassroomArtworkAnalysis(artworkId);
   return artworkId;
 }
 
@@ -602,7 +638,7 @@ async function findTeacherUploadTarget(
 
 router.post(
   '/:classId/participants/:classroomCode/artwork',
-  async (req, res) => {
+  teacherWrite(async (req, res) => {
     const teacherId = getTeacherId(req, res);
     if (!teacherId) return;
     const key = getIdempotencyKey(req, res);
@@ -613,6 +649,8 @@ router.post(
       if (classroom) sendErr(res, 'Classroom is closed', 409);
       return;
     }
+    if (!hasClassroomCapability(classroom, teacherId, 'manage')) return sendErr(res, 'FORBIDDEN', 403);
+    await assertClassroomWritable(classId);
     const input = parseArtworkUpload(req.body, res);
     if (!input) return;
     const classroomCode = req.params.classroomCode;
@@ -639,10 +677,10 @@ router.post(
         400
       );
     }
-  }
+  })
 );
 
-router.get('/:classId/data-completeness', async (req, res) => {
+router.get('/:classId/data-completeness', asyncClassroomRoute(async (req, res) => {
   const teacherId = getTeacherId(req, res);
   if (!teacherId) return;
   const classroom = await findAccessibleClassroom(req.params.classId, teacherId, res);
@@ -675,7 +713,7 @@ router.get('/:classId/data-completeness', async (req, res) => {
       (record) => record.artworkStatus === 'teacher_uploaded'
     ).length,
   });
-});
+}));
 
 router.use('/:classId/assessment-results', teacherClassroomAssessmentResultsRouter);
 router.use('/:classId/artwork-corrections', teacherClassroomCorrectionsRouter);

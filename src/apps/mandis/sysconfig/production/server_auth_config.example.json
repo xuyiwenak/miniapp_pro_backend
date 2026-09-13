@@ -42,6 +42,10 @@
   "educationQwenVl": {
     "apiKey": "YOUR_EDUCATION_DASHSCOPE_API_KEY",
     "model": "qwen3.8-flash",
-    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "reasoningEffort": "none",
+    "temperature": 0,
+    "seed": 20260904,
+    "maxCompletionTokens": 4096
   }
 }

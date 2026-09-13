@@ -1,9 +1,9 @@
+import { assertClassroomWritable } from './classroomWriteBoundary';
 import { createHash, randomUUID } from 'crypto';
 import sharp from 'sharp';
 import { getWorkModel } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { checkImage } from '../../../../util/wxContentSecurity';
-import { uploadToStorage } from '../../../../util/imageUploader';
-import { getOssUploadPrefixes } from '../../../../util/ossUploader';
+import { getOssUploadPrefixes, uploadToOss } from '../../../../util/ossUploader';
 
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MIN_ARTWORK_DIMENSION = 100;
@@ -109,7 +109,9 @@ async function storeImage(
   const filename = `${workId}.${extension}`;
   const { worksObjectPrefix } = getOssUploadPrefixes();
   const key = `${worksObjectPrefix}/classrooms/${input.classId}/${filename}`;
-  const url = await uploadToStorage(image.buffer, key, image.contentType);
+  // Classroom images must never fall back to publicly served local storage.
+  const objectKey = await uploadToOss(image.buffer, key, image.contentType, true);
+  const url = `oss://${objectKey}`;
   return { ...image, contentHash, url, filename };
 }
 
@@ -119,6 +121,7 @@ export async function createClassroomArtwork(
   const workId = randomUUID();
   const image = await storeImage(input, workId);
   const Work = getWorkModel();
+  await assertClassroomWritable(input.classId);
   await Work.create({
     workId,
     authorId: null,

@@ -26,7 +26,6 @@ import {
   UserOutlined,
   UsergroupAddOutlined,
   UserSwitchOutlined,
-  AuditOutlined,
   ZoomInOutlined,
 } from '@ant-design/icons';
 import QRCode from 'qrcode';
@@ -42,7 +41,6 @@ import {
 } from './ClassroomAssessmentResults';
 import { TeacherArtworkUpload } from './TeacherArtworkUpload';
 import { ClassroomCollaborators } from './ClassroomCollaborators';
-import { ClassroomArtworkCorrection } from './ClassroomArtworkCorrection';
 
 const { Text, Title } = Typography;
 const POLL_INTERVAL_MS = 5000;
@@ -347,6 +345,9 @@ function LiveProgress({ classroom, progress, qrDataUrl, studentUrl, status }: {
               value={progress.artworkCounts.notProvided}
             />
             <StatusItem icon={<RobotOutlined />} label="AI失败" value={progress.issueCounts.aiFailed} />
+            <StatusItem icon={<FormOutlined />} label="意图已提交" value={progress.reflectionProgress?.intentionSubmitted ?? 0} />
+            <StatusItem icon={<FormOutlined />} label="评价已提交" value={progress.reflectionProgress?.evaluationSubmitted ?? 0} />
+            <StatusItem icon={<FormOutlined />} label="未授权AI" value={progress.reflectionProgress?.aiDeclined ?? 0} />
           </div>
         </section>
         <section className="classroom-data-card">
@@ -384,7 +385,6 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
-  const [correctionOpen, setCorrectionOpen] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>('progress');
   const [resultsActions, setResultsActions] = useState<ClassroomResultsActions | null>(null);
   const studentUrl = useMemo(() => classroomUrl(classroom), [classroom]);
@@ -392,6 +392,8 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
   const resultsAvailable = ['closing', 'closed'].includes(effectiveStatus);
   const shownView = resultsAvailable && activeView === 'results' ? 'results' : 'progress';
   const isOwner = classroom.createdByTeacherId === teacherId;
+  const canUpload = isOwner || Boolean(classroom.capabilityGrants
+    ?.find((grant) => grant.teacherId === teacherId)?.capabilities.includes('manage'));
 
   const loadProgress = useCallback(async (): Promise<boolean> => {
     try {
@@ -509,7 +511,7 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
           <Text><CalendarOutlined /> {classroom.classDate}</Text>
           <Text><ClockCircleOutlined /> {classroom.startTime}–{classroom.endTime}</Text>
         </div>
-        <Space wrap className="classroom-dashboard__actions">
+        <Space className="classroom-dashboard__actions">
           <Button
             icon={<ReloadOutlined />}
             onClick={() => shownView === 'results' ? resultsActions?.refresh() : void loadProgress()}
@@ -557,11 +559,8 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
           {effectiveStatus === 'closing' && isOwner && (
             <Button icon={<PlayCircleOutlined />} onClick={confirmFinalize}>提前结束宽限期</Button>
           )}
-          {['open', 'closing'].includes(effectiveStatus) && (
+          {canUpload && ['open', 'closing'].includes(effectiveStatus) && (
             <Button icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>教师代上传</Button>
-          )}
-          {['closing', 'closed'].includes(effectiveStatus) && (
-            <Button icon={<AuditOutlined />} onClick={() => setCorrectionOpen(true)}>研究修正</Button>
           )}
         </Space>
       </header>
@@ -601,12 +600,6 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
           onCancel={() => setCollaboratorsOpen(false)}
         />
       )}
-      <ClassroomArtworkCorrection
-        classId={classroom.classId}
-        open={correctionOpen}
-        onCancel={() => setCorrectionOpen(false)}
-        onChanged={() => void loadProgress()}
-      />
     </div>
   );
 }

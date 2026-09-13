@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Input, List, Modal, Popconfirm, Space, Typography, message } from 'antd';
+import { Alert, Checkbox, Button, Input, List, Modal, Popconfirm, Space, Typography, message } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { classroomApi, type ClassroomCollaborator } from '@/api/classroomApi';
 
@@ -14,10 +14,12 @@ export function ClassroomCollaborators({ classId, teacherId, open, onCancel }: P
   const [list, setList] = useState<ClassroomCollaborator[]>([]);
   const [candidateId, setCandidateId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [readOnly, setReadOnly] = useState(true);
 
   const load = useCallback(async (): Promise<void> => {
     const response = await classroomApi.collaborators(classId);
     setList(response.data.list);
+    setReadOnly(response.data.readOnly);
   }, [classId]);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function ClassroomCollaborators({ classId, teacherId, open, onCancel }: P
       <Alert
         type="info"
         showIcon
-        message="协作教师可查看进度、测评汇总和处理作品，但不能开放、关闭或编辑课堂。"
+        message="默认仅查看进度与汇总。额外权限在开放前配置；课堂开放后不可修改。"
       />
       <Typography.Paragraph copyable={{ text: teacherId }} style={{ marginTop: 16 }}>
         我的教师 ID：{teacherId}
@@ -59,7 +61,7 @@ export function ClassroomCollaborators({ classId, teacherId, open, onCancel }: P
           placeholder="输入对方的教师 ID"
           onChange={(event) => setCandidateId(event.target.value)}
         />
-        <Button type="primary" icon={<PlusOutlined />} loading={saving} onClick={() => void add()}>
+        <Button type="primary" icon={<PlusOutlined />} loading={saving} disabled={readOnly} onClick={() => void add()}>
           授权
         </Button>
       </Space.Compact>
@@ -74,11 +76,20 @@ export function ClassroomCollaborators({ classId, teacherId, open, onCancel }: P
                 title="移除这位协作教师？"
                 onConfirm={() => void remove(item.teacherId)}
               >
-                <Button type="text" danger icon={<DeleteOutlined />}>移除</Button>
+                <Button disabled={readOnly} type="text" danger icon={<DeleteOutlined />}>移除</Button>
               </Popconfirm>,
             ]}
           >
-            <List.Item.Meta title={item.displayName} description={item.organization || item.teacherId} />
+            <List.Item.Meta title={item.displayName} description={<>
+              <p>{item.organization || item.teacherId}</p>
+              <Checkbox.Group disabled={readOnly} value={item.capabilities ?? []}
+                options={[{ label: '代传管理', value: 'manage' }, { label: '去标识明细', value: 'detail' },
+                  { label: '敏感文本导出', value: 'sensitiveExport' }]}
+                onChange={(values) => {
+                  void classroomApi.setCapabilities(classId, item.teacherId, values.map(String))
+                    .then(load).catch(() => message.error('权限保存失败'));
+                }} />
+            </>} />
           </List.Item>
         )}
       />

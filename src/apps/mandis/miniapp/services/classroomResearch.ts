@@ -51,9 +51,14 @@ export function buildScheduledDate(classDate: string, time: string): Date {
 
 export function isResearchRecordComplete(participation: IClassroomParticipation): boolean {
   return (
+    participation.allowPrivateAi &&
     participation.preAssessment.status === 'submitted' &&
     participation.postAssessment.status === 'submitted' &&
     Boolean(participation.artworkId) &&
+    participation.intention?.status === 'submitted' &&
+    participation.evaluation?.status === 'submitted' &&
+    Boolean(participation.reportViewedAt) &&
+    participation.viewedAnalysisRunId === participation.evaluation?.analysisRunId &&
     Boolean(participation.instrumentVersion) &&
     Boolean(participation.dataSchemaVersion)
   );

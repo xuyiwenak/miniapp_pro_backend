@@ -220,7 +220,48 @@
 .notice-copy {
   border-block: 1px solid #e7dfd4;
   margin: 22px 0 28px;
-  padding: 8px 0;
+  padding: 4px 0 10px;
+}
+.notice-copy section {
+  border-bottom: 1px solid rgba(231, 223, 212, 0.72);
+  padding: 14px 0;
+}
+.notice-copy section:last-child {
+  border-bottom: 0;
+}
+.notice-copy h2 {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 0 0 6px;
+}
+.notice-copy p {
+  font-size: 14px;
+  margin: 0;
+}
+.consent-check {
+  align-items: flex-start;
+  background: #f1f8f6;
+  border: 1px solid #b9d8d4;
+  border-radius: 14px;
+  color: #43504e;
+  display: grid !important;
+  font-size: 14px;
+  gap: 11px !important;
+  grid-template-columns: 22px 1fr;
+  line-height: 1.65;
+  margin: 0 0 18px !important;
+  padding: 14px;
+}
+.consent-check input {
+  accent-color: var(--classroom-accent);
+  height: 20px;
+  margin: 2px 0 0;
+  width: 20px;
+}
+.consent-version {
+  font-size: 11px;
+  margin: 12px 0 0;
+  text-align: center;
 }
 
 .course-progress {
@@ -1000,3 +1041,24 @@
     animation: none;
   }
 }
+
+.reflection-form { display: grid; gap: 1rem; margin-block: 1.5rem; }
+.reflection-question { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
+.reflection-question legend { font-weight: 600; }
+.reflection-anchors { font-size: .875rem; }
+.reflection-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(32px, 1fr)); gap: .25rem; }
+.reflection-scores label { min-height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid #65877d; border-radius: 6px; cursor: pointer; }
+.reflection-scores label.is-selected { background: #23584f; color: #fff; }
+.reflection-scores input { width: 12px; margin: 0 3px 0 0; }
+.reflection-emotions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.reflection-emotions label { display: flex; align-items: center; min-height: 44px; gap: .4rem; }
+.reflection-form textarea { width: 100%; min-height: 90px; box-sizing: border-box; }
+.reflection-form input:focus-visible, .reflection-form button:focus-visible,
+.reflection-form textarea:focus-visible { outline: 2px solid #4dbfb4; outline-offset: 3px; }
+
+.reflection-scores.is-vad { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.reflection-scores label { position: relative; }
+.reflection-scores input { position: absolute; opacity: 0; width: 100%; height: 100%; inset: 0; margin: 0; }
+.reflection-scores label:has(input:focus-visible) { outline: 2px solid #4dbfb4; outline-offset: 3px; }
+.reflection-form .classroom-primary:not(:disabled) { color: #17372f; }

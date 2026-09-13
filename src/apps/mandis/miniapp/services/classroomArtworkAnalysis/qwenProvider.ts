@@ -8,12 +8,17 @@ import {
   type EducationArtworkAnalysisResult,
   parseEducationArtworkAnalysisOutput,
 } from './contract';
+import { EDUCATION_ARTWORK_RESPONSE_FORMAT } from './jsonSchema';
 import { buildEducationUserContent, EDUCATION_ARTWORK_SYSTEM_PROMPT } from './prompt';
 
 export interface EducationQwenConfig {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  reasoningEffort?: 'none';
+  temperature?: number;
+  seed?: number;
+  maxCompletionTokens?: number;
 }
 
 type EducationAuthConfig = {
@@ -35,11 +40,13 @@ type EducationQwenHttpResponse = {
   body: string;
 };
 
-const DEFAULT_MODEL = 'qwen-vl-plus';
+const DEFAULT_MODEL = 'qwen3.8-flash';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
-const MAX_OUTPUT_TOKENS = 4096;
-const JSON_OBJECT_RESPONSE_FORMAT = { type: 'json_object' };
+const DEFAULT_MAX_COMPLETION_TOKENS = 4096;
+const DEFAULT_STABILITY_SEED = 20260904;
+const DEFAULT_TEMPERATURE = 0;
+const DEFAULT_REASONING_EFFORT = 'none';
 const API_KEY_PLACEHOLDER = 'YOUR_DASHSCOPE_API_KEY';
 const EDUCATION_API_KEY_PLACEHOLDER = 'YOUR_EDUCATION_DASHSCOPE_API_KEY';
 
@@ -53,7 +60,15 @@ export function resolveEducationQwenConfig(
 ): EducationQwenConfig {
   const apiKey = environmentApiKey ?? config?.apiKey;
   if (!isConfiguredApiKey(apiKey)) throw new Error('Education Qwen apiKey not configured');
-  return { apiKey, model: config?.model, baseUrl: config?.baseUrl };
+  return {
+    apiKey,
+    model: config?.model,
+    baseUrl: config?.baseUrl,
+    reasoningEffort: config?.reasoningEffort,
+    temperature: config?.temperature,
+    seed: config?.seed,
+    maxCompletionTokens: config?.maxCompletionTokens,
+  };
 }
 
 export function getEducationQwenConfig(): EducationQwenConfig {
@@ -70,8 +85,11 @@ export function buildEducationQwenPostData(
 ): Buffer {
   return Buffer.from(JSON.stringify({
     model: config.model ?? DEFAULT_MODEL,
-    max_completion_tokens: MAX_OUTPUT_TOKENS,
-    response_format: JSON_OBJECT_RESPONSE_FORMAT,
+    reasoning_effort: config.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
+    temperature: config.temperature ?? DEFAULT_TEMPERATURE,
+    seed: config.seed ?? DEFAULT_STABILITY_SEED,
+    max_completion_tokens: config.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS,
+    response_format: EDUCATION_ARTWORK_RESPONSE_FORMAT,
     messages: [
       { role: 'system', content: EDUCATION_ARTWORK_SYSTEM_PROMPT },
       { role: 'user', content: buildEducationUserContent(imageUrl) },
@@ -152,6 +170,24 @@ function parseAnalysisContent(content: string): EducationArtworkAnalysisResult['
   return parseEducationArtworkAnalysisOutput(parsed);
 }
 
+export class EducationProviderOutputError extends Error {
+  constructor(public readonly rawOutput: string, public readonly failureCode: string) {
+    super(failureCode);
+    this.name = 'EducationProviderOutputError';
+  }
+}
+function validatedProviderOutput(response: EducationQwenHttpResponse) {
+  try {
+    const parsed = parseDashScopeResponse(response);
+    const content = parsed.choices?.[0]?.message?.content;
+    if (!content) throw new Error('EMPTY_OUTPUT');
+    return { parsed, content, output: parseAnalysisContent(content) };
+  } catch (error) {
+    const code = error instanceof ClassroomNotArtworkError ? 'NOT_ARTWORK' : 'PROVIDER_OR_PARSE_FAILURE';
+    throw new EducationProviderOutputError(response.body, code);
+  }
+}
+
 export async function analyzeClassroomArtworkImage(
   imageUrl: string,
   workId: string,
@@ -165,10 +201,7 @@ export async function analyzeClassroomArtworkImage(
     buildEducationQwenPostData(config, imageUrl),
     new URL(`${baseUrl}/chat/completions`),
   );
-  const parsed = parseDashScopeResponse(response);
-  const content = parsed.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Education Qwen returned empty content');
-  const output = parseAnalysisContent(content);
+  const { parsed, content, output } = validatedProviderOutput(response);
   logger.info('education.qwen.analyze.success', {
     workId,
     model,
@@ -177,5 +210,7 @@ export async function analyzeClassroomArtworkImage(
     totalTokens: parsed.usage?.total_tokens ?? 0,
     durationMs: Date.now() - startedAt,
   });
-  return { output, modelVersion: model };
+  const request = JSON.parse(buildEducationQwenPostData(config, imageUrl).toString()) as Record<string, unknown>;
+  const { messages: _messages, ...parameters } = request;
+  return { output, modelVersion: model, rawOutput: content, samplingParametersJson: JSON.stringify(parameters) };
 }

@@ -51,11 +51,15 @@ describe('classroom research helpers', () => {
     assert.equal(hasCompleteAssessment(answers.vad, answers.panas), false);
   });
 
-  it('marks only paired assessments with an artwork as research complete', () => {
+  it('requires intent, exposure and evaluation in addition to paired assessments and artwork', () => {
     const participant = {
       preAssessment: { status: 'submitted' },
       postAssessment: { status: 'submitted' },
+      allowPrivateAi: true,
       artworkId: 'artwork-id',
+      intention: { status: 'submitted' },
+      evaluation: { status: 'submitted', analysisRunId: 'run-id' },
+      reportViewedAt: new Date(), viewedAnalysisRunId: 'run-id',
       instrumentVersion: 'sam-vad-ipanas-sf-v1',
       dataSchemaVersion: 'classroom-participation-v1',
     } as IClassroomParticipation;

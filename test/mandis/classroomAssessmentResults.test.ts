@@ -41,6 +41,7 @@ function participation(
     participantId: `participant-${classroomCode}`,
     classId: 'class-1',
     classroomCode,
+    intentionHistory: [], evaluationHistory: [], consentEvents: [], allowPrivateAi: false, allowSensitiveText: false,
     resumeTokenHash: `hash-${classroomCode}`,
     source: 'student',
     instrumentVersion,
@@ -95,11 +96,11 @@ describe('classroom assessment results', () => {
     };
     assert.equal(new Audit({
       ...common,
-      datasetVersion: 'classroom-assessment-results-v2',
+      datasetVersion: 'classroom-assessment-results-v3',
     }).validateSync(), undefined);
     assert.match(new Audit({
       ...common,
-      datasetVersion: 'classroom-assessment-results-v3',
+      datasetVersion: 'classroom-assessment-results-unknown',
     }).validateSync()?.message ?? '', /datasetVersion/);
   });
 
@@ -152,10 +153,11 @@ describe('classroom assessment results', () => {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     assert.deepEqual(workbook.SheetNames, [
       'manifest', 'summary', 'participant_wide', 'responses_long', 'artwork_affect',
-      'affect_associations', 'data_dictionary',
+      'affect_associations', 'reflections', 'module_responses', 'consent_events', 'ai_runs', 'data_dictionary',
     ]);
     assert.equal(sanitizeSpreadsheetCell('+formula'), "'+formula");
-    assert.match(buildAssessmentCsv(result).toString('utf8'), /'=unsafe/);
+    assert.doesNotMatch(buildAssessmentCsv(result).toString('utf8'), /unsafe|uploadReason/);
+    assert.equal(sanitizeSpreadsheetCell('=unsafe'), "'=unsafe");
     const participantRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets.participant_wide,
     );

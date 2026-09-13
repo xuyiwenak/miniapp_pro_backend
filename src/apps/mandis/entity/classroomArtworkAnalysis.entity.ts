@@ -25,6 +25,17 @@ export interface IClassroomArtworkEmbeddedText {
 }
 
 export interface IClassroomArtworkAnalysis {
+  status?: 'pending' | 'success' | 'failed' | 'closed_incomplete';
+  submittedAt?: Date;
+  completedAt?: Date;
+  errorCode?: string;
+  modelProvider?: string;
+  schemaVersion?: string;
+  inputManifestJson?: string;
+  reportJson?: string;
+  rawOutputJson?: string;
+  samplingParametersJson?: string;
+  shownModules?: string[];
   analysisId: string;
   workId: string;
   classroomId: string;
@@ -81,6 +92,11 @@ const EmbeddedTextSchema = new Schema<IClassroomArtworkEmbeddedText>({
 }, { _id: false });
 
 export const ClassroomArtworkAnalysisSchema = new Schema<IClassroomArtworkAnalysis>({
+  status: { type: String, enum: ['pending', 'success', 'failed', 'closed_incomplete'], index: true },
+  submittedAt: Date, completedAt: Date, errorCode: String,
+  modelProvider: String, schemaVersion: String, inputManifestJson: String,
+  reportJson: { type: String }, rawOutputJson: { type: String, select: false },
+  samplingParametersJson: String, shownModules: [String],
   analysisId: { type: String, required: true, unique: true },
   workId: { type: String, required: true, index: true },
   classroomId: { type: String, required: true, index: true },
@@ -90,16 +106,16 @@ export const ClassroomArtworkAnalysisSchema = new Schema<IClassroomArtworkAnalys
   promptVersion: { type: String, required: true },
   scaleVersion: { type: String, required: true },
   generatedAt: { type: Date, required: true },
-  visualDimensions: { type: ArtworkDimensionsSchema, required: true },
-  visualVad: { type: ArtworkVadSchema, required: true },
-  embeddedText: { type: EmbeddedTextSchema, required: true },
+  visualDimensions: { type: ArtworkDimensionsSchema, required: false },
+  visualVad: { type: ArtworkVadSchema, required: false },
+  embeddedText: { type: EmbeddedTextSchema, required: false },
   relation: {
     type: String,
     enum: ['reinforces', 'contrasts', 'independent', 'unclear'],
-    required: true,
+    required: false,
   },
-  fusedDimensions: { type: ArtworkDimensionsSchema, required: true },
-  fusedVad: { type: ArtworkVadSchema, required: true },
+  fusedDimensions: { type: ArtworkDimensionsSchema, required: false },
+  fusedVad: { type: ArtworkVadSchema, required: false },
 }, { timestamps: true, collection: 'mandis_classroom_artwork_analyses' });
 
 ClassroomArtworkAnalysisSchema.index({ classroomId: 1, createdAt: -1 });

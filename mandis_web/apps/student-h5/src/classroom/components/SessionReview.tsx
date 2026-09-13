@@ -128,7 +128,13 @@ function AiContent({ echo, zh, waitExpired, failed, hasArtwork }: {
     <>
       <h2>{zh ? '作品中的颜色与线条' : 'Colour and line in your artwork'}</h2>
       {echo.colorAnalysis && <p>{echo.colorAnalysis}</p>}
-      {echo.summary && <p>{echo.summary}</p>}
+      {echo.summary && <section><h3>{zh ? '整体表达' : 'Overall expression'}</h3><p>{echo.summary}</p></section>}
+      {echo.lineAnalysis && <p>{echo.lineAnalysis}</p>}
+      {echo.emotionVad?.assessable && <section><h3>{zh ? '情绪与 VAD' : 'Emotion and VAD'}</h3>
+        <p>{echo.emotionVad.interpretation}</p>
+        <p>V / A / D: {echo.emotionVad.valence} / {echo.emotionVad.arousal} / {echo.emotionVad.dominance} (0–100)</p>
+      </section>}
+      {echo.embeddedText && <section><h3>{zh ? '画内文字' : 'Embedded text'}</h3><p>{echo.embeddedText}</p></section>}
       {echo.compositionReport && <p>{echo.compositionReport}</p>}
       {echo.suggestion && <aside>{echo.suggestion}</aside>}
     </>
@@ -178,13 +184,16 @@ function AiPage({ locale, classroom, participation, echo, waitExpired, statusQue
     <div className="review-page review-ai" aria-live="polite">
       <ReviewHeading classroom={classroom} title={zh ? '作品回响' : 'Artwork reflection'} />
       {echo?.coverUrl && <img src={echo.coverUrl} alt={zh ? '本次课堂作品' : 'Artwork from this session'} />}
-      <AiContent
+      {(!participation.allowPrivateAi || participation.intention?.status !== 'submitted')
+        ? <p>{locale === 'zh-CN' ? '尚未满足回响查看条件。已保存的测评与意图仍可查看。'
+          : 'This reflection is not available. Your saved records remain accessible.'}</p>
+        : <AiContent
         echo={echo}
         zh={zh}
         waitExpired={waitExpired}
         failed={statusQueryFailed}
         hasArtwork={Boolean(participation.artworkId || echo?.coverUrl)}
-      />
+      />}
       <aside className="review-boundary">
         {zh
           ? '学生自评是主要记录；AI 仅辅助整理作品的可见特征，'
