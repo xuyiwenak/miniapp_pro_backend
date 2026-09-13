@@ -223,8 +223,8 @@ export function ClassroomAssessmentResults({ classId, classStatus, onActionsChan
 }
 
 const MODULE_RESPONSE_LABELS: Record<string, string> = {
-  matches: '符合', partly_matches: '部分符合', does_not_match: '不符合', cannot_judge: '无法判断',
-  helpful: '有帮助', partly_helpful: '部分有帮助', not_helpful: '无帮助', not_answered: '未作答',
+  strongly_matches: '非常符合', partly_matches: '部分符合', does_not_match: '不符合',
+  very_helpful: '非常有帮助', partly_helpful: '部分有帮助', not_helpful: '没有帮助', not_answered: '未作答',
   not_shown: '未展示', evaluation_not_submitted: '未提交评价',
 };
 function ModuleSummary({ modules }: {

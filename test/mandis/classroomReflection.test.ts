@@ -25,7 +25,9 @@ const RUN_ID = randomUUID();
 const INTENTION = { intendedValence: 5, intendedArousal: 4, intendedDominance: 6,
   intendedEmotions: ['calm'], expressionConfidence: 6, intentionText: 'private intention' };
 const EVALUATION = { analysisRunId: RUN_ID, reportVersion: RUN_ID, feedbackOverallHelpful: 6,
-  feedbackReflectionHelp: 5, feedbackDiscomfort: 1, moduleResponses: {}, overallComment: 'private comment' };
+  feedbackReflectionHelp: 5, feedbackDiscomfort: 1,
+  moduleResponses: { color: { responseCode: 'strongly_matches', missingReason: null } },
+  overallComment: 'private comment' };
 const ParticipantModel = mongooseModels.ReflectionTestParticipant
   ?? model<IClassroomParticipation>('ReflectionTestParticipant', ClassroomParticipationSchema);
 
@@ -57,15 +59,22 @@ describe('classroom reflection validation', () => {
       assert.equal(IntentionSubmitInput.safeParse({ ...INTENTION, ...patch }).success, false);
     }
   });
-  it('requires only the three core scores, keeps categorical responses separate', () => {
+  it('requires explicit three-way responses for every displayed module', () => {
     assert.equal(EvaluationSubmitInput.safeParse(EVALUATION).success, true);
     assert.equal(EvaluationSubmitInput.safeParse({ ...EVALUATION, feedbackDiscomfort: 8 }).success, false);
-    const input = EvaluationSubmitInput.parse({ ...EVALUATION,
-      moduleResponses: { color: { responseCode: 'cannot_judge', missingReason: null } } });
+    assert.equal(EvaluationSubmitInput.safeParse({ ...EVALUATION,
+      moduleResponses: { color: { responseCode: 'cannot_judge', missingReason: null } } }).success, false);
+    const input = EvaluationSubmitInput.parse(EVALUATION);
     const result = normalizeModuleResponses(input, ['color', 'suggestion']);
-    assert.equal(result.color?.responseCode, 'cannot_judge');
+    assert.equal(result.color?.responseCode, 'strongly_matches');
     assert.equal(result.suggestion?.missingReason, 'not_answered');
     assert.equal(result.embeddedText?.missingReason, 'not_shown');
+    assert.throws(() => normalizeModuleResponses(input, ['color', 'suggestion'], true), /MODULE_RESPONSE_REQUIRED/);
+    const complete = EvaluationSubmitInput.parse({ ...EVALUATION, moduleResponses: {
+      ...EVALUATION.moduleResponses, suggestion: { responseCode: 'very_helpful', missingReason: null },
+    } });
+    assert.equal(normalizeModuleResponses(complete, ['color', 'suggestion'], true).suggestion?.responseCode,
+      'very_helpful');
     assert.throws(() => normalizeModuleResponses(input, []), /MODULE_NOT_SHOWN/);
   });
   it('does not expose a report before intention and AI consent', () => {
@@ -164,6 +173,7 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal((await request('/echo')).body.data?.summary, 'Private AI report');
     assert.ok(stored.reportReturnedAt);
     await request('/echo/viewed', { analysisRunId: RUN_ID });
+    assert.equal((await request('/feedback', { ...EVALUATION, moduleResponses: {} })).status, 409);
     assert.equal((await request('/feedback', EVALUATION)).status, 200);
     assert.equal(stored.researchRecordComplete, true);
     await request('/intention/submit', { ...INTENTION, intendedValence: 8 });

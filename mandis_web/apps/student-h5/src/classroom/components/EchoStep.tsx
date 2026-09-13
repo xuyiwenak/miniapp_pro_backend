@@ -49,7 +49,7 @@ function useEchoStep(props: Props) {
   const [returnUrl, setReturnUrl] = useState('');
   const [notice, setNotice] = useState('');
   const [hidden, setHidden] = useState(false);
-  const [evaluating, setEvaluating] = useState(false);
+  const [evaluating, setEvaluating] = useState(() => participation.evaluation?.status !== 'submitted');
   const [revising, setRevising] = useState(false);
   const exposure = useRef('');
   useEffect(() => {
@@ -60,7 +60,7 @@ function useEchoStep(props: Props) {
   }, [echo?.analysisRunId, readOnly, hidden, props.onViewed]);
   async function beginEvaluation() {
     if (!echo?.analysisRunId) return;
-    try { await props.onViewed(echo.analysisRunId); setEvaluating(true); }
+    try { await props.onViewed(echo.analysisRunId); setHidden(false); setEvaluating(true); }
     catch (failure) { setNotice(failure instanceof Error ? failure.message : 'Unable to continue'); }
   }
   async function saveReturn() {
@@ -88,10 +88,10 @@ export function EchoStep(props: Props) {
 }
 
 function ReportPanel({ props, state }: { props: Props; state: StepState }) {
-  const { locale, participation, zh, readOnly, echo, evaluating, setEvaluating, beginEvaluation } = state;
+  const { locale, participation, zh, readOnly, echo, evaluating, beginEvaluation } = state;
   if (!readOnly && participation.intention?.status !== 'submitted') return null;
   return <>
-    <ReportReader state={state} />
+    <ReportReader props={props} state={state} />
     {!readOnly && !participation.artworkId && <button type="button" className="reflection-text-button"
       onClick={props.onReviseArtwork}>{zh ? '补充上传作品' : 'Upload artwork'}</button>}
     {!readOnly && echo?.status === 'success' && !evaluating && <div className="echo-evaluation-action">
@@ -100,12 +100,6 @@ function ReportPanel({ props, state }: { props: Props; state: StepState }) {
           : (zh ? '评价这份回响' : 'Respond to this reflection')}</button>
       <p>{zh ? '你的评价不会改变这份回响。' : 'Your response will not change this reflection.'}</p>
     </div>}
-    {!readOnly && evaluating && echo && <EvaluationForm locale={locale} echo={echo}
-      saved={participation.evaluation} cacheKey={`evaluation:${participation.participantId}:${echo.analysisRunId}`}
-      onSave={async (input, submit) => {
-        if (submit) { await props.onFeedback(input); setEvaluating(false); }
-        else await props.onDraft(input);
-      }} />}
     <div className="echo-saved-records"><SavedIntention state={state} /><SavedEvaluation state={state} />
       <details><summary>{zh ? '活动前后的自评记录' : 'Your before and after records'}</summary>
         <SessionReview locale={locale} classroom={state.classroom} participation={participation}
@@ -114,8 +108,8 @@ function ReportPanel({ props, state }: { props: Props; state: StepState }) {
     </div>
   </>;
 }
-function ReportReader({ state }: { state: StepState }) {
-  const { zh, participation, echo, error, hidden, setHidden } = state;
+function ReportReader({ props, state }: { props: Props; state: StepState }) {
+  const { zh, participation, echo, error, hidden, evaluating, setEvaluating, setHidden } = state;
   const permitted = participation.allowPrivateAi && participation.intention?.status === 'submitted';
   return <section className="echo-reader">
     <p className="redesign-step">{zh ? '作品回响 · 阅读与评价' : 'Artwork reflection · Read and respond'}</p>
@@ -129,8 +123,13 @@ function ReportReader({ state }: { state: StepState }) {
         <span>{hidden ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}
           {hidden ? <DownOutlined aria-hidden /> : <UpOutlined aria-hidden />}</span></button>
       <div id="ai-reflection-content" hidden={hidden}>
-        <AiContent echo={echo} zh={zh} waitExpired={false} failed={Boolean(error)}
-          hasArtwork={Boolean(participation.artworkId)} />
+        {evaluating && echo ? <EvaluationForm locale={state.locale} echo={echo}
+          saved={participation.evaluation} cacheKey={`evaluation:${participation.participantId}:${echo.analysisRunId}`}
+          onSave={async (input, submit) => {
+            if (submit) { await props.onFeedback(input); setEvaluating(false); }
+            else await props.onDraft(input);
+          }} /> : <AiContent echo={echo} zh={zh} waitExpired={false} failed={Boolean(error)}
+          hasArtwork={Boolean(participation.artworkId)} />}
         <p className="echo-boundary">{zh ? 'AI 解读仅供参考，不用于心理诊断或课程评分。'
           : 'AI interpretation is for reflection, not diagnosis or grading.'}</p>
         <button className="reflection-text-button echo-collapse" type="button" onClick={() => setHidden(true)}>

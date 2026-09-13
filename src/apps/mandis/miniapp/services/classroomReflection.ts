@@ -35,8 +35,8 @@ export const IntentionSubmitInput = IntentionDraftInput.extend({
   }
 });
 const ResponseSchema = z.object({
-  responseCode: z.enum(['matches', 'partly_matches', 'does_not_match', 'cannot_judge',
-    'helpful', 'partly_helpful', 'not_helpful']).nullable(),
+  responseCode: z.enum(['strongly_matches', 'partly_matches', 'does_not_match',
+    'very_helpful', 'partly_helpful', 'not_helpful']).nullable(),
   missingReason: z.enum(['not_answered', 'not_shown', 'not_applicable']).nullable(),
 }).strict().refine((value) => (value.responseCode === null) !== (value.missingReason === null));
 export const EvaluationDraftInput = z.object({
@@ -65,7 +65,7 @@ export function assertCanViewReport(participant: IClassroomParticipation): void 
   if (participant.intention?.status !== 'submitted') throw new ClassroomWriteError('INTENTION_REQUIRED');
 }
 export function normalizeModuleResponses(
-  input: z.infer<typeof EvaluationDraftInput>, shown: ModuleCode[],
+  input: z.infer<typeof EvaluationDraftInput>, shown: ModuleCode[], requireComplete = false,
 ): IFeedbackEvaluation['moduleResponses'] {
   return Object.fromEntries(MODULE_CODES.map((code) => {
     const value = input.moduleResponses[code];
@@ -74,13 +74,16 @@ export function normalizeModuleResponses(
       return [code, { responseCode: null, missingReason: 'not_shown' }];
     }
     const allowed = code === 'suggestion'
-      ? ['helpful', 'partly_helpful', 'not_helpful', 'cannot_judge']
-      : ['matches', 'partly_matches', 'does_not_match', 'cannot_judge'];
+      ? ['very_helpful', 'partly_helpful', 'not_helpful']
+      : ['strongly_matches', 'partly_matches', 'does_not_match'];
     if (value?.responseCode && !allowed.includes(value.responseCode)) {
       throw new ClassroomWriteError('INVALID_MODULE_RESPONSE');
     }
     if (value?.missingReason && value.missingReason !== 'not_answered') {
       throw new ClassroomWriteError('INVALID_MISSING_REASON');
+    }
+    if (requireComplete && !value?.responseCode) {
+      throw new ClassroomWriteError('MODULE_RESPONSE_REQUIRED');
     }
     return [code, value ?? { responseCode: null, missingReason: 'not_answered' }];
   }));
@@ -105,7 +108,7 @@ export function buildEvaluation(
   return {
     ...input, evaluationId: previous?.evaluationId ?? randomUUID(), status: submit ? 'submitted' : 'draft',
     revision: (previous?.revision ?? 0) + 1, instrumentVersion: REFLECTION_VERSION,
-    moduleEvaluationVersion: MODULE_VERSION, moduleResponses: normalizeModuleResponses(input, shown),
+    moduleEvaluationVersion: MODULE_VERSION, moduleResponses: normalizeModuleResponses(input, shown, submit),
     startedAt: previous?.startedAt ?? new Date(),
     firstSubmittedAt: previous?.firstSubmittedAt ?? (submit ? new Date() : undefined),
     requestKey: key, requestHash: requestHash(input),

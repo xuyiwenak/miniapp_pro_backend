@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { CheckOutlined } from '@ant-design/icons';
 import type {
   ClassroomInfo,
   EchoResult,
+  EvaluationInput,
   Locale,
+  ModuleCode,
+  ModuleResponseCode,
   ParticipationState,
 } from '@mandis/common/classroom-types';
 import {
@@ -118,25 +122,75 @@ function MeasuresPage({
   );
 }
 
-export function AiContent({ echo, zh, waitExpired, failed, hasArtwork }: {
+type ModuleEvaluation = {
+  modules: ModuleCode[];
+  responses: EvaluationInput['moduleResponses'];
+  onChange: (code: ModuleCode, responseCode: ModuleResponseCode) => void;
+};
+
+const MATCH_OPTIONS: Array<[ModuleResponseCode, string, string]> = [
+  ['strongly_matches', '非常符合', 'Strong match'],
+  ['partly_matches', '部分符合', 'Partial match'],
+  ['does_not_match', '不符合', 'Does not match'],
+];
+const HELPFUL_OPTIONS: Array<[ModuleResponseCode, string, string]> = [
+  ['very_helpful', '非常有帮助', 'Very helpful'],
+  ['partly_helpful', '部分有帮助', 'Partly helpful'],
+  ['not_helpful', '没有帮助', 'Not helpful'],
+];
+
+function InlineModuleEvaluation({ code, zh, evaluation }: {
+  code: ModuleCode; zh: boolean; evaluation?: ModuleEvaluation;
+}) {
+  if (!evaluation?.modules.includes(code)) return null;
+  const options = code === 'suggestion' ? HELPFUL_OPTIONS : MATCH_OPTIONS;
+  const selected = evaluation.responses[code]?.responseCode;
+  return <fieldset className="module-evaluation" id={`module-evaluation-${code}`}>
+    <legend>{code === 'suggestion'
+      ? (zh ? '这条建议有帮助吗？' : 'Was this suggestion helpful?')
+      : (zh ? '这段解读符合吗？' : 'Does this interpretation fit?')}</legend>
+    <div>{options.map(([value, cn, en]) => <label key={value} className={selected === value ? 'is-selected' : ''}>
+      <input type="radio" name={`module-${code}`} checked={selected === value}
+        onChange={() => evaluation.onChange(code, value)} />
+      <span>{zh ? cn : en}</span>{selected === value && <CheckOutlined aria-hidden />}
+    </label>)}</div>
+  </fieldset>;
+}
+
+function AiSection({ code, title, zh, evaluation, children }: {
+  code: ModuleCode; title: string; zh: boolean; evaluation?: ModuleEvaluation; children: ReactNode;
+}) {
+  return <section className="ai-reflection-module">
+    <h3>{title}</h3>{children}<InlineModuleEvaluation code={code} zh={zh} evaluation={evaluation} />
+  </section>;
+}
+
+export function AiContent({ echo, zh, waitExpired, failed, hasArtwork, evaluation }: {
   echo: EchoResult | null;
   zh: boolean;
   waitExpired: boolean;
   failed: boolean;
   hasArtwork: boolean;
+  evaluation?: ModuleEvaluation;
 }) {
   if (echo?.status === 'success') return (
     <>
-      {echo.summary && <section><h3>{zh ? '整体表达' : 'Overall expression'}</h3><p>{echo.summary}</p></section>}
-      {echo.colorAnalysis && <section><h3>{zh ? '色彩' : 'Colour'}</h3><p>{echo.colorAnalysis}</p></section>}
-      {(echo.lineAnalysis || echo.compositionReport) && <section><h3>{zh ? '线条与构图' : 'Line and composition'}</h3>
-        <p>{echo.lineAnalysis}</p><p>{echo.compositionReport}</p></section>}
-      {echo.emotionVad?.assessable && <section><h3>{zh ? '情绪与 VAD' : 'Emotion and VAD'}</h3>
+      {echo.summary && <AiSection code="overallExpression" title={zh ? '整体表达' : 'Overall expression'}
+        zh={zh} evaluation={evaluation}><p>{echo.summary}</p></AiSection>}
+      {echo.colorAnalysis && <AiSection code="color" title={zh ? '色彩' : 'Colour'} zh={zh}
+        evaluation={evaluation}><p>{echo.colorAnalysis}</p></AiSection>}
+      {(echo.lineAnalysis || echo.compositionReport) && <AiSection code="lineComposition"
+        title={zh ? '线条与构图' : 'Line and composition'} zh={zh} evaluation={evaluation}>
+        <p>{echo.lineAnalysis}</p><p>{echo.compositionReport}</p></AiSection>}
+      {echo.emotionVad?.assessable && <AiSection code="emotionVad" title={zh ? '情绪与 VAD' : 'Emotion and VAD'}
+        zh={zh} evaluation={evaluation}>
         <p>{echo.emotionVad.interpretation}</p>
         <p>V / A / D: {echo.emotionVad.valence} / {echo.emotionVad.arousal} / {echo.emotionVad.dominance} (0–100)</p>
-      </section>}
-      {echo.embeddedText && <section><h3>{zh ? '画内文字' : 'Embedded text'}</h3><p>{echo.embeddedText}</p></section>}
-      {echo.suggestion && <section><h3>{zh ? '可以试试' : 'You could try'}</h3><p>{echo.suggestion}</p></section>}
+      </AiSection>}
+      {echo.embeddedText && <AiSection code="embeddedText" title={zh ? '画内文字' : 'Embedded text'} zh={zh}
+        evaluation={evaluation}><p>{echo.embeddedText}</p></AiSection>}
+      {echo.suggestion && <AiSection code="suggestion" title={zh ? '可以试试' : 'You could try'} zh={zh}
+        evaluation={evaluation}><p>{echo.suggestion}</p></AiSection>}
     </>
   );
   if (!hasArtwork) return (

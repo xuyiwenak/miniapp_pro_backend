@@ -147,6 +147,27 @@
 #ai-reflection-content section { padding: 12px 0; }
 #ai-reflection-content h3 { color: #24665d; font-size: 18px; font-weight: 600; margin: 0 0 8px; }
 #ai-reflection-content p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.ai-reflection-module { border-bottom: 1px solid #e7e1d9; }
+.module-evaluation { border: 0; margin: 14px 0 4px; padding: 0; }
+.module-evaluation legend { color: #5f6865; font-size: 13px; margin-bottom: 8px; }
+.module-evaluation > div { display: grid; gap: 7px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.module-evaluation label {
+  align-items: center; background: rgba(255, 253, 248, .72); border: 1px solid #b8c8c3; border-radius: 10px;
+  color: #36534e; cursor: pointer; display: flex; font-size: 13px; gap: 5px; justify-content: center;
+  min-height: 44px; padding: 7px 4px; position: relative; text-align: center;
+}
+.module-evaluation label.is-selected { background: #24665d; border-color: #24665d; color: #fff; }
+.module-evaluation input { cursor: pointer; height: 100%; inset: 0; margin: 0; opacity: 0; position: absolute; width: 100%; }
+.module-evaluation label:has(input:focus-visible) { outline: 2px solid #24665d; outline-offset: 3px; }
+.module-evaluation .anticon { flex: 0 0 auto; font-size: 11px; }
+.module-evaluation-progress {
+  background: #eef4f1; border-radius: 10px; color: #24665d; font-size: 13px !important;
+  font-weight: 600; margin: 16px 0 24px !important; padding: 9px 12px; text-align: center;
+}
+.evaluation-overall { border-top: 1px solid #d9d3cb; padding-top: 20px !important; }
+.evaluation-overall h2 { font-size: 21px; margin: 0; }
+.reflection-incomplete { color: #9b3f39; }
+.reflection-incomplete:empty { display: none; }
 #ai-reflection-content .echo-boundary { border-top: 1px solid #dfd9d1; font-size: 12px; margin-top: 14px; padding-top: 16px; }
 .echo-collapse { align-items: center; display: flex; gap: 8px; justify-content: center; margin: 8px auto; }
 .echo-evaluation-action { margin: 12px 0 20px; }
@@ -181,6 +202,7 @@
   .consent-overview__icon { height: 44px; width: 44px; }
   .visual-vad__grid label { min-height: 96px; padding: 8px; }
   .visual-vad__grid img { height: 48px; }
+  .module-evaluation label { font-size: 12px; }
 }
 .watercolor-backdrop:has(.classroom-redesign) { background: #fcf9f3; isolation: isolate; position: relative; }
 .watercolor-backdrop:has(.classroom-redesign)::before {

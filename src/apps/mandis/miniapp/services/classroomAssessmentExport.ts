@@ -175,7 +175,7 @@ function dictionaryRows(): ExportRow[] {
     { field: 'feedbackOverallHelpful', definition: '总体帮助度主指标，1–7；仅已提交评价有效' },
     { field: 'feedbackReflectionHelp', definition: '反思帮助，1–7；独立报告，不合成总分' },
     { field: 'feedbackDiscomfort', definition: '不适，1–7；独立报告，不自动解释为风险' },
-    { field: 'moduleResponses', definition: '分类回应；cannot_judge、未答与未展示分开保存，不换算评分' },
+    { field: 'moduleResponses', definition: '已展示模块三分类回应；未答与未展示分开保存，不换算评分' },
     { field: 'missingReasons', definition: '未完成环节列表；不以0填补，文本默认排除' },
     { field: 'classroomCode', definition: '仅在本课堂有效的匿名参与编号' },
     { field: 'valence', definition: 'SAM 愉悦度，1–9' },
