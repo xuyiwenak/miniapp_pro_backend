@@ -11,6 +11,7 @@ import {
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
 import type { IWork } from '../../../../entity/work.entity';
+import { resolveImageUrl } from '../../../../util/imageUploader';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation } from '../../entity/classroomParticipation.entity';
 import {
@@ -50,6 +51,32 @@ type ResultBundle = {
   result: ClassroomAssessmentResult;
   dataStatus: AssessmentDataStatus;
 };
+
+export function buildParticipantArtworkEvaluation(
+  participant: IClassroomParticipation,
+  work?: IWork,
+): Record<string, unknown> {
+  const healing = work?.healing;
+  const artworkAffect = resolveArtworkAffect(work);
+  const coverUrl = work?.images[0]?.url;
+  return {
+    status: healing?.status ?? 'none',
+    coverUrl: coverUrl ? resolveImageUrl(coverUrl) : undefined,
+    summary: healing?.summary,
+    colorAnalysis: healing?.colorAnalysis,
+    compositionReport: healing?.compositionReport,
+    suggestion: healing?.suggestion,
+    artworkAffect: artworkAffect.data ? { ...artworkAffect.data,
+      dimensions: Object.fromEntries(Object.entries(artworkAffect.data.dimensions)
+        .map(([key, value]) => [key, { ...value, evidence: [] }])),
+      vad: { ...artworkAffect.data.vad, evidence: [], interpretation: '' },
+    } : undefined,
+    researchEligible: artworkAffect.researchEligible,
+    exclusionReason: artworkAffect.exclusionReason,
+    selfReportComparison: buildArtworkSelfReportComparison(participant, work),
+    feedbackFit: participant.feedback?.fit ?? null,
+  };
+}
 
 export function getAssessmentResultDataStatus(
   classroom: IClassroom,
@@ -129,23 +156,10 @@ async function participantDetailPayload(
     classroomId: bundle.classroom.classId,
     participantId: participant.participantId,
   }).select('images healing uploaderRole').lean().exec();
-  const healing = work?.healing;
-  const artworkAffect = resolveArtworkAffect(work ?? undefined);
   return {
     ...participantRow,
     instrumentVersions: splitInstrumentVersion(participant.instrumentVersion),
-    artworkEvaluation: {
-      status: healing?.status ?? 'none',
-      artworkAffect: artworkAffect.data ? { ...artworkAffect.data,
-        dimensions: Object.fromEntries(Object.entries(artworkAffect.data.dimensions)
-          .map(([key, value]) => [key, { ...value, evidence: [] }])),
-        vad: { ...artworkAffect.data.vad, evidence: [], interpretation: '' },
-      } : undefined,
-      researchEligible: artworkAffect.researchEligible,
-      exclusionReason: artworkAffect.exclusionReason,
-      selfReportComparison: buildArtworkSelfReportComparison(participant, work ?? undefined),
-      feedbackFit: participant.feedback?.fit ?? null,
-    },
+    artworkEvaluation: buildParticipantArtworkEvaluation(participant, work ?? undefined),
   };
 }
 

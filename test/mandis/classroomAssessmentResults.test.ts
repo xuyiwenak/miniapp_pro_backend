@@ -3,6 +3,7 @@ import { model } from 'mongoose';
 import * as XLSX from 'xlsx';
 import type { IClassroom } from '../../src/apps/mandis/entity/classroom.entity';
 import type { IClassroomParticipation } from '../../src/apps/mandis/entity/classroomParticipation.entity';
+import type { IWork } from '../../src/entity/work.entity';
 import { TeacherDataExportAuditSchema } from '../../src/apps/mandis/entity/teacherDataExportAudit.entity';
 import {
   buildClassroomAssessmentResult,
@@ -14,7 +15,10 @@ import {
   buildAssessmentWorkbook,
   sanitizeSpreadsheetCell,
 } from '../../src/apps/mandis/miniapp/services/classroomAssessmentExport';
-import { getAssessmentResultDataStatus } from '../../src/apps/mandis/miniapp/routes/teacherClassroomAssessmentResults';
+import {
+  buildParticipantArtworkEvaluation,
+  getAssessmentResultDataStatus,
+} from '../../src/apps/mandis/miniapp/routes/teacherClassroomAssessmentResults';
 
 const POSITIVE_CODES = [
   'PANAS_ALERT', 'PANAS_INSPIRED', 'PANAS_DETERMINED', 'PANAS_ATTENTIVE', 'PANAS_ACTIVE',
@@ -174,5 +178,35 @@ describe('classroom assessment results', () => {
     participant.profile = { gender: 'other' } as unknown as typeof participant.profile;
     const result = buildClassroomAssessmentResult([participant]);
     assert.equal(result.participants[0]?.gender, null);
+  });
+
+  it('returns the artwork preview and interpretation in participant details', () => {
+    const now = new Date('2026-08-31T08:00:00.000Z');
+    const work: IWork = {
+      workId: 'artwork-A234',
+      desc: '',
+      images: [{ url: 'https://example.com/artwork.jpg', name: 'artwork.jpg', type: 'image/jpeg' }],
+      tags: [],
+      status: 'published',
+      healing: {
+        scores: {},
+        status: 'success',
+        isPublic: false,
+        summary: '作品回响',
+        colorAnalysis: '颜色与线条观察',
+        compositionReport: '构图观察',
+        suggestion: '可尝试的方向',
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const evaluation = buildParticipantArtworkEvaluation(participation('A234', 2, 4), work);
+
+    assert.equal(evaluation.coverUrl, 'https://example.com/artwork.jpg');
+    assert.equal(evaluation.summary, '作品回响');
+    assert.equal(evaluation.colorAnalysis, '颜色与线条观察');
+    assert.equal(evaluation.compositionReport, '构图观察');
+    assert.equal(evaluation.suggestion, '可尝试的方向');
   });
 });
