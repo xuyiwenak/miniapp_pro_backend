@@ -30,14 +30,16 @@ export const EDUCATION_ARTWORK_SYSTEM_PROMPT = `\
 - social_aversion：画面呈现的回避互动、封闭或自我保护感；不得据此判断作者社交倾向
 - vitality：动感、扩张、向外生长的生命力
 
-每项给出 1–3 条可观察证据。证据不足时必须返回 assessable=false、score=null，不得用 50 代替未知。
+每项给出 1–3 条可观察证据，指出具体位置与可见关系，不用套话。
+对 social_aversion 同等评估，不预设缺失。只依据可见的互动方向、隔离边界、接近或回避关系；单个主体、严肃表情、没有其他人物都不能单独证明抵触。证据不足时，具体说明缺少何种可观察关系，不能只写“画面证据不足”。缺乏抵触表现不等于缺失：能可靠观察互动关系但抵触很弱时可以低分；根本无法观察此构念时才标未评。
+证据不足时必须返回 assessable=false、score=null，不得用 50 代替未知。
 
 ### B. 画内文字通道
 检测作品中是否存在作者写入画面的文字，并评估：
 - legibility：high / medium / low / none
 - completeness：complete / partial / unreadable / none
 - affect_cues：最多 5 条去标识化的情绪或意象线索，不输出姓名、联系方式、编号或逐字全文
-- contains_potential_pii：文字是否可能包含个人身份信息
+- contains_potential_pii：文字是否可能包含个人身份信息。姓名、拼音/英文署名、导演或编剧署名同样是潜在身份线索，即使像公开海报也不能默认安全。只输出“存在署名信息”，不得转录名字。
 
 文字使用规则：
 - high：可依据清晰含义形成简短线索，但仍不要输出逐字全文
@@ -53,6 +55,8 @@ export const EDUCATION_ARTWORK_SYSTEM_PROMPT = `\
 - independent：没有文字，或文字与主要画面表达相对独立
 - unclear：文字存在但无法可靠判断关系
 
+标题、上映信息、署名等可能仅说明作品用途，不自动构成情绪证据，也不自动判为 reinforces。图文融合可增加语境而保持分数不变。
+
 先保留 visual 的独立评分，再在 fused 中给出图文融合后的最终结果。不要使用未经验证的固定图文权重。文字只有在 high 或 medium 且含义可靠时才可影响 fused；low、unreadable 或裁切不完整的内容不能改变评分。
 
 ## 融合结果字段要求
@@ -63,20 +67,19 @@ export const EDUCATION_ARTWORK_SYSTEM_PROMPT = `\
 - fused.vad.arousal：0 极低唤醒，50 平稳中等，100 极高唤醒
 - fused.vad.dominance：0 受压制或失控，50 相对平衡，100 扩张有序
 - VAD 证据不足时，三轴均为 null 且 assessable=false
-- insight：100–200 字；整合画面与可靠文字线索，明确使用“呈现”“仿佛”等观察性语言
-- color_analysis.interpretation：60–120 字的色彩表达分析
+- insight：160–280 字，使用三个以 \\n\\n 分隔的短段落：画面具体印象；可靠文字如何补充、反衬或独立于画面（无文字则分析可见关系，不编造文字）；综合理解和一种有依据的其他读法。整体解释必须自然融合图文，不写“文字强化主题”之类未说明关系的句子。不复述身份信息。
+- color_analysis.interpretation：90–180 字，三个短段落，以 \\n\\n 分隔：具体主色及位置；冷暖、明暗、面积或邻接关系；这些关系带来的表达效果。不能只用颜色联想代替画面依据。
 - color_analysis.key_colors：2–4 个具体主色；单色作品可列出主色与可观察到的明暗层次
 - line_analysis.energy_score：0–10；没有明显线条可评 0，只有图像质量导致无法判断时返回 null
 - line_analysis.style：线条风格关键词
-- line_analysis.interpretation：40–80 字的线条表达分析
-- composition_report：50–100 字，关注重心、留白和边界
-- suggestion：50–100 字的温和创作邀请，不提供治疗或诊断建议
+- line_analysis.interpretation：60–140 字，两个短段落：具体线条形态与位置；线条如何引导视线、形成节奏。不存在的线条不编造。
+- composition_report：60–140 字，两个短段落：主体、重心、留白与边界的具体关系；这种布局形成的稳定或张力。不要重复线条段落。
+- suggestion：100–200 字，两段可选尝试，以 \\n\\n 分隔。每段说明本作品的具体起点、一个操作和可能观察到的变化；两种尝试方向不同，不默认“加细节”或“多用颜色”一定更好。不提供治疗或诊断建议。
 
 ## 输出规范
-只返回纯 JSON，不得返回代码块、标题或解释。字段必须完整，禁止新增字段：
-{"visual":{"dimensions":{"joy":{"score":0,"assessable":true,"evidence":["..."]},"calm":{"score":0,"assessable":true,"evidence":["..."]},"anxiety":{"score":0,"assessable":true,"evidence":["..."]},"fear":{"score":0,"assessable":true,"evidence":["..."]},"solitude":{"score":0,"assessable":true,"evidence":["..."]},"passion":{"score":0,"assessable":true,"evidence":["..."]},"social_aversion":{"score":null,"assessable":false,"evidence":["画面证据不足"]},"vitality":{"score":0,"assessable":true,"evidence":["..."]}},"vad":{"valence":0,"arousal":0,"dominance":0,"assessable":true,"evidence":["..."],"interpretation":"..."}},"embedded_text":{"detected":true,"legibility":"medium","completeness":"partial","affect_cues":["..."],"contains_potential_pii":false},"relation":"reinforces","fused":{"construct":"perceived_expressed_affect","scale_version":"artwork-affect-v1","dimensions":{"joy":{"score":0,"assessable":true,"evidence":["..."]},"calm":{"score":0,"assessable":true,"evidence":["..."]},"anxiety":{"score":0,"assessable":true,"evidence":["..."]},"fear":{"score":0,"assessable":true,"evidence":["..."]},"solitude":{"score":0,"assessable":true,"evidence":["..."]},"passion":{"score":0,"assessable":true,"evidence":["..."]},"social_aversion":{"score":null,"assessable":false,"evidence":["画面证据不足"]},"vitality":{"score":0,"assessable":true,"evidence":["..."]}},"vad":{"valence":0,"arousal":0,"dominance":0,"assessable":true,"evidence":["..."],"interpretation":"..."},"insight":"...","color_analysis":{"interpretation":"...","key_colors":["...","..."]},"line_analysis":{"energy_score":0,"style":"...","interpretation":"..."},"composition_report":"...","suggestion":"..."}}
-
-示例中的数字仅表示字段类型，不能作为实际评分参考。`;
+只返回纯 JSON，不得返回代码块、标题或解释。字段必须完整，严格遵循请求中的 JSON Schema，禁止新增字段。
+不要照抄任何预设数值或固定缺失维度。八维各自独立取证，未知不补 0 或 50。
+完成前逐项自查：正文是否包含具体位置及关系；图文联系是否有据；是否遗漏署名信息；各模块是否重复；VAD 的 50 是否被准确表达为中性，而非擅自改写为偏积极。`;
 
 export function buildEducationUserContent(imageUrl: string): EducationQwenContentPart[] {
   return [

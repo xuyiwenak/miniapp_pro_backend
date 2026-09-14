@@ -71,7 +71,7 @@ function RadarLabels({ dimensions }: { dimensions: ArtworkAffectRadarDimension[]
       <text key={dimension.code} x={point.x} y={point.y - 7} textAnchor={labelAnchor(point.x)}>
         <tspan className="artwork-affect-radar__label">{dimension.label}</tspan>
         <tspan className="artwork-affect-radar__score" x={point.x} dy="21">
-          {formatScore(dimension.score)}
+          {formatScore(isValid(dimension) ? dimension.score : null)}
         </tspan>
       </text>
     );
@@ -82,23 +82,28 @@ function RadarSeries({ dimensions, gradientId }: {
   dimensions: ArtworkAffectRadarDimension[];
   gradientId: string;
 }) {
-  const dataPoints = polygonPoints(
-    dimensions,
-    ({ score }) => scoreRatio(score),
-  );
-  return (
-    <>
-      <polygon
-        className="artwork-affect-radar__area"
-        points={dataPoints}
-        style={{ fill: `url(#${gradientId})` }}
-      />
-      {dimensions.map((dimension, index) => {
-        const point = pointAt(index, dimensions.length, CHART_RADIUS * scoreRatio(dimension.score));
-        return <circle key={dimension.code} cx={point.x} cy={point.y} r="4" />;
-      })}
-    </>
-  );
+  const points = dimensions.map((dimension, index) => isValid(dimension)
+    ? pointAt(index, dimensions.length, CHART_RADIUS * scoreRatio(dimension.score)) : null);
+  const complete = points.length >= 3 && points.every(Boolean);
+  return <>
+    {complete && <polygon className="artwork-affect-radar__area"
+      points={points.map((point) => `${point!.x},${point!.y}`).join(' ')}
+      style={{ fill: `url(#${gradientId})` }} />}
+    {points.map((point, index) => {
+      if (!point) return null;
+      const next = points[(index + 1) % points.length];
+      return <g key={dimensions[index].code}>
+        {next && <line className="artwork-affect-radar__segment"
+          x1={point.x} y1={point.y} x2={next.x} y2={next.y} />}
+        <circle cx={point.x} cy={point.y} r="4" />
+      </g>;
+    })}
+  </>;
+}
+
+function isValid(dimension: ArtworkAffectRadarDimension): boolean {
+  return dimension.assessable && dimension.score !== null && Number.isFinite(dimension.score)
+    && dimension.score >= 0 && dimension.score <= 100;
 }
 
 export function ArtworkAffectRadar({ dimensions }: { dimensions: ArtworkAffectRadarDimension[] }) {
@@ -107,7 +112,7 @@ export function ArtworkAffectRadar({ dimensions }: { dimensions: ArtworkAffectRa
   const descriptionId = `${instanceId}-description`;
   const gradientId = `${instanceId}-fill`;
   const hasCompleteSeries = dimensions.length >= 3
-    && dimensions.every(({ assessable, score }) => assessable && score !== null);
+    && dimensions.every(isValid);
 
   return (
     <div className="artwork-affect-radar">
@@ -127,11 +132,11 @@ export function ArtworkAffectRadar({ dimensions }: { dimensions: ArtworkAffectRa
           </linearGradient>
         </defs>
         <RadarGrid dimensions={dimensions} />
-        {hasCompleteSeries && <RadarSeries dimensions={dimensions} gradientId={gradientId} />}
+        <RadarSeries dimensions={dimensions} gradientId={gradientId} />
         <RadarLabels dimensions={dimensions} />
       </svg>
       {!hasCompleteSeries && (
-        <span className="artwork-affect-radar__empty">维度数据不足，暂不绘制数据轮廓</span>
+        <span className="artwork-affect-radar__empty">{dimensions.some(isValid) ? '已显示有效点位；缺失维度不连线、不补分' : '暂无可标注的维度'}</span>
       )}
     </div>
   );

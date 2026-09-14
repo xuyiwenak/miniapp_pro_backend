@@ -143,11 +143,11 @@ function PeerAiForm({ detail, zh, readOnly, busy, onSave }: {
   return <section id="ai-reflection-content">
     <p className="evaluation-progress"><CheckCircleOutlined /> {zh ? '独立评价已保存' : 'Independent response saved'}
       <span>{zh ? `已评价 ${completed} / ${modules.length}` : `${completed} / ${modules.length}`}</span></p>
-    <fieldset disabled={locked || busy} className="peer-ai-fields">
+    <div className="peer-ai-fields">
       <AiContent echo={detail.echo ?? null} zh={zh} waitExpired={false} failed={false} hasArtwork
-        evaluation={{ modules, responses, onChange: (code, responseCode) => setResponses({ ...responses,
+        evaluation={{ modules, responses, disabled: locked || busy, onChange: (code, responseCode) => setResponses({ ...responses,
           [code]: { responseCode, missingReason: null } }) }} />
-    </fieldset>
+    </div>
     <p role="status">{message || (detail.feedbackSubmittedAt ? (zh ? '评价已提交' : 'Review submitted') : '')}</p>
     {!readOnly && detail.feedbackSubmittedAt && !editing &&
       <button className="reflection-text-button" onClick={() => setEditing(true)}>

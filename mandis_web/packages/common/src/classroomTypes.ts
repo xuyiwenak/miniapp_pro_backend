@@ -63,13 +63,15 @@ export type AssessmentAnswers = {
 };
 
 export type EchoResult = {
+  layoutVersion?: string;
+  dimensions?: Record<string, { score: number | null; assessable: boolean; evidence: string[] }>;
   analysisRunId?: string;
   reportVersion?: string;
   modules?: ModuleCode[];
   lineAnalysis?: string;
   embeddedText?: string;
   emotionVad?: { valence: number | null; arousal: number | null; dominance: number | null;
-    assessable: boolean; interpretation: string };
+    assessable: boolean; interpretation: string; evidence?: string[] };
 
   status: 'none' | 'pending' | 'success' | 'failed';
   artworkStatus: string;

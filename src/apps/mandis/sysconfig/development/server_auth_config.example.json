@@ -41,6 +41,6 @@
     "reasoningEffort": "none",
     "temperature": 0,
     "seed": 20260904,
-    "maxCompletionTokens": 4096
+    "maxCompletionTokens": 8192
   }
 }

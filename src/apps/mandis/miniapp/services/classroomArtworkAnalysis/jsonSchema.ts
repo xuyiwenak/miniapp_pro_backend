@@ -5,6 +5,8 @@ import {
   EDUCATION_NOT_ARTWORK_ERROR_CODE,
 } from './contract';
 
+import { NARRATIVE_RULES } from './narrative';
+
 type JsonSchema = Record<string, unknown>;
 
 const STRING_SCHEMA = { type: 'string', minLength: 1 };
@@ -68,15 +70,21 @@ function embeddedTextSchema(): JsonSchema {
   });
 }
 
+function narrativeSchema(key: keyof typeof NARRATIVE_RULES): JsonSchema {
+  const rule = NARRATIVE_RULES[key];
+  return { type: 'string', minLength: rule.min,
+    description: `Write ${rule.paragraphs} distinct paragraphs separated by double newlines; ${rule.min}–${rule.max} characters.` };
+}
+
 function fusedSchema(): JsonSchema {
   return strictObject({
     construct: { type: 'string', const: EDUCATION_ARTWORK_CONSTRUCT },
     scale_version: { type: 'string', const: EDUCATION_ARTWORK_SCALE_VERSION },
     dimensions: affectDimensionsSchema(),
     vad: affectVadSchema(),
-    insight: STRING_SCHEMA,
+    insight: narrativeSchema('insight'),
     color_analysis: strictObject({
-      interpretation: STRING_SCHEMA,
+      interpretation: narrativeSchema('color'),
       key_colors: { type: 'array', items: STRING_SCHEMA, minItems: 2, maxItems: 4 },
     }),
     line_analysis: strictObject({
@@ -84,10 +92,10 @@ function fusedSchema(): JsonSchema {
         anyOf: [{ type: 'number', minimum: 0, maximum: 10 }, { type: 'null' }],
       },
       style: STRING_SCHEMA,
-      interpretation: STRING_SCHEMA,
+      interpretation: narrativeSchema('line'),
     }),
-    composition_report: STRING_SCHEMA,
-    suggestion: STRING_SCHEMA,
+    composition_report: narrativeSchema('composition'),
+    suggestion: narrativeSchema('suggestion'),
   });
 }
 

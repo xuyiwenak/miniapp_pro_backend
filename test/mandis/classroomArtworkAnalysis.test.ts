@@ -13,6 +13,9 @@ import {
   resolveEducationQwenConfig,
 } from '../../src/apps/mandis/miniapp/services/classroomArtworkAnalysis/qwenProvider';
 
+import { validateNarrativeQuality, NARRATIVE_RULES } from '../../src/apps/mandis/miniapp/services/classroomArtworkAnalysis/narrative';
+import { containsPotentialPii, redactPotentialPii } from '../../src/apps/mandis/miniapp/services/classroomArtworkAnalysis/redaction';
+
 const DIMENSION_CODES = [
   'joy', 'calm', 'anxiety', 'fear', 'solitude', 'passion', 'social_aversion', 'vitality',
 ];
@@ -104,7 +107,7 @@ describe('classroom artwork analysis', () => {
     assert.equal(payload.reasoning_effort, 'none');
     assert.equal(payload.temperature, 0);
     assert.equal(payload.seed, 20260904);
-    assert.equal(payload.max_completion_tokens, 4096);
+    assert.equal(payload.max_completion_tokens, 8192);
     const responseFormat = payload.response_format as Record<string, unknown>;
     assert.equal(responseFormat.type, 'json_schema');
     const jsonSchema = responseFormat.json_schema as Record<string, unknown>;
@@ -160,6 +163,11 @@ describe('classroom artwork analysis', () => {
     assert.equal(audit.contentHash, 'content-hash-1');
     assert.deepEqual(audit.embeddedText.affectCues, ['文字提到自由与不同，但部分内容被裁切']);
     assert.equal(Object.prototype.hasOwnProperty.call(audit.embeddedText, 'transcript'), false);
+    assert.ok(audit.reportJson);
+    const report = JSON.parse(audit.reportJson) as Record<string, unknown>;
+    assert.equal(Object.prototype.hasOwnProperty.call(report, 'emotionVad'), false);
+    assert.ok(audit.shownModules);
+    assert.equal(audit.shownModules.includes('emotionVad'), false);
   });
 
   it('redacts common contact details before compatible or audit persistence', () => {
@@ -179,5 +187,49 @@ describe('classroom artwork analysis', () => {
     assert.doesNotMatch(audit.embeddedText.affectCues.join(' '), /student@example\.com/);
     assert.deepEqual(audit.embeddedText.affectCues, []);
     assert.equal(audit.embeddedText.containsPotentialPii, true);
+  });
+});
+
+
+describe('classroom artwork report v2', () => {
+  it('keeps missing social evidence null and publishes all other scores with a fused report', () => {
+    const output = parseEducationArtworkAnalysisOutput(validAnalysis());
+    output.fused.dimensions.social_aversion = {
+      score: null, assessable: false, evidence: ['缺少可观察的互动方向与接近或回避关系'],
+    };
+    const audit = mapEducationAnalysisToAudit('a', 'w', 'c', 'p', undefined, 'test', new Date(), output);
+    const report = JSON.parse(audit.reportJson!);
+    assert.equal(report.layoutVersion, 'artwork-report-v2');
+    assert.equal(report.dimensions.social_aversion.score, null);
+    assert.equal(report.dimensions.joy.score, 32);
+    assert.equal(report.embeddedText, undefined);
+    assert.ok(audit.shownModules?.includes('affectDimensions'));
+    assert.ok(!audit.shownModules?.includes('embeddedText'));
+    assert.ok(audit.embeddedText.affectCues.length);
+  });
+
+  it('rejects short or repeated new narratives while accepting structured output', () => {
+    const output = parseEducationArtworkAnalysisOutput(validAnalysis());
+    assert.throws(() => validateNarrativeQuality(output), /NARRATIVE_STRUCTURE/);
+    const narrative = (key: keyof typeof NARRATIVE_RULES) => {
+      const rule = NARRATIVE_RULES[key];
+      return Array.from({ length: rule.paragraphs }, (_, index) =>
+        `${key}${index}：${'画面关系提供具体的视觉依据。'.repeat(5)}`).join('\n\n');
+    };
+    output.fused.insight = narrative('insight');
+    output.fused.color_analysis.interpretation = narrative('color');
+    output.fused.line_analysis.interpretation = narrative('line');
+    output.fused.composition_report = narrative('composition');
+    output.fused.suggestion = narrative('suggestion');
+    assert.doesNotThrow(() => validateNarrativeQuality(output));
+    output.fused.composition_report = output.fused.line_analysis.interpretation;
+    assert.throws(() => validateNarrativeQuality(output), /NARRATIVE_REPEATED/);
+  });
+
+  it('redacts labelled credits without treating generic credit descriptions as names', () => {
+    assert.equal(containsPotentialPii('导演署名为 Example Person，文字排列在上方。'), true);
+    assert.doesNotMatch(redactPotentialPii('导演署名为 Example Person。主体居中。'), /Example Person/);
+    assert.equal(containsPotentialPii('存在署名信息，标题与画面用途相关。'), false);
+    assert.equal(redactPotentialPii('存在署名信息，标题与画面用途相关。'), '存在署名信息，标题与画面用途相关。');
   });
 });

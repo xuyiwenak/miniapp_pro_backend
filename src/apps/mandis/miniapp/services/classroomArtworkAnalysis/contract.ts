@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const EDUCATION_ARTWORK_CONSTRUCT = 'perceived_expressed_affect' as const;
 export const EDUCATION_ARTWORK_SCALE_VERSION = 'artwork-affect-v1';
-export const EDUCATION_ARTWORK_PROMPT_VERSION = 'education-artwork-affect-prompt-v1';
+export const EDUCATION_ARTWORK_PROMPT_VERSION = 'education-artwork-affect-prompt-v2';
+export const EDUCATION_REPORT_LAYOUT_VERSION = 'artwork-report-v2';
 export const EDUCATION_NOT_ARTWORK_ERROR_CODE = 'NOT_ARTWORK';
 
 export const EDUCATION_ARTWORK_DIMENSIONS = [

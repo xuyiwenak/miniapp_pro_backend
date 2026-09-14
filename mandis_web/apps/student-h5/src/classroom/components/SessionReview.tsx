@@ -15,6 +15,8 @@ import {
   type SessionMeasure,
 } from '../sessionResults';
 
+import { ExpressionRadar } from './ExpressionCharts';
+
 const REVIEW_PAGE_COUNT = 4;
 
 type Props = {
@@ -123,6 +125,7 @@ function MeasuresPage({
 }
 
 type ModuleEvaluation = {
+  disabled?: boolean;
   modules: ModuleCode[];
   responses: EvaluationInput['moduleResponses'];
   onChange: (code: ModuleCode, responseCode: ModuleResponseCode) => void;
@@ -145,7 +148,7 @@ function InlineModuleEvaluation({ code, zh, evaluation }: {
   if (!evaluation?.modules.includes(code)) return null;
   const options = code === 'suggestion' ? HELPFUL_OPTIONS : MATCH_OPTIONS;
   const selected = evaluation.responses[code]?.responseCode;
-  return <fieldset className="module-evaluation" id={`module-evaluation-${code}`}>
+  return <fieldset disabled={evaluation.disabled} className="module-evaluation" id={`module-evaluation-${code}`}>
     <legend>{code === 'suggestion'
       ? (zh ? '这条建议有帮助吗？' : 'Was this suggestion helpful?')
       : (zh ? '这段解读符合吗？' : 'Does this interpretation fit?')}</legend>
@@ -165,6 +168,11 @@ function AiSection({ code, title, zh, evaluation, children }: {
   </section>;
 }
 
+function ReportParagraphs({ text }: { text?: string }) {
+  return <>{text?.split(/\n\s*\n/).filter(Boolean).map((part, index) =>
+    <p className="report-paragraph" key={index}>{part}</p>)}</>;
+}
+
 export function AiContent({ echo, zh, waitExpired, failed, hasArtwork, evaluation }: {
   echo: EchoResult | null;
   zh: boolean;
@@ -176,21 +184,19 @@ export function AiContent({ echo, zh, waitExpired, failed, hasArtwork, evaluatio
   if (echo?.status === 'success') return (
     <>
       {echo.summary && <AiSection code="overallExpression" title={zh ? '整体表达' : 'Overall expression'}
-        zh={zh} evaluation={evaluation}><p>{echo.summary}</p></AiSection>}
+        zh={zh} evaluation={evaluation}><ReportParagraphs text={echo.summary} /></AiSection>}
       {echo.colorAnalysis && <AiSection code="color" title={zh ? '色彩' : 'Colour'} zh={zh}
-        evaluation={evaluation}><p>{echo.colorAnalysis}</p></AiSection>}
+        evaluation={evaluation}><ReportParagraphs text={echo.colorAnalysis} /></AiSection>}
       {(echo.lineAnalysis || echo.compositionReport) && <AiSection code="lineComposition"
         title={zh ? '线条与构图' : 'Line and composition'} zh={zh} evaluation={evaluation}>
-        <p>{echo.lineAnalysis}</p><p>{echo.compositionReport}</p></AiSection>}
-      {echo.emotionVad?.assessable && <AiSection code="emotionVad" title={zh ? '情绪与 VAD' : 'Emotion and VAD'}
-        zh={zh} evaluation={evaluation}>
-        <p>{echo.emotionVad.interpretation}</p>
-        <p>V / A / D: {echo.emotionVad.valence} / {echo.emotionVad.arousal} / {echo.emotionVad.dominance} (0–100)</p>
-      </AiSection>}
-      {echo.embeddedText && <AiSection code="embeddedText" title={zh ? '画内文字' : 'Embedded text'} zh={zh}
+        <ReportParagraphs text={echo.lineAnalysis} /><ReportParagraphs text={echo.compositionReport} /></AiSection>}
+      {echo.layoutVersion === 'artwork-report-v2' && echo.dimensions &&
+        <AiSection code="affectDimensions" title={zh ? '八维情绪表达' : 'Eight expression dimensions'}
+          zh={zh} evaluation={evaluation}><ExpressionRadar dimensions={echo.dimensions} zh={zh} /></AiSection>}
+      {echo.layoutVersion !== 'artwork-report-v2' && echo.embeddedText && <AiSection code="embeddedText" title={zh ? '画内文字' : 'Embedded text'} zh={zh}
         evaluation={evaluation}><p>{echo.embeddedText}</p></AiSection>}
       {echo.suggestion && <AiSection code="suggestion" title={zh ? '可以试试' : 'You could try'} zh={zh}
-        evaluation={evaluation}><p>{echo.suggestion}</p></AiSection>}
+        evaluation={evaluation}><ReportParagraphs text={echo.suggestion} /></AiSection>}
     </>
   );
   if (!hasArtwork) return (

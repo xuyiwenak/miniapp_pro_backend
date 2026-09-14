@@ -8,7 +8,7 @@ export const EMOTION_CODES = [
   'joy', 'calm', 'anxiety', 'fear', 'solitude', 'passion', 'social_aversion', 'vitality', 'other',
 ] as const;
 export const MODULE_CODES = [
-  'overallExpression', 'emotionVad', 'color', 'lineComposition', 'embeddedText', 'suggestion',
+  'overallExpression', 'emotionVad', 'color', 'lineComposition', 'embeddedText', 'suggestion', 'affectDimensions',
 ] as const;
 export type ModuleCode = typeof MODULE_CODES[number];
 export interface IModuleResponse {

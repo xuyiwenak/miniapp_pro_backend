@@ -20,6 +20,11 @@ type GetParticipant = (req: Request) => Participant;
 type MapParticipant = (participant: IClassroomParticipation) => Record<string, unknown>;
 type WriteHandler = (handler: (req: Request, res: Response) => Promise<void>) => RequestHandler;
 const RECOVERY_BYTES = 32;
+const STUDENT_HIDDEN_MODULES = new Set<ModuleCode>(['emotionVad']);
+
+function studentReportModules(modules: ModuleCode[]): ModuleCode[] {
+  return modules.filter((moduleCode) => !STUDENT_HIDDEN_MODULES.has(moduleCode));
+}
 export function reflectionState(p: IClassroomParticipation): Record<string, unknown> {
   return { intention: p.intention, evaluation: p.evaluation, allowPrivateAi: p.allowPrivateAi,
     allowSensitiveText: p.allowSensitiveText, reportViewedAt: p.reportViewedAt };
@@ -42,7 +47,7 @@ async function reportFor(p: IClassroomParticipation) {
   const report = JSON.parse(run.reportJson) as Record<string, unknown>;
   return { ...base, ...report, coverUrl: resolveImageUrl(work.images[0]?.url ?? ''),
     analysisRunId: run.analysisId, reportVersion: run.analysisId,
-    modules: run.shownModules as ModuleCode[] };
+    modules: studentReportModules(run.shownModules as ModuleCode[]) };
 }
 async function saveIntention(req: Request, p: Participant, submit: boolean): Promise<void> {
   if (p.postAssessment.status !== 'submitted') throw new ClassroomWriteError('POST_ASSESSMENT_REQUIRED');

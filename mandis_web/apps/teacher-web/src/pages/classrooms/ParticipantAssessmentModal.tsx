@@ -129,6 +129,34 @@ function ArtworkAffectDimensionList({ dimensions }: { dimensions: ArtworkAffectV
   );
 }
 
+const ARTWORK_VAD_AXES = [
+  ['valence', '愉悦方向', '负向', '正向'],
+  ['arousal', '激活程度', '安静', '强烈'],
+  ['dominance', '掌控感', '受限', '有掌控感'],
+] as const;
+
+function ArtworkVadChart({ detail }: { detail: AssessmentParticipantDetail }) {
+  const vad = detail.artworkEvaluation.artworkAffect?.vad;
+  if (!vad?.assessable) return null;
+  return <section className="artwork-vad-chart">
+    <Text strong>VAD 作品表达 · 0–100</Text>
+    {ARTWORK_VAD_AXES.map(([code, label, low, high]) => {
+      const score = vad[code];
+      const valid = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100;
+      return <div key={code}>
+        <span>{label} · {valid ? score : '—'}</span>
+        <svg viewBox="0 0 320 28" role="img" aria-label={`${label} ${valid ? score : '未标注'} / 100`}>
+          <line x1="10" x2="310" y1="14" y2="14" stroke="#d6e6e1" strokeWidth="6" />
+          <line x1="160" x2="160" y1="8" y2="20" stroke="#7d9890" />
+          {valid && <circle cx={10 + score * 3} cy="14" r="6" fill="#267f7c" />}
+        </svg>
+        <small>0 · {low}<span>50</span><span>{high} · 100</span></small>
+      </div>;
+    })}
+    <p>{vad.interpretation}</p>
+  </section>;
+}
+
 function ArtworkAffectDetails({ detail }: { detail: AssessmentParticipantDetail }) {
   const evaluation = detail.artworkEvaluation;
   const affect = evaluation.artworkAffect;
@@ -152,6 +180,7 @@ function ArtworkAffectDetails({ detail }: { detail: AssessmentParticipantDetail 
         <ArtworkAffectRadar dimensions={dimensions} />
         <ArtworkAffectDimensionList dimensions={dimensions} />
       </div>
+      <ArtworkVadChart detail={detail} />
       <Text type="secondary">
         {affect.modelVersion} · {affect.promptVersion} · {affect.scaleVersion} · 来源 {affect.scoreSource}
       </Text>

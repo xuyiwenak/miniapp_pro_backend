@@ -5,6 +5,7 @@ import type {
 import {
   EDUCATION_ARTWORK_DIMENSIONS,
   EDUCATION_ARTWORK_PROMPT_VERSION,
+  EDUCATION_REPORT_LAYOUT_VERSION,
   type EducationArtworkAnalysisOutput,
   type EducationFusedArtworkAnalysis,
 } from './contract';
@@ -124,6 +125,13 @@ export function mapEducationAnalysisToHealingUpdate(
   return update;
 }
 
+function hasPotentialPii(value: unknown): boolean {
+  if (typeof value === 'string') return containsPotentialPii(value);
+  if (Array.isArray(value)) return value.some(hasPotentialPii);
+  if (value && typeof value === 'object') return Object.values(value).some(hasPotentialPii);
+  return false;
+}
+
 export function mapEducationAnalysisToAudit(
   analysisId: string,
   workId: string,
@@ -135,13 +143,13 @@ export function mapEducationAnalysisToAudit(
   analysis: EducationArtworkAnalysisOutput,
 ): NewClassroomArtworkAnalysis {
   const detectedPii = analysis.embedded_text.contains_potential_pii
-    || containsPotentialPii(JSON.stringify(analysis));
+    || Object.values(analysis).some(hasPotentialPii);
   const affectCues = detectedPii
     ? []
     : analysis.embedded_text.affect_cues.map(redactPotentialPii);
   const fused = sanitizeFused(analysis.fused);
   return {
-    ...reportSnapshot(fused, affectCues),
+    ...reportSnapshot(fused),
     analysisId, workId,
     classroomId,
     participantId,
@@ -165,13 +173,12 @@ export function mapEducationAnalysisToAudit(
   };
 }
 
-function reportSnapshot(fused: EducationFusedArtworkAnalysis, affectCues: string[]) {
+function reportSnapshot(fused: EducationFusedArtworkAnalysis) {
   return {
-    reportJson: JSON.stringify({ summary: fused.insight, colorAnalysis: fused.color_analysis.interpretation,
+    reportJson: JSON.stringify({ layoutVersion: EDUCATION_REPORT_LAYOUT_VERSION,
+      summary: fused.insight, colorAnalysis: fused.color_analysis.interpretation,
       compositionReport: fused.composition_report, lineAnalysis: fused.line_analysis.interpretation,
-      suggestion: fused.suggestion, emotionVad: fused.vad, dimensions: fused.dimensions,
-      embeddedText: affectCues.join('；') }),
-    shownModules: ['overallExpression', 'color', 'lineComposition', 'suggestion',
-      ...(fused.vad.assessable ? ['emotionVad'] : []), ...(affectCues.length ? ['embeddedText'] : [])],
+      suggestion: fused.suggestion, dimensions: fused.dimensions }),
+    shownModules: ['overallExpression', 'color', 'lineComposition', 'affectDimensions', 'suggestion'],
   };
 }

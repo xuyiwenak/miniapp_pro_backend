@@ -58,6 +58,16 @@ describe('classroom reflection validation', () => {
       assert.equal(IntentionSubmitInput.safeParse({ ...INTENTION, ...patch }).success, false);
     }
   });
+  it('requires the new radar response only for reports that actually show it', () => {
+    const input = EvaluationSubmitInput.parse(EVALUATION);
+    assert.equal(normalizeModuleResponses(input, ['color'], true).affectDimensions?.missingReason, 'not_shown');
+    assert.throws(() => normalizeModuleResponses(input, ['color', 'affectDimensions'], true), /MODULE_RESPONSE_REQUIRED/);
+    const complete = EvaluationSubmitInput.parse({ ...EVALUATION, moduleResponses: {
+      ...EVALUATION.moduleResponses, affectDimensions: { responseCode: 'partly_matches', missingReason: null },
+    } });
+    assert.equal(normalizeModuleResponses(complete, ['color', 'affectDimensions'], true)
+      .affectDimensions?.responseCode, 'partly_matches');
+  });
   it('requires explicit three-way responses for every displayed module', () => {
     assert.equal(EvaluationSubmitInput.safeParse(EVALUATION).success, true);
     assert.equal(EvaluationSubmitInput.safeParse({ ...EVALUATION, feedbackDiscomfort: 8 }).success, false);
@@ -140,7 +150,8 @@ describe('classroom reflection HTTP gates and persistence', () => {
       updateMany: () => query(() => ({ modifiedCount: 0 })) };
     sinon.stub(db, 'getWorkModel').returns(workModel as unknown as ReturnType<typeof db.getWorkModel>);
     const analysisModel = { findOne: () => query(() => reportExists ? {
-      analysisId: RUN_ID, reportJson: JSON.stringify({ summary: 'Private AI report' }), shownModules: ['color'],
+      analysisId: RUN_ID, reportJson: JSON.stringify({ summary: 'Private AI report' }),
+      shownModules: ['color', 'emotionVad'],
     } : null), updateMany: () => query(() => ({ modifiedCount: 0 })) };
     sinon.stub(db, 'getClassroomArtworkAnalysisModel')
       .returns(analysisModel as unknown as ReturnType<typeof db.getClassroomArtworkAnalysisModel>);
@@ -169,7 +180,9 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal(stored.intention?.revision, 1);
     assert.equal((await request('/intention/submit', { ...INTENTION, expressionConfidence: 7 }, key)).status, 409);
     assert.equal((await request('/feedback', EVALUATION)).status, 409);
-    assert.equal((await request('/echo')).body.data?.summary, 'Private AI report');
+    const report = await request('/echo');
+    assert.equal(report.body.data?.summary, 'Private AI report');
+    assert.deepEqual(report.body.data?.modules, ['color']);
     assert.ok(stored.reportReturnedAt);
     await request('/echo/viewed', { analysisRunId: RUN_ID });
     assert.equal((await request('/feedback', { ...EVALUATION, moduleResponses: {} })).status, 409);

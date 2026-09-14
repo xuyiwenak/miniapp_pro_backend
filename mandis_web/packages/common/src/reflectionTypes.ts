@@ -14,6 +14,7 @@ export const MODULE_LABELS = {
   overallExpression: ['整体表达', 'Overall expression'], emotionVad: ['情绪与 VAD', 'Emotion and VAD'],
   color: ['色彩', 'Colour'], lineComposition: ['线条与构图', 'Line and composition'],
   embeddedText: ['画内文字', 'Embedded text'], suggestion: ['创作建议', 'Suggestions'],
+  affectDimensions: ['八维情绪表达', 'Eight expression dimensions'],
 } as const;
 export type ModuleCode = keyof typeof MODULE_LABELS;
 export type ModuleResponseCode =

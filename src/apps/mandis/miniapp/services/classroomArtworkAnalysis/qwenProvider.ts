@@ -10,6 +10,7 @@ import {
 } from './contract';
 import { EDUCATION_ARTWORK_RESPONSE_FORMAT } from './jsonSchema';
 import { buildEducationUserContent, EDUCATION_ARTWORK_SYSTEM_PROMPT } from './prompt';
+import { validateNarrativeQuality } from './narrative';
 
 export interface EducationQwenConfig {
   apiKey: string;
@@ -43,7 +44,7 @@ type EducationQwenHttpResponse = {
 const DEFAULT_MODEL = 'qwen3.8-flash';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
-const DEFAULT_MAX_COMPLETION_TOKENS = 4096;
+const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 const DEFAULT_STABILITY_SEED = 20260904;
 const DEFAULT_TEMPERATURE = 0;
 const DEFAULT_REASONING_EFFORT = 'none';
@@ -82,6 +83,7 @@ export function getEducationQwenConfig(): EducationQwenConfig {
 export function buildEducationQwenPostData(
   config: EducationQwenConfig,
   imageUrl: string,
+  repairCode?: string,
 ): Buffer {
   return Buffer.from(JSON.stringify({
     model: config.model ?? DEFAULT_MODEL,
@@ -93,6 +95,7 @@ export function buildEducationQwenPostData(
     messages: [
       { role: 'system', content: EDUCATION_ARTWORK_SYSTEM_PROMPT },
       { role: 'user', content: buildEducationUserContent(imageUrl) },
+      ...(repairCode ? [{ role: 'user', content: `上次输出未通过结构检查（${repairCode}）。请重新观察图片，按各字段字数及段落要求输出完整 JSON；不要用重复句子凑字数。` }] : []),
     ],
   }));
 }
@@ -181,10 +184,29 @@ function validatedProviderOutput(response: EducationQwenHttpResponse) {
     const parsed = parseDashScopeResponse(response);
     const content = parsed.choices?.[0]?.message?.content;
     if (!content) throw new Error('EMPTY_OUTPUT');
-    return { parsed, content, output: parseAnalysisContent(content) };
+    const output = parseAnalysisContent(content);
+    validateNarrativeQuality(output);
+    return { parsed, content, output };
   } catch (error) {
-    const code = error instanceof ClassroomNotArtworkError ? 'NOT_ARTWORK' : 'PROVIDER_OR_PARSE_FAILURE';
+    let code = 'PROVIDER_OR_PARSE_FAILURE';
+    if (error instanceof ClassroomNotArtworkError) code = 'NOT_ARTWORK';
+    if (error instanceof Error && error.message.startsWith('NARRATIVE_')) code = error.message;
     throw new EducationProviderOutputError(response.body, code);
+  }
+}
+
+async function requestValidatedAnalysis(config: EducationQwenConfig, imageUrl: string, baseUrl: string) {
+  const url = new URL(`${baseUrl}/chat/completions`);
+  const response = await sendEducationQwenRequest(config, buildEducationQwenPostData(config, imageUrl), url);
+  try {
+    return { ...validatedProviderOutput(response), repairCode: undefined as string | undefined };
+  } catch (error) {
+    if (!(error instanceof EducationProviderOutputError) || !error.failureCode.startsWith('NARRATIVE_')) throw error;
+    logger.info('education.qwen.narrative.retry', { failureCode: error.failureCode });
+    const repaired = await sendEducationQwenRequest(
+      config, buildEducationQwenPostData(config, imageUrl, error.failureCode), url,
+    );
+    return { ...validatedProviderOutput(repaired), repairCode: error.failureCode };
   }
 }
 
@@ -196,12 +218,7 @@ export async function analyzeClassroomArtworkImage(
   const model = config.model ?? DEFAULT_MODEL;
   const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
   const startedAt = Date.now();
-  const response = await sendEducationQwenRequest(
-    config,
-    buildEducationQwenPostData(config, imageUrl),
-    new URL(`${baseUrl}/chat/completions`),
-  );
-  const { parsed, content, output } = validatedProviderOutput(response);
+  const { parsed, content, output, repairCode } = await requestValidatedAnalysis(config, imageUrl, baseUrl);
   logger.info('education.qwen.analyze.success', {
     workId,
     model,
@@ -210,7 +227,10 @@ export async function analyzeClassroomArtworkImage(
     totalTokens: parsed.usage?.total_tokens ?? 0,
     durationMs: Date.now() - startedAt,
   });
-  const request = JSON.parse(buildEducationQwenPostData(config, imageUrl).toString()) as Record<string, unknown>;
+  const request = JSON.parse(
+    buildEducationQwenPostData(config, imageUrl, repairCode).toString(),
+  ) as Record<string, unknown>;
   const { messages: _messages, ...parameters } = request;
-  return { output, modelVersion: model, rawOutput: content, samplingParametersJson: JSON.stringify(parameters) };
+  return { output, modelVersion: model, rawOutput: content,
+    samplingParametersJson: JSON.stringify({ ...parameters, narrativeRepairCode: repairCode ?? null }) };
 }

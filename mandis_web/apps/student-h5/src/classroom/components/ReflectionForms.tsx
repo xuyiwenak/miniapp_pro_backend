@@ -23,6 +23,16 @@ function hasCurrentResponse(input: EvaluationInput, code: ModuleCode): boolean {
   return Boolean(response && (code === 'suggestion' ? SUGGESTION_RESPONSES : MATCH_RESPONSES).includes(response));
 }
 
+function currentEvaluationInput(input: EvaluationInput, shownModules: ModuleCode[]): EvaluationInput {
+  return {
+    ...input,
+    moduleResponses: Object.fromEntries(shownModules.flatMap((code) => {
+      const response = input.moduleResponses[code];
+      return response ? [[code, response]] : [];
+    })),
+  };
+}
+
 export function EvaluationForm({ locale, echo, saved, cacheKey, onSave }: {
   locale: Locale; echo: EchoResult; saved?: EvaluationRecord; cacheKey: string;
   onSave: (input: EvaluationInput, submit: boolean) => Promise<void>;
@@ -34,9 +44,9 @@ export function EvaluationForm({ locale, echo, saved, cacheKey, onSave }: {
     feedbackOverallHelpful: saved?.feedbackOverallHelpful, feedbackReflectionHelp: saved?.feedbackReflectionHelp,
     feedbackDiscomfort: saved?.feedbackDiscomfort,
   });
-  const [incompleteMessage, setIncompleteMessage] = useState('');
-  const { message, saving, save } = useSaveDraft(zh, input, onSave);
   const shownModules = echo.modules ?? [];
+  const [incompleteMessage, setIncompleteMessage] = useState('');
+  const { message, saving, save } = useSaveDraft(zh, currentEvaluationInput(input, shownModules), onSave);
   const answeredCount = shownModules.filter((code) => hasCurrentResponse(input, code)).length;
 
   function updateModule(code: ModuleCode, responseCode: ModuleResponseCode): void {
@@ -64,7 +74,7 @@ export function EvaluationForm({ locale, echo, saved, cacheKey, onSave }: {
 
   return <div className="evaluation-flow">
     <AiContent echo={echo} zh={zh} waitExpired={false} failed={false} hasArtwork
-      evaluation={{ modules: shownModules, responses: input.moduleResponses, onChange: updateModule }} />
+      evaluation={{ disabled: saving, modules: shownModules, responses: input.moduleResponses, onChange: updateModule }} />
     <p className="module-evaluation-progress" aria-live="polite">
       {zh ? `已评价 ${answeredCount} / ${shownModules.length}` : `${answeredCount} of ${shownModules.length} reviewed`}
     </p>
