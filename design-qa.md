@@ -1,46 +1,44 @@
-# Teacher Classroom Dashboard Design QA
-
-## Comparison setup
-
-- Source of truth: `/var/folders/0p/xyl5b0nd2r9c3plc3609wp0h0000gn/T/codex-clipboard-d25f4711-7b4b-4137-9f7a-125029ad2ca3.png`
-- Implementation screenshot: `/tmp/teacher-dashboard-reference-final.png`
-- Full side-by-side comparison: `/tmp/teacher-dashboard-comparison-full.png`
-- Header and overview comparison: `/tmp/teacher-dashboard-comparison-top.png`
-- Assessment and status comparison: `/tmp/teacher-dashboard-comparison-bottom.png`
-- Viewport: `1484 × 1060` CSS pixels
-- State: classroom `closing`, one completed participant, one teacher-upload-pending artwork
-
-## Visual review
-
-| Surface | Result | Notes |
-| --- | --- | --- |
-| Overall composition | Pass | Sidebar, header, overview, metrics, assessment matrix, and bottom cards follow the reference hierarchy. |
-| Typography | Pass | System Chinese font stack, title scale, table hierarchy, and numeric emphasis visually match the source. |
-| Spacing and sizing | Pass | Desktop canvas has no horizontal overflow; card rhythm and content density match the reference. |
-| Color and borders | Pass | Teal primary, orange warning, pale sidebar selection, neutral borders, and restrained shadows match the source. |
-| Icons and imagery | Pass | The live classroom QR is retained; Ant Design outline icons are used as the closest installed equivalents for the reference pictograms. |
-| Copy and data state | Pass | Status, seven-stage flow, measurement progress, artwork status, and completeness labels match the requested Chinese UI. |
-| Interaction | Pass | Refresh and existing dashboard actions remain available; the sidebar collapse/expand interaction works. |
-| Responsive behavior | Pass | At 390 px, the page itself does not overflow horizontally; dense progress content scrolls inside its card. |
-| Accessibility | Pass | Controls keep accessible names and keyboard focus styling; status is conveyed with text and icons, not color alone. |
-
-## Iteration history
-
-- Pass 1 — P2: the title was undersized because of Ant Design selector specificity. Fixed with a scoped heading rule.
-- Pass 1 — P2: dashboard sections lacked the source's vertical rhythm under the `Spin` wrapper. Fixed by applying the layout grid to the rendered spin container.
-- Pass 1 — P2: pre- and post-assessment data shared one header and read as a single table. Fixed by rendering two independent matrix rows matching the source.
-- Pass 2 — P3: the source uses bespoke human pictograms and a graduation-cap brand icon. The implementation uses the closest Ant Design icons to remain consistent with the existing dependency set.
-- Intentional product difference: the approved `测评结果` action remains in the header, so teachers do not lose access to the existing results feature.
-
-## Engineering verification
-
-- Desktop dimensions: `scrollWidth 1484`, `clientWidth 1484`
-- Mobile dimensions: `scrollWidth 375`, `clientWidth 375`
-- Sidebar collapsed grid: `72px 1412px`
-- Browser console errors: none
-- Frontend workspace production build: passed
-- Backend TypeScript check and ESLint: passed
-- Classroom assessment and teacher ownership tests: 7 passed
-- Git whitespace check: passed
+# 课堂作品廊视觉验收
 
 final result: passed
+
+## 视觉基准与证据
+
+- 原稿：`mandis_web/apps/student-h5/preview/approved-design.png`，1536 × 1024 四屏概念稿。
+- 实现：`http://127.0.0.1:5173/classroom/gallery-preview.html`，使用正式页面组件及开发演示接口。
+- 手机视口：390 × 844 CSS px；浏览器截图输出 375 × 812 px，比较图按 390 px 宽归一化。
+- 全图合并比对：`design-evidence/gallery/comparison.png`。上部为原稿，下部为已加载列表、已完成 AI 反馈、
+  教师代传方式。概念稿单屏约 360 px 宽；判断布局时按单屏宽度对齐，而非整块画布字号比较。
+- 原始页面截图：`design-evidence/gallery/gallery-list.png`、`ai-feedback.png`、`teacher-upload.png`。
+- 状态差异明确保留：原稿为部分评价、已选图片；实测为已完成评价、未选择自传图并切到代传。
+  演示图片用仓库样例照片；正式页面图片来自当前课堂，未把概念稿山水画硬编码到产品中。
+
+## 比较及修复历史
+
+1. 第一轮发现 AI 页仍用大图，正文被明显推后；修复为 76 px 缩略图与放大入口。
+2. 第一轮发现作品列表缺少“我的作品”描边、上传方式仍为旧分散操作；增加描边及等宽方式切换。
+3. 第二轮发现返回列表残留“已提交”消息，AI 模块顶部间距偏大；清理跨页面消息，收紧正文间距，
+   将完成进度置于浅薄荷底。再次截图，结果见 comparison.png。
+4. 图片尚未完成加载时的中间截图未用作最终验收；最终列表截图已确认六幅图片载入。
+
+## 视觉结论
+
+- 颜色：复用现有粉蓝紫水彩背景与品牌标志，奶油卡片，明亮青绿操作色，薄荷底选中态。
+- 排版：中文使用项目现有字体；画廊标题与模块标题为清晰无衬线，保留原上传页书写体及课程进度。
+- 布局：两列作品、三列情绪、三个等宽模块选项；390 px 视口无横向溢出，底部课堂导航保持可见。
+- 素材：品牌与水彩直接复用项目资源；VAD 使用已有量尺图片，情绪使用现有图标库。
+- 文案：不出现“无法判断”；已完成模块显示选中状态；作品的 VAD 明确区别于自己的当前心情。
+- 无未处理的 P0/P1/P2 视觉问题。具体课堂图片与文字长度会改变页面总高度，允许纵向滚动。
+
+## 交互检查
+
+已操作：打开作品、选择情绪、三项 VAD、信心、提交独立评价、解锁 AI、逐模块三选项、统一提交、
+返回已评价状态、修订入口、自传/代传切换。未评价作品无 AI 内容。浏览器错误日志为空。
+按钮和选项使用原生可聚焦控件，选择同时以图标和文字表示，不只依赖颜色。
+
+## 后续细节及测试范围
+
+- P3：既有上传页保留课程总进度与书写体标题；没有为贴合概念稿重做整个课堂框架。
+- 情绪图卡保留既有九项词表，概念稿六项仅示意；没有擅自缩减研究选项。
+- 这是学生端视觉及开发交互验收。真实 OSS、DashScope、MongoDB 与教师完整浏览器流程另需联调；
+  本报告不把本地演示操作算作线上验证。

@@ -41,6 +41,7 @@ import {
 } from './ClassroomAssessmentResults';
 import { TeacherArtworkUpload } from './TeacherArtworkUpload';
 import { ClassroomCollaborators } from './ClassroomCollaborators';
+import { ClassroomGalleryPanel } from './ClassroomGalleryPanel';
 
 const { Text, Title } = Typography;
 const POLL_INTERVAL_MS = 5000;
@@ -586,6 +587,7 @@ export function ClassroomDashboard({ classroom, teacherId, onEdit, onChanged }: 
           onActionsChange={setResultsActions}
         />
       )}
+      {canUpload && <ClassroomGalleryPanel classId={classroom.classId} readOnly={effectiveStatus === 'closed'} />}
       <TeacherArtworkUpload
         classId={classroom.classId}
         open={uploadOpen}

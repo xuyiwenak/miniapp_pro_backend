@@ -8,11 +8,16 @@ import { ActivityStep } from './classroom/components/ActivityStep';
 import { ArtworkStep } from './classroom/components/ArtworkStep';
 import { EchoStep } from './classroom/components/EchoStep';
 import { useClassroomFlow } from './classroom/useClassroomFlow';
+import { HomeOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { ClassroomGallery } from './classroom/components/ClassroomGallery';
+import { GallerySharing } from './classroom/components/GallerySharing';
+import './classroom/gallery.css';
 
 export function ClassroomPage() {
   const { accessCode = '' } = useParams();
   const flow = useClassroomFlow(accessCode);
   const [revisitingArtwork, setRevisitingArtwork] = useState(false);
+  const [view, setView] = useState<'classroom' | 'gallery'>('classroom');
   const zh = flow.locale === 'zh-CN';
 
   if (flow.loading) return <div className="classroom-loading">{zh ? '正在读取课堂…' : 'Loading classroom…'}</div>;
@@ -83,6 +88,7 @@ export function ClassroomPage() {
         saving={flow.saving}
         classroomCode={revisitingArtwork ? undefined : flow.teacherUploadConfirmation?.classroomCode}
         revisiting={revisitingArtwork}
+        sharing={<GallerySharing token={flow.token} locale={flow.locale} />}
         onUpload={async (dataUrl) => {
           await flow.uploadArtwork(dataUrl);
           setRevisitingArtwork(false);
@@ -133,7 +139,14 @@ export function ClassroomPage() {
           {flow.error}
         </p>
       )}
-      {content}
+      {view === 'gallery' && flow.participation?.consented
+        ? <ClassroomGallery token={flow.token} locale={flow.locale} /> : content}
+      {flow.participation?.consented && <nav className="gallery-navigation" aria-label={zh ? '课堂导航' : 'Classroom navigation'}>
+        <button aria-current={view === 'classroom' ? 'page' : undefined} onClick={() => setView('classroom')}>
+          <HomeOutlined /><span>{zh ? '我的课堂' : 'My classroom'}</span></button>
+        <button aria-current={view === 'gallery' ? 'page' : undefined} onClick={() => setView('gallery')}>
+          <AppstoreOutlined /><span>{zh ? '课堂作品' : 'Classroom artworks'}</span></button>
+      </nav>}
     </ClassroomShell>
   );
 }

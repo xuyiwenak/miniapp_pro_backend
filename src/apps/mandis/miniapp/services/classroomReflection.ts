@@ -8,22 +8,18 @@ import {
 } from '../../entity/classroomReflection.entity';
 import { ClassroomWriteError } from './classroomWriteBoundary';
 
-const VAD_MAX = 9;
 const LIKERT_MAX = 7;
 const MAX_EMOTIONS = 3;
 const MAX_INTENTION_LENGTH = 200;
 const MAX_COMMENT_LENGTH = 300;
 const MAX_OTHER_LENGTH = 50;
 const LikertSchema = z.number().int().min(1).max(LIKERT_MAX);
-const VadSchema = z.number().int().min(1).max(VAD_MAX);
 export const IntentionDraftInput = z.object({
-  intendedValence: VadSchema.optional(), intendedArousal: VadSchema.optional(),
-  intendedDominance: VadSchema.optional(), intendedEmotions: z.array(z.enum(EMOTION_CODES)).max(MAX_EMOTIONS),
+  intendedEmotions: z.array(z.enum(EMOTION_CODES)).max(MAX_EMOTIONS),
   otherEmotion: z.string().trim().max(MAX_OTHER_LENGTH).optional(),
   expressionConfidence: LikertSchema.optional(), intentionText: z.string().trim().max(MAX_INTENTION_LENGTH).optional(),
 }).strict();
 export const IntentionSubmitInput = IntentionDraftInput.extend({
-  intendedValence: VadSchema, intendedArousal: VadSchema, intendedDominance: VadSchema,
   expressionConfidence: LikertSchema,
   intendedEmotions: z.array(z.enum(EMOTION_CODES)).min(1).max(MAX_EMOTIONS),
 }).superRefine((value, ctx) => {

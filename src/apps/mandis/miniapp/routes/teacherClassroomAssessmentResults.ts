@@ -8,6 +8,7 @@ import {
   getClassroomArtworkAnalysisModel,
   getTeacherDataExportAuditModel,
   getWorkModel,
+  getGalleryWorkModel, getPeerReviewModel,
 } from '../../../../dbservice/model/GlobalInfoDBModel';
 import { sendErr, sendSucc } from '../../../../shared/miniapp/middleware/response';
 import type { IWork } from '../../../../entity/work.entity';
@@ -265,8 +266,13 @@ router.get('/export', asyncClassroomRoute(async (req, res) => {
   const analyses = await getClassroomArtworkAnalysisModel().find({ classroomId: bundle.classroom.classId })
     .sort({ submittedAt: 1, analysisId: 1 }).lean().exec();
   const format = parsed.data.format;
+  const items = await getGalleryWorkModel().find({ classId: bundle.classroom.classId })
+    .sort({ galleryId: 1 }).lean().exec();
+  const reviews = await getPeerReviewModel().find({ classId: bundle.classroom.classId })
+    .sort({ assignmentId: 1 }).lean().exec();
   const buffer = format === 'xlsx'
-    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result, bundle.works, analyses, sensitive)
+    ? buildAssessmentWorkbook(bundle.classroom, bundle.participants, bundle.result, bundle.works, analyses,
+      sensitive, { items, reviews })
     : buildAssessmentCsv(bundle.result, bundle.participants);
   await saveExportAudit(bundle, teacherId, format, buffer, sensitive);
   const metadata = exportMetadata(format);

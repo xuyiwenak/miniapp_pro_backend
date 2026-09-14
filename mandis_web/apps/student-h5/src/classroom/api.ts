@@ -22,7 +22,7 @@ async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   }
 }
 
-async function classroomRequest<T>(
+export async function classroomRequest<T>(
   path: string,
   options: RequestInit = {},
   resumeToken?: string,

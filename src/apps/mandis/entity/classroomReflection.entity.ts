@@ -1,7 +1,7 @@
 import { Schema } from 'mongoose';
 
 export const REFLECTION_VERSION = 'ai-feedback-evaluation-v3';
-export const INTENTION_VERSION = 'artwork-intention-v1';
+export const INTENTION_VERSION = 'artwork-intention-v2-emotions';
 export const EMOTION_VERSION = 'artwork-emotion-taxonomy-v1-draft';
 export const MODULE_VERSION = 'module-click-v2';
 export const EMOTION_CODES = [

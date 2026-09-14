@@ -35,6 +35,8 @@ export function reflectionWideRow(p: IClassroomParticipation, sensitive = false)
     participantStudyId: studyId(p), classroomCode: p.classroomCode, workId: p.artworkId ?? null,
     contentHash: intention?.contentHash ?? p.intention?.contentHash ?? null,
     intentionStatus: intention?.status ?? 'not_started', intentionVersion: intention?.instrumentVersion ?? null,
+    intentionVadCollection: intention?.instrumentVersion === 'artwork-intention-v2-emotions'
+      ? 'not_collected_by_instrument' : 'instrument_version_dependent',
     emotionTaxonomyVersion: intention?.emotionTaxonomyVersion ?? null,
     intendedValence: intention?.intendedValence ?? null, intendedArousal: intention?.intendedArousal ?? null,
     intendedDominance: intention?.intendedDominance ?? null,

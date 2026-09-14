@@ -318,3 +318,4 @@ export type AssessmentParticipantPage = {
   pageSize: number;
   dataStatus: 'provisional' | 'final';
 };
+export * from './galleryTypes';

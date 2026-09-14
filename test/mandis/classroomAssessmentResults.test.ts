@@ -158,6 +158,7 @@ describe('classroom assessment results', () => {
     assert.deepEqual(workbook.SheetNames, [
       'manifest', 'summary', 'participant_wide', 'responses_long', 'artwork_affect',
       'affect_associations', 'reflections', 'module_responses', 'consent_events', 'ai_runs', 'data_dictionary',
+      'gallery_versions', 'peer_independent', 'peer_ai_feedback', 'gallery_consent',
     ]);
     assert.equal(sanitizeSpreadsheetCell('+formula'), "'+formula");
     assert.doesNotMatch(buildAssessmentCsv(result).toString('utf8'), /unsafe|uploadReason/);

@@ -3,6 +3,7 @@ import { resolveImageUrl } from '../../../../util/imageUploader';
 import { withClassroomWrite, assertClassroomWritable, ClassroomWriteError, asyncClassroomRoute } from '../services/classroomWriteBoundary';
 import { finalizeClassroomIfExpired } from '../services/classroomLifecycle';
 import { registerReflectionRoutes, reflectionState } from './classroomReflection';
+import { registerGalleryRoutes } from './classroomGallery';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { HydratedDocument } from 'mongoose';
 import { z } from 'zod';
@@ -592,6 +593,7 @@ router.get('/artwork/status', asyncClassroomRoute(async (req: ParticipationReque
 }));
 
 registerReflectionRoutes(router, getParticipation, mapParticipationState, participationWrite);
+registerGalleryRoutes(router, getParticipation, participationWrite);
 
 router.post('/complete', participationWrite(async (req: ParticipationRequest, res) => {
   sendSucc(res, mapParticipationState(getParticipation(req)));

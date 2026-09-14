@@ -4,10 +4,10 @@ export const EMOTION_OPTIONS = [
   ['social_aversion', '回避互动／封闭感', 'Withdrawal'], ['vitality', '活力', 'Vitality'], ['other', '其他', 'Other'],
 ] as const;
 export type IntentionInput = {
-  intendedValence?: number; intendedArousal?: number; intendedDominance?: number;
   intendedEmotions: string[]; otherEmotion?: string; expressionConfidence?: number; intentionText?: string;
 };
 export type IntentionRecord = IntentionInput & {
+  instrumentVersion?: string;
   status: 'draft' | 'submitted'; revision: number; firstSubmittedAt?: string;
 };
 export const MODULE_LABELS = {

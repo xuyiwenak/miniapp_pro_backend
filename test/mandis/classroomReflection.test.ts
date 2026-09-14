@@ -22,8 +22,7 @@ import router from '../../src/apps/mandis/miniapp/routes/classroomParticipation'
 
 const TOKEN = 'a'.repeat(43);
 const RUN_ID = randomUUID();
-const INTENTION = { intendedValence: 5, intendedArousal: 4, intendedDominance: 6,
-  intendedEmotions: ['calm'], expressionConfidence: 6, intentionText: 'private intention' };
+const INTENTION = { intendedEmotions: ['calm'], expressionConfidence: 6, intentionText: 'private intention' };
 const EVALUATION = { analysisRunId: RUN_ID, reportVersion: RUN_ID, feedbackOverallHelpful: 6,
   feedbackReflectionHelp: 5, feedbackDiscomfort: 1,
   moduleResponses: { color: { responseCode: 'strongly_matches', missingReason: null } },
@@ -52,7 +51,7 @@ describe('classroom reflection validation', () => {
     assert.equal(hasClassroomCapability(c, 'colleague', 'sensitiveExport'), false);
     assert.equal(hasClassroomCapability(c, 'stranger', 'summary'), false);
   });
-  it('requires complete integer VAD, unique emotions and other text', () => {
+  it('collects emotions without a second VAD and requires unique emotions and other text', () => {
     assert.equal(IntentionSubmitInput.safeParse(INTENTION).success, true);
     for (const patch of [{ intendedValence: 0 }, { intendedArousal: 2.5 },
       { intendedEmotions: ['calm', 'calm'] }, { intendedEmotions: ['other'] }]) {
@@ -168,7 +167,7 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal((await request('/intention/submit', INTENTION, key)).status, 200);
     assert.equal((await request('/intention/submit', INTENTION, key)).status, 200);
     assert.equal(stored.intention?.revision, 1);
-    assert.equal((await request('/intention/submit', { ...INTENTION, intendedValence: 7 }, key)).status, 409);
+    assert.equal((await request('/intention/submit', { ...INTENTION, expressionConfidence: 7 }, key)).status, 409);
     assert.equal((await request('/feedback', EVALUATION)).status, 409);
     assert.equal((await request('/echo')).body.data?.summary, 'Private AI report');
     assert.ok(stored.reportReturnedAt);
@@ -176,12 +175,12 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal((await request('/feedback', { ...EVALUATION, moduleResponses: {} })).status, 409);
     assert.equal((await request('/feedback', EVALUATION)).status, 200);
     assert.equal(stored.researchRecordComplete, true);
-    await request('/intention/submit', { ...INTENTION, intendedValence: 8 });
-    assert.equal(stored.intentionHistory[0].intendedValence, 5);
+    await request('/intention/submit', { ...INTENTION, expressionConfidence: 5 });
+    assert.equal(stored.intentionHistory[0].expressionConfidence, 6);
     assert.equal(stored.intention?.postExposureRevision, true);
     await request('/intention/submit', INTENTION, key);
     assert.equal(stored.intention?.revision, 2);
-    assert.equal(stored.intention?.intendedValence, 8);
+    assert.equal(stored.intention?.expressionConfidence, 5);
     assert.equal(reflectionWideRow(stored).intentionText, null);
     assert.equal(reflectionWideRow(stored, true).overallComment, null);
   });
@@ -193,6 +192,28 @@ describe('classroom reflection HTTP gates and persistence', () => {
     assert.equal((await request('/complete', {})).status, 409);
     assert.equal((await request('/echo')).status, 409);
     assert.equal(stored.lastActiveAt.getTime(), before);
+  });
+  it('blocks gallery sharing and both review stages after sealing without creating tasks', async () => {
+    stored.consentedAt = new Date();
+    classroom.status = 'closed';
+    const before = JSON.stringify(stored);
+    const create = sinon.spy();
+    sinon.stub(db, 'getPeerReviewModel').returns({ create } as unknown as ReturnType<typeof db.getPeerReviewModel>);
+    for (const path of ['/gallery/sharing', '/gallery/work/independent', '/gallery/work/feedback']) {
+      assert.equal((await request(path, { sharing: true })).status, 409);
+    }
+    assert.equal(create.callCount, 0);
+    assert.equal(JSON.stringify(stored), before);
+  });
+  it('rejects malformed gallery answers before creating or consenting to a task', async () => {
+    stored.consentedAt = new Date();
+    const create = sinon.spy();
+    sinon.stub(db, 'getPeerReviewModel').returns({ create } as unknown as ReturnType<typeof db.getPeerReviewModel>);
+    assert.equal((await request('/gallery/work/independent', {
+      submit: true, consent: true, answers: { emotions: ['calm'] },
+    })).status, 400);
+    assert.equal(create.callCount, 0);
+    assert.equal(stored.peerConsentAt, undefined);
   });
   it('returns an authorised report after sealing without adding exposure events', async () => {
     await request('/intention/submit', INTENTION);

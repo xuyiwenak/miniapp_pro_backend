@@ -41,8 +41,10 @@ import {
 import { startClassroomArtworkAnalysis } from '../services/classroomArtworkAnalysis/service';
 import teacherClassroomAssessmentResultsRouter from './teacherClassroomAssessmentResults';
 import teacherClassroomCorrectionsRouter from './teacherClassroomCorrections';
+import teacherClassroomGalleryRouter from './teacherClassroomGallery';
 
 const router = Router();
+router.use(teacherClassroomGalleryRouter);
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
 const MAX_GRACE_PERIOD_MINUTES = 180;
 const MAX_CODE_ATTEMPTS = 12;

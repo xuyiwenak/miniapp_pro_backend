@@ -38,6 +38,9 @@ import {
   type IClassroomArtworkAnalysis,
 } from '../../apps/mandis/entity/classroomArtworkAnalysis.entity';
 
+import { GalleryWorkSchema, PeerReviewSchema, type IGalleryWork, type IPeerReview }
+  from '../../apps/mandis/entity/classroomGallery.entity';
+
 class GlobalModelManager {
   private connection: Connection;
   private workModel!: Model<IWork>;
@@ -47,6 +50,8 @@ class GlobalModelManager {
   private userTipsModel!: Model<IUserTips>;
   private emailTemplateConfigModel!: Model<IEmailTemplateConfig>;
   private classroomModel!: Model<IClassroom>;
+  public galleryWorkModel!: Model<IGalleryWork>;
+  public peerReviewModel!: Model<IPeerReview>;
   private classroomParticipationModel!: Model<IClassroomParticipation>;
   private teacherProfileModel!: Model<ITeacherProfile>;
   private teacherDataExportAuditModel!: Model<ITeacherDataExportAudit>;
@@ -59,6 +64,7 @@ class GlobalModelManager {
   }
 
   private registerModels() {
+    this.registerGalleryModels();
     this.workModel = this.connection.model<IWork>('Work', WorkSchema);
     this.workModel.createIndexes().catch(() => {});
 
@@ -110,6 +116,13 @@ class GlobalModelManager {
       ClassroomArtworkAnalysisSchema,
     );
     this.classroomArtworkAnalysisModel.createIndexes().catch(() => {});
+  }
+
+  private registerGalleryModels(): void {
+    this.galleryWorkModel = this.connection.model<IGalleryWork>('GalleryWork', GalleryWorkSchema);
+    this.peerReviewModel = this.connection.model<IPeerReview>('PeerReview', PeerReviewSchema);
+    this.galleryWorkModel.createIndexes().catch(() => {});
+    this.peerReviewModel.createIndexes().catch(() => {});
   }
 
   public getWorkModel(): Model<IWork> {
@@ -210,6 +223,9 @@ export function getEmailTemplateConfigModel(): Model<IEmailTemplateConfig> {
 export function getClassroomModel(): Model<IClassroom> {
   return getGlobalModelManager().getClassroomModel();
 }
+
+export const getGalleryWorkModel = (): Model<IGalleryWork> => getGlobalModelManager().galleryWorkModel;
+export const getPeerReviewModel = (): Model<IPeerReview> => getGlobalModelManager().peerReviewModel;
 
 export function getClassroomParticipationModel(): Model<IClassroomParticipation> {
   return getGlobalModelManager().getClassroomParticipationModel();

@@ -6,6 +6,7 @@ import { SessionReview, AiContent } from './SessionReview';
 import { UpOutlined, DownOutlined, BookOutlined, RightOutlined, CopyOutlined } from '@ant-design/icons';
 import { EvaluationForm } from './ReflectionForms';
 import { IntentionForm } from './IntentionWizard';
+import { EMOTION_OPTIONS } from '@mandis/common/classroom-types';
 
 const POLL_INTERVAL_MS = 5000;
 type Props = {
@@ -143,8 +144,8 @@ function SavedIntention({ state }: { state: StepState }) {
   const { participation, zh, readOnly, setRevising } = state;
   return <>
       {participation.intention && <details><summary>{zh ? '我的表达意图' : 'My intention'}</summary>
-        <p>VAD: {participation.intention.intendedValence ?? '—'} / {participation.intention.intendedArousal ?? '—'}
-          / {participation.intention.intendedDominance ?? '—'}</p>
+        <p>{participation.intention.intendedEmotions.map((code) =>
+          EMOTION_OPTIONS.find(([value]) => value === code)?.[zh ? 1 : 2] ?? code).join(' · ')}</p>
         <p>{participation.intention.intentionText}</p>
         {!readOnly && <button type="button" onClick={() => setRevising(true)}>
           {zh ? '修改表达意图' : 'Edit intention'}</button>}

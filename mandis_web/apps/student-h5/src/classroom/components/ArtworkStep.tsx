@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { Locale } from '@mandis/common/classroom-types';
 import { CourseProgress } from './CourseProgress';
 
@@ -11,6 +11,7 @@ type Props = {
   saving: boolean;
   classroomCode?: string;
   revisiting?: boolean;
+  sharing?: ReactNode;
   onUpload: (dataUrl: string) => Promise<void>;
   onTeacherUpload: () => Promise<void>;
   onConfirmTeacherUpload: () => void;
@@ -31,6 +32,7 @@ export function ArtworkStep({
   saving,
   classroomCode,
   revisiting = false,
+  sharing,
   onUpload,
   onTeacherUpload,
   onConfirmTeacherUpload,
@@ -41,6 +43,7 @@ export function ArtworkStep({
   const albumInputRef = useRef<HTMLInputElement>(null);
   const [dataUrl, setDataUrl] = useState('');
   const [error, setError] = useState('');
+  const [uploadMode, setUploadMode] = useState<'self' | 'teacher'>(classroomCode ? 'teacher' : 'self');
 
   useEffect(
     () => () => {
@@ -98,7 +101,7 @@ export function ArtworkStep({
               ? '补充你的课堂作品'
               : 'Add your classroom artwork'
             : zh
-            ? '记录你的课堂作品'
+            ? '上传我的作品'
             : 'Capture your classroom artwork'}
         </h1>
         <p>
@@ -125,7 +128,13 @@ export function ArtworkStep({
           accept={IMAGE_ACCEPT}
           onChange={handleFileChange}
         />
-        <div className="artwork-picker">
+        {!revisiting && <div className="artwork-upload-modes" role="group" aria-label={zh ? '上传方式' : 'Upload method'}>
+          <button aria-pressed={uploadMode === 'self'} disabled={saving} onClick={() => setUploadMode('self')}>
+            {zh ? '自己上传' : 'Upload myself'}</button>
+          <button aria-pressed={uploadMode === 'teacher'} disabled={saving} onClick={() => setUploadMode('teacher')}>
+            {zh ? '请老师代传' : 'Ask my teacher'}</button>
+        </div>}
+        {uploadMode === 'self' && <><div className="artwork-picker">
           {dataUrl ? (
             <img src={dataUrl} alt={zh ? '作品预览' : 'Artwork preview'} />
           ) : (
@@ -152,13 +161,14 @@ export function ArtworkStep({
           >
             {zh ? '从相册选择' : 'Choose from library'}
           </button>
-        </div>
+        </div></>}
+        {sharing}
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
         )}
-        {dataUrl && (
+        {dataUrl && uploadMode === 'self' && (
           <button
             className="classroom-primary"
             type="button"
@@ -167,14 +177,14 @@ export function ArtworkStep({
               void upload();
             }}
           >
-            {zh ? '确认上传' : 'Upload artwork'}
+            {zh ? '保存作品，继续' : 'Save artwork and continue'}
           </button>
         )}
         {revisiting ? (
           <button className="classroom-secondary revisit-artwork-back" type="button" onClick={onCancel}>
             {zh ? '暂不上传，返回作品回响' : 'Not now, return to reflection'}
           </button>
-        ) : classroomCode ? (
+        ) : uploadMode !== 'teacher' ? null : classroomCode ? (
           <div className="pending-artwork teacher-upload-confirmation">
             <h2>{zh ? '请记录匿名课堂编号' : 'Save your anonymous classroom code'}</h2>
             <strong>{classroomCode}</strong>

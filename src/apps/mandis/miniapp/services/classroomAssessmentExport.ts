@@ -1,4 +1,6 @@
 import { reflectionWideRow, moduleExportRows, consentExportRows, studyId } from './classroomReflectionExport';
+import { galleryExportRows } from './classroomGalleryExport';
+import type { IGalleryWork, IPeerReview } from '../../entity/classroomGallery.entity';
 import type { IClassroomArtworkAnalysis } from '../../entity/classroomArtworkAnalysis.entity';
 import * as XLSX from 'xlsx';
 import type { IWork } from '../../../../entity/work.entity';
@@ -176,6 +178,12 @@ function dictionaryRows(): ExportRow[] {
     { field: 'feedbackReflectionHelp', definition: '反思帮助，1–7；独立报告，不合成总分' },
     { field: 'feedbackDiscomfort', definition: '不适，1–7；独立报告，不自动解释为风险' },
     { field: 'moduleResponses', definition: '已展示模块三分类回应；未答与未展示分开保存，不换算评分' },
+    { field: 'intentionVadCollection', definition: '意图 v2 不采集 VAD，标记未采集而非学生漏答；T0/T1 不变' },
+    { field: 'peer_independent.valence/arousal/dominance', definition: '旁观者对作品的独立 VAD 1–9，不是个人 T1' },
+    { field: 'peer_independent.confidence', definition: '对独立作品判断的信心 1–7' },
+    { field: 'peer_independent.eligibility', definition: '独立提交、未完成、撤回/不可用/替换排除分别记录' },
+    { field: 'gallery_versions.displayedImageHash', definition: '人和 AI 使用的同一去标识图片哈希' },
+    { field: 'peer_ai_feedback.responseCode', definition: '旁观者主观符合度三分类；与作者体验分开，不称客观准确率' },
     { field: 'missingReasons', definition: '未完成环节列表；不以0填补，文本默认排除' },
     { field: 'classroomCode', definition: '仅在本课堂有效的匿名参与编号' },
     { field: 'valence', definition: 'SAM 愉悦度，1–9' },
@@ -208,6 +216,7 @@ export function buildAssessmentWorkbook(
   works: IWork[] = [],
   analyses: IClassroomArtworkAnalysis[] = [],
   sensitive = false,
+  gallery: { items: IGalleryWork[]; reviews: IPeerReview[] } = { items: [], reviews: [] },
 ): Buffer {
   const workbook = XLSX.utils.book_new();
   appendSheet(workbook, 'manifest', manifestRows(classroom, result));
@@ -221,6 +230,10 @@ export function buildAssessmentWorkbook(
   appendSheet(workbook, 'consent_events', consentExportRows(participants));
   appendSheet(workbook, 'ai_runs', analysisRows(analyses, participants));
   appendSheet(workbook, 'data_dictionary', dictionaryRows());
+  const galleryRows = galleryExportRows(gallery.items, gallery.reviews, participants, works);
+  for (const [name, rows] of Object.entries(galleryRows)) {
+    appendSheet(workbook, name, rows);
+  }
   return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 }
 

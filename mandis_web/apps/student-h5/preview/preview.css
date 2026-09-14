@@ -1,0 +1,2 @@
+/* Match a 390 CSS-pixel mobile viewport inside the local desktop preview. */
+#root { max-width: 390px; margin: auto; }

@@ -89,6 +89,11 @@ export interface IClassroomParticipation {
   evaluationHistory: IFeedbackEvaluation[];
   consentEvents: IConsentEvent[];
   allowPrivateAi: boolean;
+  gallerySharing?: boolean;
+  galleryConsentAt?: Date;
+  galleryConsentVersion?: string;
+  peerConsentAt?: Date;
+  galleryConsentEvents?: Array<{ sharing: boolean; at: Date; version: string; requestKey: string }>;
   allowSensitiveText: boolean;
   reportReturnedAt?: Date;
   returnedAnalysisRunId?: string;
@@ -222,6 +227,12 @@ export const ClassroomParticipationSchema = new Schema<IClassroomParticipation>(
     evaluationHistory: { type: [FeedbackEvaluationSchema], default: [] },
     consentEvents: { type: [ConsentEventSchema], default: [] },
     allowPrivateAi: { type: Boolean, default: false },
+    gallerySharing: { type: Boolean, default: false },
+    galleryConsentAt: Date,
+    galleryConsentVersion: String,
+    peerConsentAt: Date,
+    galleryConsentEvents: { type: [new Schema({ sharing: Boolean, at: Date, version: String,
+      requestKey: String }, { _id: false })], default: [] },
     allowSensitiveText: { type: Boolean, default: false },
     reportReturnedAt: Date,
     returnedAnalysisRunId: String,
