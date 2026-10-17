@@ -26,7 +26,7 @@ export function createArtworkStorage(config: SmartCourseConfig): ArtworkStorage 
       throw new SmartCourseError(503, 'STORAGE_NOT_CONFIGURED', '作品上传暂未配置，请联系教师');
     }
     return { region, bucket, accessKeyId, accessKeySecret,
-      worksObjectPrefix: 'smartCourse/artworks', avatarObjectPrefix: 'smartCourse/avatars' };
+      worksObjectPrefix: config.SMARTCOURSE_OSS_WORKS_PREFIX, avatarObjectPrefix: 'smart/user_upload/avatars' };
   }
   return {
     async upload(buffer, courseId, participantId) {

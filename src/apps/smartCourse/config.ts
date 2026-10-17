@@ -17,6 +17,9 @@ const EnvironmentSchema = z.object({
   SMARTCOURSE_OSS_BUCKET: z.string().optional(),
   SMARTCOURSE_OSS_ACCESS_KEY_ID: z.string().optional(),
   SMARTCOURSE_OSS_ACCESS_KEY_SECRET: z.string().optional(),
+  // All smartCourse uploads stay within the product's OSS namespace.
+  SMARTCOURSE_OSS_WORKS_PREFIX: z.string().regex(/^smart\/[a-zA-Z0-9_/-]+[^/]$/)
+    .default('smart/user_upload/works'),
 });
 export type SmartCourseConfig = ReturnType<typeof loadConfig>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {

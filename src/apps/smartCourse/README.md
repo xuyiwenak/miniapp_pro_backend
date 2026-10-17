@@ -34,7 +34,7 @@
 
 正式运行：`npm run build` 后以 `GAME_TYPE=smartCourse ENV=production node dist/apps/smartCourse/front.js` 启动。
 前端构建：在 mandis_web 执行 `npm run build:smartCourse`，产物位于 `apps/smart-course-web/dist`。
-已补齐 Compose、Nginx 与智能发布脚本；尚未执行线上发布。
+基础版本已上线，教师建课、学生加入与完成状态保存已通过公网验收。百炼与 OSS 需继续真实联调。
 
 ## 正式域名与 Docker 部署
 
@@ -102,7 +102,7 @@ Redis 使用 `smartCourse:` 前缀，新数据库独立于 Mandis。课程和作
 - `contextText` 由本课说明与当前参与者同一作品的最近 6 个成功回合生成。切换作品不沿用旧作品的视觉描述；
   不附图时只带无图回合。服务端只查询当前课程+参与者；不使用 provider session_id 或全局记忆。
 - OSS 上传先解码、纠正方向、缩放、重新编码以去除 EXIF，再以私有对象保存。
-  图片放在 `smartCourse/artworks/{courseId}/{participantId}`，每次调用临时签名 15 分钟；模型超时 90 秒。
+  图片放在 `smart/user_upload/works/{courseId}/{participantId}`，每次调用临时签名 15 分钟；模型超时 90 秒。
   确认 OSS 图片可从百炼地域读取。签名过期后刷新页面重新获取。
 - 非流式读取 `output.text`；只展示文本。**当前发布应用输出文本，不擅自假设结构化 JSON 已启用。**
   不传递 reasoningContent、内部节点调试结果、密钥。文本由 React 转义，无 HTML 注入或原样 Markdown 渲染。
@@ -121,3 +121,10 @@ Redis 使用 `smartCourse:` 前缀，新数据库独立于 Mandis。课程和作
 - mandis_web 中 `npm run build` 验证原有三端与新端。
 - 真实百炼/OSS 联调仍需有效凭据：至少测试无图、有效图、不可读图、图后无图、双学生隔离、断网重发。
 - 上线前配置独立 Mongo/Redis 权限、服务端密钥、同源反代、有效 HTTPS Origin；不能把本地回环地址二维码发给学生。
+
+## OSS 目录约定
+
+复用 Mandis 的 Bucket、地域及服务端凭据，分别注入 SMARTCOURSE_OSS_* 环境变量，
+不加载 Mandis 业务模块。当前 Bucket 为 image-miniapp001，地域为 oss-cn-wulanchabu。
+作品前缀由 SMARTCOURSE_OSS_WORKS_PREFIX 配置，默认 smart/user_upload/works；
+课程和参与者仍使用各自 ID 分目录。作品保持私有，签名访问，不更改 Bucket 的公共权限。
