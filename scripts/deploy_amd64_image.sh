@@ -80,7 +80,7 @@ prepareRemoteImage() {
 restartServices() {
   local imageReference="$1"
   ssh "$DEPLOY_HOST" \
-    "cd '$DEPLOY_PATH' && git pull --ff-only origin '$DEPLOY_BRANCH' && test \"\$(git rev-parse HEAD)\" = '$releaseCommit' && ART_BACKEND_IMAGE='$imageReference' docker compose up -d --no-build begreat_app mandis_app && docker compose ps begreat_app mandis_app"
+    "cd '$DEPLOY_PATH' && git pull --ff-only origin '$DEPLOY_BRANCH' && test \"\$(git rev-parse HEAD)\" = '$releaseCommit' && ART_BACKEND_IMAGE='$imageReference' docker compose up -d --no-build --wait --wait-timeout 150 begreat_app mandis_app smartcourse_app && docker compose ps begreat_app mandis_app smartcourse_app"
 }
 
 main() {
@@ -89,6 +89,7 @@ main() {
   requireCommand git
   requireCommand ssh
   ensureCleanWorkingTree
+  "$(dirname "${BASH_SOURCE[0]}")/check_smartcourse_deploy.sh"
   prepareReleaseBuildContext
   trap cleanupBuildContext EXIT
 

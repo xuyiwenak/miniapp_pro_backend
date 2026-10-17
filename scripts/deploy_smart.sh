@@ -12,6 +12,7 @@ executeDeployment=false
 backendImageChanged=false
 begreatConfigChanged=false
 mandisConfigChanged=false
+smartCourseConfigChanged=false
 nginxChanged=false
 composeChanged=false
 hostFilesChanged=false
@@ -64,6 +65,7 @@ addAllFrontends() {
   addFrontendTarget 'creator-web'
   addFrontendTarget 'student-h5'
   addFrontendTarget 'teacher-web'
+  addFrontendTarget 'smart-course-web'
 }
 
 collectChangedFiles() {
@@ -87,7 +89,11 @@ classifyFile() {
     mandis_web/apps/creator-web/*) addFrontendTarget 'creator-web' ;;
     mandis_web/apps/student-h5/*) addFrontendTarget 'student-h5' ;;
     mandis_web/apps/teacher-web/*) addFrontendTarget 'teacher-web' ;;
+    mandis_web/apps/smart-course-web/*) addFrontendTarget 'smart-course-web' ;;
+    mandis_web/packages/education-ui/*)
+      addFrontendTarget 'student-h5'; addFrontendTarget 'teacher-web'; addFrontendTarget 'smart-course-web' ;;
     mandis_web/packages/common/*|mandis_web/package.json|mandis_web/package-lock.json) addAllFrontends ;;
+    src/apps/smartCourse/sysconfig/*) smartCourseConfigChanged=true ;;
     src/apps/begreat/sysconfig/*) begreatConfigChanged=true ;;
     src/apps/mandis/sysconfig/*) mandisConfigChanged=true ;;
     src/*|tpl/*|package.json|package-lock.json|Dockerfile|.dockerignore) backendImageChanged=true ;;
@@ -108,7 +114,7 @@ classifyChanges() {
 
 needsServerSync() {
   [[ "$backendImageChanged" == true || "$begreatConfigChanged" == true ||
-    "$mandisConfigChanged" == true || "$nginxChanged" == true ||
+    "$mandisConfigChanged" == true || "$smartCourseConfigChanged" == true || "$nginxChanged" == true ||
     "$composeChanged" == true || "$hostFilesChanged" == true ]]
 }
 
@@ -124,6 +130,7 @@ printPlan() {
   [[ "$backendImageChanged" == true ]] && printf '%s\n' '  [后端镜像] 构建、传输并重启应用容器'
   [[ "$begreatConfigChanged" == true ]] && printf '%s\n' '  [配置] 同步 Git 并重启 begreat_app'
   [[ "$mandisConfigChanged" == true ]] && printf '%s\n' '  [配置] 同步 Git 并重启 mandis_app'
+  [[ "$smartCourseConfigChanged" == true ]] && printf '%s\n' '  [配置] 同步 Git 并重启 smartcourse_app'
   [[ "$nginxChanged" == true ]] && printf '%s\n' '  [Nginx] 同步 Git、检查配置并 reload'
   [[ "$composeChanged" == true ]] && printf '%s\n' '  [Compose] 同步 Git并按现有后端镜像更新服务'
   [[ "$hostFilesChanged" == true ]] && printf '%s\n' '  [宿主机文件] 仅同步 Git，bind mount 自动生效'
@@ -146,7 +153,7 @@ releaseAndSyncServer() {
 applyComposeChanges() {
   local remoteCommand="cd '$DEPLOY_PATH' && "
   remoteCommand+="currentImage=\$(docker inspect -f '{{.Config.Image}}' miniapp-mandis) && "
-  remoteCommand+='ART_BACKEND_IMAGE="$currentImage" docker compose up -d --no-build'
+  remoteCommand+='ART_BACKEND_IMAGE="$currentImage" docker compose up -d --no-build --wait --wait-timeout 150'
   ssh "$DEPLOY_HOST" "$remoteCommand"
 }
 
@@ -163,6 +170,9 @@ applyServerChanges() {
   if [[ "$backendImageChanged" != true && "$mandisConfigChanged" == true ]]; then
     ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && docker compose restart mandis_app"
   fi
+  if [[ "$backendImageChanged" != true && "$smartCourseConfigChanged" == true ]]; then
+    ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && docker compose restart smartcourse_app"
+  fi
   if [[ "$nginxChanged" == true ]]; then
     ssh "$DEPLOY_HOST" "docker exec miniapp-nginx nginx -t && docker exec miniapp-nginx nginx -s reload"
   fi
@@ -172,13 +182,19 @@ executePlan() {
   local target
   if needsServerSync; then
     ensureCleanWorkingTree
+    "$REPO_ROOT/scripts/check_smartcourse_deploy.sh"
   fi
   if [[ ${#frontendTargets[@]} -gt 0 ]]; then
     for target in "${frontendTargets[@]}"; do
-      "$REPO_ROOT/scripts/deploy_web.sh" "$target"
+      "$REPO_ROOT/scripts/deploy_web.sh" "$target" --stage-only
     done
   fi
   applyServerChanges
+  if [[ ${#frontendTargets[@]} -gt 0 ]]; then
+    for target in "${frontendTargets[@]}"; do
+      "$REPO_ROOT/scripts/deploy_web.sh" "$target" --verify-only
+    done
+  fi
 }
 
 main() {

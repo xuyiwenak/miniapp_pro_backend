@@ -11,12 +11,18 @@ case "$APP_NAME" in
     readonly APP_DIR_NAME='student-h5' REMOTE_DIR_NAME='student_h5_dist' DEPLOY_PATH='/classroom/' ;;
   teacher-web)
     readonly APP_DIR_NAME='teacher-web' REMOTE_DIR_NAME='teacher_web_dist' DEPLOY_PATH='/teacher/' ;;
-  *) printf '用法：deploy_web.sh creator-web|student-h5|teacher-web\n' >&2; exit 1 ;;
+  smart-course-web)
+    readonly APP_DIR_NAME='smart-course-web' REMOTE_DIR_NAME='smartcourse_web_dist' DEPLOY_PATH='/smartcourse/' ;;
+  *) printf '用法：deploy_web.sh creator-web|student-h5|teacher-web|smart-course-web\n' >&2; exit 1 ;;
 esac
 readonly ART_WEB_DIR="${MANDIS_WEB_DIR:-${BACKEND_DIR}/mandis_web/apps/${APP_DIR_NAME}}"
 readonly DEPLOY_HOST="${MANDIS_WEB_DEPLOY_HOST:-bn}"
 readonly REMOTE_DIST_DIR="${MANDIS_WEB_REMOTE_DIST_DIR:-/root/workspace/miniapp_pro_backend/${REMOTE_DIR_NAME}}"
-readonly DEPLOY_URL="${MANDIS_WEB_DEPLOY_URL:-https://www.starryspark.com.cn${DEPLOY_PATH}}"
+defaultOrigin='https://www.starryspark.com.cn'
+[[ "$APP_NAME" == 'smart-course-web' ]] && defaultOrigin='https://smart.starryspark.com.cn'
+readonly DEPLOY_MODE="${2:-}"
+[[ -z "$DEPLOY_MODE" || "$DEPLOY_MODE" == '--stage-only' || "$DEPLOY_MODE" == '--verify-only' ]] || exit 1
+readonly DEPLOY_URL="${MANDIS_WEB_DEPLOY_URL:-${defaultOrigin}${DEPLOY_PATH}}"
 
 logStep() {
   local stepName="$1"
@@ -49,13 +55,13 @@ buildFrontend() {
 }
 
 uploadStaticAssets() {
-  logStep '3/5 上传 Mandis 网页端静态资源'
+  logStep '3/5 上传 网页端静态资源'
   ssh "$DEPLOY_HOST" "mkdir -p '$REMOTE_DIST_DIR'"
   rsync -az --exclude 'index.html' "$ART_WEB_DIR/dist/" "$DEPLOY_HOST:$REMOTE_DIST_DIR/"
 }
 
 publishIndex() {
-  logStep '4/5 原子发布 Mandis 网页端入口'
+  logStep '4/5 原子发布 网页端入口'
   rsync -az "$ART_WEB_DIR/dist/index.html" "$DEPLOY_HOST:$REMOTE_DIST_DIR/.index.html.next"
   ssh "$DEPLOY_HOST" \
     "mv '$REMOTE_DIST_DIR/.index.html.next' '$REMOTE_DIST_DIR/index.html'"
@@ -65,24 +71,32 @@ verifyDeployment() {
   local localHash
   local remoteHash
 
-  logStep '5/5 验证 Mandis 网页端'
+  logStep '5/5 验证 网页端'
   localHash="$(shasum -a 256 "$ART_WEB_DIR/dist/index.html" | awk '{print $1}')"
   remoteHash="$(ssh "$DEPLOY_HOST" "sha256sum '$REMOTE_DIST_DIR/index.html'" | awk '{print $1}')"
   if [[ "$localHash" != "$remoteHash" ]]; then
-    printf '错误：Mandis 网页端线上入口与本地构建结果不一致。\n' >&2
+    printf '错误：网页端线上入口与本地构建结果不一致。\n' >&2
     exit 1
   fi
   curl --fail --silent --show-error --location --output /dev/null "$DEPLOY_URL"
+  local assetPath
+  while IFS= read -r assetPath; do
+    curl --fail --silent --show-error --output /dev/null "${DEPLOY_URL%${DEPLOY_PATH}}${assetPath}"
+  done < <(grep -oE '(src|href)="[^"]+\.(js|css)"' "$ART_WEB_DIR/dist/index.html" | cut -d '"' -f 2)
   printf '%s 部署完成：%s\n' "$APP_NAME" "$DEPLOY_URL"
   printf '静态文件已生效，无需重启 Docker 或 reload Nginx。\n'
 }
 
 main() {
+  if [[ "$DEPLOY_MODE" == '--verify-only' ]]; then
+    verifyDeployment
+    return
+  fi
   installDependencies
   buildFrontend
   uploadStaticAssets
   publishIndex
-  verifyDeployment
+  [[ "$DEPLOY_MODE" == '--stage-only' ]] || verifyDeployment
 }
 
 main "$@"

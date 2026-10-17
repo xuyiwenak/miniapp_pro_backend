@@ -72,3 +72,7 @@ docs/local_*.xlsx
 .omx/
 mandis_web/apps/student-h5/design-qa.md
 mandis_web/apps/student-h5/design-qa/
+
+# smartCourse server credentials and independently published assets
+config/.smartCourse.env
+smartcourse_web_dist/

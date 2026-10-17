@@ -12,6 +12,7 @@ showUsage() {
   printf '%s\n' '  ./deploy.sh creator-web'
   printf '%s\n' '  ./deploy.sh student-h5'
   printf '%s\n' '  ./deploy.sh teacher-web'
+  printf '%s\n' '  ./deploy.sh smart-course-web'
   printf '%s\n' '  ./deploy.sh smart [--execute]'
   printf '\n%s\n' '发布单元：'
   printf '%s\n' '  commander   BeGreat + Mandis 共用管理后台'
@@ -45,7 +46,7 @@ main() {
     commander)
       deployCommander "${2:-}"
       ;;
-    creator-web|student-h5|teacher-web)
+    creator-web|student-h5|teacher-web|smart-course-web)
       deployMandisWeb "$target"
       ;;
     smart)

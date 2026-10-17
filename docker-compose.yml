@@ -148,6 +148,46 @@ services:
       - ./static:/app/static
       - ./logs/mandis:/app/logs
 
+  smartcourse_app:
+    image: ${ART_BACKEND_IMAGE:-art-backend:latest}
+    container_name: miniapp-smartcourse
+    restart: unless-stopped
+    command: ["node", "dist/apps/smartCourse/front.js"]
+    stop_grace_period: 120s
+    env_file:
+      - ./config/.smartCourse.env
+    environment:
+      NODE_ENV: production
+      ENV: production
+      GAME_TYPE: smartCourse
+      APP_NAME: smartCourse
+      SYSCONFIG_ROOT: /app/config
+      SMARTCOURSE_PORT: 43002
+      SMARTCOURSE_ORIGIN: https://smart.starryspark.com.cn
+      SMARTCOURSE_DB_HOST: mongo
+      SMARTCOURSE_DB_PORT: 27017
+      SMARTCOURSE_DB_NAME: smartcourse
+      SMARTCOURSE_REDIS_URL: redis://redis:6379/2
+    expose:
+      - "43002"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/apps/smartCourse/sysconfig:/app/config:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:43002/smartcourse-api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   nginx:
     image: nginx:1.27-alpine
     pull_policy: if_not_present
@@ -171,6 +211,7 @@ services:
       - ./creator_web_dist:/usr/share/nginx/html/creator:ro
       - ./student_h5_dist:/usr/share/nginx/html/student:ro
       - ./teacher_web_dist:/usr/share/nginx/html/teacher:ro
+      - ./smartcourse_web_dist:/usr/share/nginx/html/smartcourse:ro
       # 原色有感独立网页端：本地构建后同步到宿主机独立目录，服务器不执行前端构建
       - /root/workspace/miniapp_pro_web_dist:/usr/share/nginx/html/arttherapy:ro
       # Commander 管理后台（commander build 产物）

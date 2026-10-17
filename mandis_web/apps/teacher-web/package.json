@@ -16,7 +16,8 @@
     "dayjs": "^1.11.20",
     "qrcode": "^1.5.4",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "@education/ui": "1.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

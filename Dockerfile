@@ -26,7 +26,9 @@ RUN npm run build \
   && test -f dist/apps/begreat/sysconfig/production/log_config.json \
   && test -f dist/apps/mandis/sysconfig/production/log_config.json \
   && test -f dist/apps/begreat/front.js \
-  && test -f dist/apps/mandis/front.js
+  && test -f dist/apps/mandis/front.js \
+  && test -f dist/apps/smartCourse/front.js \
+  && test -f dist/apps/smartCourse/sysconfig/production/log_config.json
 
 # 移除开发依赖，仅保留生产环境需要的包
 # HUSKY=0 跳过 prepare 脚本（husky 是 devDep，--omit=dev 后不存在）
@@ -58,7 +60,7 @@ COPY --from=builder /app/dist ./dist
 VOLUME ["/app/static", "/app/logs"]
 
 # 暴露所有 app 的端口（compose 按需映射即可）
-EXPOSE 41001 41002 42000 42001 42002
+EXPOSE 41001 41002 42000 42001 42002 43002
 
 # 默认启动 begreat；mandis 容器在 compose 里用 command 覆盖
 ENV SYSCONFIG_ROOT=/app/config

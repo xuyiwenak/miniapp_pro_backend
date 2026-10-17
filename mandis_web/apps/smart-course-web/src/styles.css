@@ -1,0 +1,149 @@
+@import '@education/ui/tokens.css';
+:root { font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; color: var(--education-ink);
+  background: var(--education-canvas); font-synthesis: none; line-height: 1.6; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; border: 1px solid var(--education-border); background: #fff; color: var(--education-ink);
+  padding: 10px 18px; border-radius: 8px; min-height: 44px; transition: background 150ms, transform 150ms; }
+button:hover:not(:disabled) { background: #edf5f3; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.primary { background: var(--education-teal); border-color: var(--education-teal); color: white; }
+button.primary:hover:not(:disabled) { background: #065e57; }
+:focus-visible { outline: 2px solid #4dbfb4; outline-offset: 3px; }
+input, select, textarea { display: block; width: 100%; padding: 11px 12px; background: white;
+  border: 1px solid #aebcbe; border-radius: 8px; color: inherit; }
+textarea { resize: vertical; }
+label { display: block; font-weight: 600; }
+label input, label textarea, label select { margin-top: 8px; font-weight: 400; }
+form { display: grid; gap: 20px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { font-size: clamp(25px, 3vw, 34px); line-height: 1.45; margin-bottom: 12px; }
+h2 { font-size: 21px; line-height: 1.5; } h3 { font-size: 18px; }
+a { color: var(--education-teal); }
+.muted { color: var(--education-muted); } .small, small { font-size: 13px; }
+.brand { display: flex; flex-direction: column; text-decoration: none; color: var(--education-ink); }
+.brand > span { font-size: 25px; font-weight: 700; letter-spacing: .13em; }
+.brand > small { color: var(--education-muted); font-size: 11px; margin-top: 4px; letter-spacing: .06em; }
+.eyebrow { color: var(--education-teal); font-size: 12px; letter-spacing: .12em; margin-bottom: 12px; }
+.notice { background: #fff3e6; color: #744419; padding: 14px 18px; border: 1px solid #e9cba6; border-radius: 8px; }
+.actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.panel { border: 1px solid var(--education-border);
+  background: white;
+  padding: 28px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  }
+.brief { white-space: pre-wrap; overflow-wrap: anywhere; }
+.loading { padding: 60px; color: var(--education-muted); }
+.access { min-height: 100dvh; display: grid; place-items: center;
+  background: radial-gradient(ellipse at 18% 10%, #f6e4e8 0, transparent 40%), #edf6f3; padding: 24px; }
+.access-card { width: min(100%, 480px);
+  background: #fff;
+  border: 1px solid var(--education-border);
+  border-radius: 16px;
+  padding: 40px;
+  }
+.access-card .brand { margin-bottom: 40px; } .access-card form { margin-top: 28px; }
+.access-card .small { margin-top: 20px; margin-bottom: 0; }
+.teacher-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100dvh; }
+.sidebar { height: 100dvh; position: sticky; top: 0; border-right: 1px solid var(--education-border);
+  background: white; display: flex; flex-direction: column; padding: 28px 18px; gap: 28px; }
+.sidebar nav { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.sidebar nav button { text-align: left; padding: 16px; border-color: transparent; }
+.sidebar nav strong { display: block; overflow-wrap: anywhere; } .sidebar nav small { color: var(--education-muted); }
+.sidebar nav .selected { background: #eef7f5; border-color: #cce4df; border-left: 4px solid var(--education-teal); }
+.workspace { padding: 0 40px 40px; max-width: 1500px; width: 100%; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; height: 80px;
+  border-bottom: 1px solid var(--education-border); margin-bottom: 32px; color: var(--education-muted); }
+.page-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 28px; }
+.status { display: inline-block; border-radius: 6px; padding: 3px 10px; font-size: 12px; background: #edf1f3; }
+.status.open { background: #e7f5ee; color: #156344; }
+.overview { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 24px; }
+.metrics { display: flex; gap: 50px; margin: 36px 0; }
+.metrics strong { display: block; font-size: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.metrics span { color: var(--education-muted); font-size: 13px; }
+.invite img { display: block; margin: 12px auto; } .invite input { font-size: 12px; margin-bottom: 12px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
+.gallery figure { margin: 0;
+  } .gallery img { width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: #f6f7f5;
+  border-radius: 8px;
+  }
+.gallery figcaption { font-size: 14px; margin-top: 8px; overflow-wrap: anywhere; }
+.empty { padding: 60px 24px; text-align: center; color: var(--education-muted); }
+.create { max-width: 760px; }
+.watercolor-backdrop { background: var(--watercolor-image) center / cover fixed no-repeat; min-height: 100dvh; }
+.student-shell { max-width: 800px; margin: auto; padding: 28px 24px 60px; }
+.student-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.course-welcome { padding: 56px 6px 28px; }
+.student-shell .panel { background: rgba(255,255,255,.96); }
+.student-shell .consent { display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 14px;
+  font-weight: 400;
+  margin: 26px 0 12px;
+  }
+.consent input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 3px; accent-color: var(--education-teal); }
+.student-artwork { display: block;
+  width: 100%;
+  max-height: 430px;
+  object-fit: contain;
+  background: #f7f7f4;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  }
+.student-footer { font-size: 13px; text-align: center; color: #544d49; margin-top: 40px; }
+.finish { border-style: dashed; }
+.assistant-dialog { width: min(640px, calc(100% - 32px)); max-height: calc(100dvh - 40px); padding: 0;
+  border: 1px solid var(--education-border); border-radius: 16px; color: var(--education-ink); background: #fbfcfb; }
+.assistant-dialog[open] { display: flex; flex-direction: column; }
+.assistant-dialog::backdrop { background: rgba(23,33,43,.45); }
+.assistant-dialog > header { padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; background: #fff; border-bottom: 1px solid var(--education-border); }
+.assistant-dialog h2, .assistant-dialog header p { margin-bottom: 0; }
+.chat-body { padding: 24px; min-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
+.chat-intro { padding: 12px 0; color: var(--education-muted); } .turn { margin-bottom: 24px; }
+.turn p { padding: 16px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
+.turn p > span { display: block; color: var(--education-muted); font-size: 11px; margin-bottom: 7px; }
+.student-message { margin-left: 40px; background: #e7f2ee; }
+.assistant-message { background: #fff; border: 1px solid var(--education-border); margin-right: 16px; }
+.thinking { color: var(--education-teal); }
+.composer { padding: 20px 24px; gap: 12px; border-top: 1px solid var(--education-border); background: white; }
+.composer-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; }
+.composer label select { padding: 7px 10px; margin-top: 4px; }
+.composer .actions { justify-content: space-between;
+  } .attachment { display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  }
+.attachment img { width: 44px; height: 44px; object-fit: contain; } .attachment span { overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 1000px) { .overview { grid-template-columns: 1fr; } .workspace { padding: 0 24px 28px; }
+  .metrics { gap: 36px; } }
+@media (max-width: 700px) {
+  .teacher-layout { display: block;
+    } .sidebar { position: static;
+    height: auto;
+    padding: 20px;
+    gap: 16px;
+    border-right: 0;
+    }
+  .sidebar nav { flex-direction: row; max-height: 150px; } .sidebar nav button { flex-shrink: 0; max-width: 220px; }
+  .workspace { padding: 0 16px 24px; } .toolbar { height: 60px; margin-bottom: 24px; }
+  .page-heading { align-items: flex-start; flex-direction: column; } .panel { padding: 22px; }
+  .student-shell { padding: 24px 16px 40px; } .course-welcome { padding-top: 40px; }
+  .watercolor-backdrop { background-image: var(--watercolor-image-portrait); background-attachment: scroll; }
+  .assistant-dialog { margin: auto auto 0; width: 100%; max-height: 94dvh; border-radius: 18px 18px 0 0; }
+  .assistant-dialog > header, .composer { padding: 16px; } .chat-body { padding: 16px; }
+  .assistant-dialog h2 { font-size: 19px; } .composer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .access-card { padding: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important;
+  transition: none !important;
+  } }

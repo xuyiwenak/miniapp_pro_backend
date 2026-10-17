@@ -6,7 +6,7 @@
     "proto": "tsrpc-cli proto",
     "build": "tsrpc-cli build && npm run copy-config && npm run doc",
     "doc": "tsrpc-cli doc",
-    "copy-config": "copyfiles -u 1 \"src/apps/begreat/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/mandis/sysconfig/**/*.json\" dist/",
+    "copy-config": "copyfiles -u 1 \"src/apps/begreat/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/mandis/sysconfig/**/*.json\" dist/ && copyfiles -u 1 \"src/apps/smartCourse/sysconfig/**/*.json\" dist/",
     "dev:begreat": "ts-node src/apps/begreat/front.ts",
     "dev:mandis": "ts-node src/apps/mandis/front.ts",
     "json-to-schemas-development": "node json_to_schema.mjs development",
@@ -15,7 +15,10 @@
     "simulate:classroom": "ts-node src/tools/simulateMandisClassroom.ts",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:smartCourse": "GAME_TYPE=smartCourse ENV=development ts-node src/apps/smartCourse/front.ts",
+    "smartCourse:teacher": "GAME_TYPE=smartCourse ts-node src/apps/smartCourse/provisionTeacher.ts",
+    "test:smartCourse": "GAME_TYPE=smartCourse ENV=test SMARTCOURSE_INTEGRATION=1 TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register \"test/smartCourse/**/*.test.ts\""
   },
   "lint-staged": {
     "src/**/*.ts": [

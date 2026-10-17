@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type { IClassroom } from '../../entity/classroom.entity';
 import type { IClassroomParticipation, ParticipationStage } from '../../entity/classroomParticipation.entity';
@@ -41,9 +41,7 @@ export function generateParticipantId(): string {
   return uuidv4();
 }
 
-export function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
+export { hashToken } from '../../../../shared/auth/tokenHash';
 
 export function buildScheduledDate(classDate: string, time: string): Date {
   return new Date(`${classDate}T${time}:00+08:00`);

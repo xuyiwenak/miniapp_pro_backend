@@ -1,11 +1,11 @@
 :root {
   --teacher-teal: #0b9488;
   --teacher-orange: #ff7a00;
-  --teacher-ink: #17212b;
+  --teacher-ink: var(--education-ink);
   --teacher-muted: #66717d;
-  --teacher-border: #e2e7eb;
-  --teacher-surface: #ffffff;
-  --teacher-canvas: #fbfcfd;
+  --teacher-border: var(--education-border);
+  --teacher-surface: var(--education-surface);
+  --teacher-canvas: var(--education-canvas);
 }
 
 .classrooms-page {
