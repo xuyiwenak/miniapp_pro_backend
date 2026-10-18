@@ -9,13 +9,16 @@
 - 续期成功才验证证书域名、执行 nginx -t 并平滑 reload。无需重启业务容器。
 - 本任务跳过全局目录 hooks，避免调用其他站点的证书复制逻辑。
 - 所有连接保留 TLS 校验，不固定 ACME IP，也不依赖个人电脑或临时代理。
+- renew.py 调用服务器已安装的 Certbot，并为该进程的 requests.Session 设置 Connection: close。
+  2026-10-18 对比：标准命令多次在 nonce/order 阶段超时，短连接完成整套 staging 演练。
+  只改变连接复用方式，不替换证书验证、ACME 签名、账号、超时或认证插件。升级 Certbot/requests 后重跑演练。
 
 按工作区 smart 发布计划同步 Git 后，在服务器执行：
 
 ```bash
 cd /root/workspace/miniapp_pro_backend
 bash ops/smartcourse-certbot/install.sh
-certbot renew --cert-name smart.starryspark.com.cn --dry-run --run-deploy-hooks \
+python3 ops/smartcourse-certbot/renew.py renew --cert-name smart.starryspark.com.cn --dry-run --run-deploy-hooks \
   --non-interactive --no-random-sleep-on-renew --no-directory-hooks \
   --deploy-hook "$PWD/ops/smartcourse-certbot/reload-nginx.sh"
 systemctl start smartcourse-certbot.service
