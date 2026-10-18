@@ -107,6 +107,11 @@ def site_inventory(config):
   return sites
 
 
+def renewal_values(path):
+  values = dict(line.split('=', 1) for line in path.read_text().splitlines() if '=' in line)
+  return {key.strip(): value.strip() for key, value in values.items()}
+
+
 def check_site(item):
   domain, cert_path = item
   result = {'domain': domain, 'certificate': cert_path, 'ok': False}
@@ -114,8 +119,12 @@ def check_site(item):
     expected = fingerprint(host_path(cert_path))
     lineage = lineage_for(cert_path)
     result['lineage'] = lineage
-    if not lineage or not (LE_ROOT / 'renewal' / (lineage + '.conf')).is_file():
+    renewal = LE_ROOT / 'renewal' / (str(lineage) + '.conf')
+    if not lineage or not renewal.is_file():
       raise ValueError('No active Certbot renewal configuration')
+    values = renewal_values(renewal)
+    if values.get('authenticator') == 'manual' and not values.get('manual_auth_hook'):
+      raise ValueError('Manual certificate has no automated authentication hook')
     if fingerprint(LE_ROOT / 'live' / lineage / 'fullchain.pem') != expected:
       raise ValueError('Nginx certificate copy differs from Certbot certificate')
     with socket.create_connection((domain, 443), timeout=SETTINGS['socketTimeoutSeconds']) as sock:
@@ -165,7 +174,7 @@ def matching_key(cert, key):
   return converted == run('openssl', 'pkey', '-in', str(key), '-pubout', '-outform', 'DER')
 
 
-def copy_certificate(lineage, target):
+def copy_certificate(lineage, target, domains=()):
   source = LE_ROOT / 'live' / lineage
   if not (source / 'fullchain.pem').exists():
     return
@@ -175,6 +184,8 @@ def copy_certificate(lineage, target):
          (destination / name).read_bytes() for name in names):
     return
   run('openssl', 'x509', '-in', str(source / names[0]), '-noout', '-checkend', '0')
+  for domain in domains:
+    run('openssl', 'x509', '-in', str(source / names[0]), '-noout', '-checkhost', domain)
   if not matching_key(source / names[0], source / names[1]):
     raise ValueError('Certificate/key mismatch for ' + lineage)
   destination.mkdir(parents=True, exist_ok=True)
@@ -189,8 +200,13 @@ def copy_certificate(lineage, target):
 
 
 def sync():
+  blocks = server_blocks(nginx_config())
   for lineage, target in SETTINGS['copies'].items():
-    copy_certificate(lineage, target)
+    path = str(Path('/etc/nginx/ssl') / target / 'fullchain.pem')
+    domains = [domain for block in blocks if block.get('ssl_certificate') == [path]
+               for domain in block.get('server_name', [])
+               if '.' in domain and not any(char in domain for char in '*~$')]
+    copy_certificate(lineage, target, domains)
   config = nginx_config()
   certificates = sorted({block['ssl_certificate'][0] for block in server_blocks(config)
                          if block.get('ssl_certificate')})
@@ -211,8 +227,7 @@ def archive_inactive_manual(backup):
   active = {fingerprint(host_path(block['ssl_certificate'][0])) for block in server_blocks(config)
             if block.get('ssl_certificate')}
   for path in sorted((LE_ROOT / 'renewal').glob('*.conf')):
-    values = dict(line.split('=', 1) for line in path.read_text().splitlines() if '=' in line)
-    values = {key.strip(): value.strip() for key, value in values.items()}
+    values = renewal_values(path)
     if values.get('authenticator') != 'manual' or values.get('manual_auth_hook'):
       continue
     cert = LE_ROOT / 'live' / path.stem / 'fullchain.pem'

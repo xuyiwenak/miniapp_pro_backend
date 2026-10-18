@@ -50,13 +50,16 @@ class CertificateManagementTests(unittest.TestCase):
       for name in ['fullchain.pem', 'privkey.pem']:
         shutil.copyfile(self.root / 'first' / name, source / name)
       with patch.object(MANAGER, 'LE_ROOT', root / 'le'), patch.object(MANAGER, 'PROJECT', root):
-        MANAGER.copy_certificate('fixture', 'fixture-copy')
+        with self.assertRaises(subprocess.CalledProcessError):
+          MANAGER.copy_certificate('fixture', 'fixture-copy', ['wrong.example'])
+        self.assertFalse((root / 'nginx/ssl/fixture-copy/fullchain.pem').exists())
+        MANAGER.copy_certificate('fixture', 'fixture-copy', ['fixture.example'])
         destination = root / 'nginx/ssl/fixture-copy/fullchain.pem'
         previous = destination.read_bytes()
         self.assertEqual((destination.parent / 'privkey.pem').stat().st_mode & 0o777, 0o600)
         shutil.copyfile(self.root / 'second/privkey.pem', source / 'privkey.pem')
         with self.assertRaises(ValueError):
-          MANAGER.copy_certificate('fixture', 'fixture-copy')
+          MANAGER.copy_certificate('fixture', 'fixture-copy', ['fixture.example'])
         self.assertEqual(destination.read_bytes(), previous)
 
   def test_inactive_manual_archive_preserves_active_certificates_and_keys(self):

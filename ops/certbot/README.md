@@ -9,7 +9,7 @@ smartcourse-certbot.timer 在迁移时停用，其原安装入口转发到此目
 - `certbot-service.conf` 为服务加上失败后 15 分钟重试，6 小时最多启动 3 次；单次上限 45 分钟。
 - 原厂 ExecStart 保持不变，使用标准 Certbot，所有 TLS 校验保持开启。
 - 成功续期会执行 deploy hook；每轮成功检查后也会核对证书拷贝，修复遗漏同步。
-- `settings.json` 保留原 hook 的共享证书拷贝映射。证书和私钥先验证匹配，再分阶段写入。
+- `settings.json` 保留原 hook 的共享证书拷贝映射。先验证证书与目标站点域名、私钥匹配，再分阶段写入。
 - 比较所有 Nginx 配置所用证书的指纹，仅变化时先 nginx -t 再平滑 reload。
 - 服务结束时，无论续期成功或失败，都会从 nginx -T 自动发现本机所有 Starryspark HTTPS 域名。
 - 验证公网真实 TLS、域名、有效期、磁盘/公网指纹一致，以及是否有对应 Certbot 续期配置。
