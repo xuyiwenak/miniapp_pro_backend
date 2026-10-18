@@ -1,0 +1,12 @@
+{
+  "domainSuffix": ".starryspark.com.cn",
+  "minimumDays": 21,
+  "socketTimeoutSeconds": 10,
+  "workers": 6,
+  "copies": {
+    "www.starryspark.com.cn": "starryspark",
+    "autorecordarchery.xyz": ".",
+    "begreat.autorecordarchery.xyz": "begreat",
+    "mandis.autorecordarchery.xyz": "mandis"
+  }
+}

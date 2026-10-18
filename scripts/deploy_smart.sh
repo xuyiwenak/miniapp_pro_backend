@@ -100,7 +100,7 @@ classifyFile() {
     tsconfig*.json|tsrpc.config.ts|json_to_schema.mjs) backendImageChanged=true ;;
     nginx/*) nginxChanged=true ;;
     docker-compose.yml) composeChanged=true ;;
-    static/*|ops/smartcourse-certbot/*) hostFilesChanged=true ;;
+    static/*|ops/smartcourse-certbot/*|ops/certbot/*) hostFilesChanged=true ;;
   esac
 }
 

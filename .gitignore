@@ -76,3 +76,6 @@ mandis_web/apps/student-h5/design-qa/
 # smartCourse server credentials and independently published assets
 config/.smartCourse.env
 smartcourse_web_dist/
+
+# Python operational-script bytecode
+__pycache__/
