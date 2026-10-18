@@ -1,0 +1,11 @@
+[Unit]
+Description=Check smartCourse HTTPS certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 03,15:00:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=smartcourse-certbot.service
+
+[Install]
+WantedBy=timers.target

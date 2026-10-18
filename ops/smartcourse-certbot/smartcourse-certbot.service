@@ -1,0 +1,17 @@
+[Unit]
+Description=Renew smartCourse HTTPS certificate
+Wants=network-online.target
+After=network-online.target docker.service
+StartLimitIntervalSec=6h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --cert-name smart.starryspark.com.cn \
+  --non-interactive --no-random-sleep-on-renew --no-directory-hooks \
+  --deploy-hook /root/workspace/miniapp_pro_backend/ops/smartcourse-certbot/reload-nginx.sh
+TimeoutStartSec=15min
+Restart=on-failure
+RestartSec=15min
+PrivateTmp=true
+NoNewPrivileges=true
