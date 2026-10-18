@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { startCeramicWorker } from './services/ceramicWorker';
 import { loadConfig } from './config';
 import { SmartCourseMongoComponent } from './component/SmartCourseMongoComponent';
 import { createRepository } from './dbservice/repository';
@@ -17,13 +18,15 @@ async function main() {
   const redis = new Redis(config.SMARTCOURSE_REDIS_URL, { maxRetriesPerRequest: 1 });
   redis.on('error', () => gameLogger.warn('smartCourse Redis connection failed'));
   await redis.ping();
-  const app = createSmartCourseApp({ config, repo: createRepository(requireValue(mongo.models)),
-    access: createAccess(redis), agent: createBailianAgent(config), storage: createArtworkStorage(config) });
+  const deps = { config, repo: createRepository(requireValue(mongo.models)),
+    access: createAccess(redis), agent: createBailianAgent(config), storage: createArtworkStorage(config) };
+  const app = createSmartCourseApp(deps);
+  const stopCeramic = startCeramicWorker(deps);
   const { server } = await startMiniappHttpServer(app, config.SMARTCOURSE_PORT, gameLogger, 'smartCourse listening');
   let stopping = false;
   const stop = () => {
     if (stopping) return;
-    stopping = true;
+    stopping = true; stopCeramic();
     server.close(() => { void Promise.all([mongo.stop(), redis.quit()]).finally(() => process.exit(0)); });
   };
   process.on('SIGTERM', stop);

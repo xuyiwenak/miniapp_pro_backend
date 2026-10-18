@@ -1,9 +1,11 @@
+import { ceramicViews } from '../services/ceramic';
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { handle, authenticated, teacherToken, type Dependencies } from '../http';
 import { API_PREFIX, LIMITS, TEACHER_COOKIE } from '../config';
 import { CourseInput, IdSchema, LoginInput, StatusInput } from '../schemas';
 import { SmartCourseError, requireValue } from '../errors';
+import { designView, assetView } from '../services/patternDesign';
 import { artworkView, courseView, ownedCourse } from '../services/courses';
 
 export function teacherRoutes(deps: Dependencies) {
@@ -62,7 +64,12 @@ function addCourseRoutes(router: Router, deps: Dependencies) {
     const id = IdSchema.parse(req.params.courseId);
     const course = await ownedCourse(deps.repo, id, session.id);
     const [participants, artworks] = await Promise.all([deps.repo.participants(id), deps.repo.artworks(id)]);
-    res.json({ course: courseView(course, true), participants: participants.map(p => ({
+    const designs = await Promise.all((await deps.repo.patternDesigns(id)).map(async design => ({
+      ...designView(design, deps), ceramics: await ceramicViews(deps, id, design.participantId),
+      participantId: design.participantId,
+      assets: (await deps.repo.patternAssets(id, design.participantId)).map(asset => assetView(asset, deps)),
+    })));
+    res.json({ designs, course: courseView(course, true), participants: participants.map(p => ({
       participantId: p.participantId, completed: p.completed, createdAt: p.createdAt,
     })), artworks: artworks.map(artwork => artworkView(artwork, deps.storage.sign)) });
   }));

@@ -1,15 +1,17 @@
 import { randomUUID, randomBytes } from 'crypto';
 import type { Models, Course, Turn } from './models';
 import { LIMITS } from '../config';
+import { patternRepository } from './patternRepository';
 
 export function createRepository(models: Models) {
   return {
+    ...patternRepository(models),
     teacher: (username: string) => models.teachers.findOne({ username }).lean().exec(),
     courses: (teacherId: string) => models.courses.find({ teacherId }).sort({ createdAt: -1 })
       .limit(LIMITS.pageSize).lean().exec(),
     course: (courseId: string) => models.courses.findOne({ courseId }).lean().exec(),
     courseByCode: (joinCode: string) => models.courses.findOne({ joinCode }).lean().exec(),
-    createCourse: (data: Pick<Course, 'teacherId' | 'title' | 'brief' | 'appId' | 'agentVersion'>) =>
+    createCourse: (data: Pick<Course, 'teacherId' | 'title' | 'brief' | 'appId' | 'agentVersion' | 'courseTemplateVersion'>) =>
       models.courses.create({ ...data, courseId: randomUUID(), joinCode: randomBytes(18).toString('base64url') }),
     setStatus: (courseId: string, teacherId: string, status: string, previous: string) =>
       models.courses.findOneAndUpdate({ courseId, teacherId, status: previous },

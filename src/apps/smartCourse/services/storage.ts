@@ -6,6 +6,8 @@ import { SmartCourseError } from '../errors';
 
 export interface ArtworkStorage {
   upload(buffer: Buffer, courseId: string, participantId: string): Promise<string>;
+  uploadPng(buffer: Buffer, courseId: string, participantId: string, name: string): Promise<string>;
+  read(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
   sign(key: string): string;
 }
@@ -34,6 +36,17 @@ export function createArtworkStorage(config: SmartCourseConfig): ArtworkStorage 
       const image = await normalizeArtwork(buffer);
       const key = `${cfg.worksObjectPrefix}/${courseId}/${participantId}/${randomUUID()}.jpg`;
       return uploadToOss(cfg, image, key, 'image/jpeg', true);
+    },
+    async uploadPng(buffer, courseId, participantId, name) {
+      const cfg = resolve();
+      const key = `${cfg.worksObjectPrefix}/${courseId}/${participantId}/pattern/${name}.png`;
+      return uploadToOss(cfg, buffer, key, 'image/png', true);
+    },
+    async read(key) {
+      const response = await fetch(signOssUrl(resolve(), key, LIMITS.signedUrlSeconds),
+        { signal: AbortSignal.timeout(15_000), redirect: 'error' });
+      if (!response.ok) throw new SmartCourseError(502, 'STORAGE_READ', '素材暂时无法读取，请重试');
+      return Buffer.from(await response.arrayBuffer());
     },
     remove: key => deleteFromOss(resolve(), key),
     sign: key => signOssUrl(resolve(), key, LIMITS.signedUrlSeconds),

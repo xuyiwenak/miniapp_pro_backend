@@ -4,6 +4,8 @@ import { gameLogger } from '../../util/logger';
 import { API_PREFIX } from './config';
 import { type Dependencies, errorResponse } from './http';
 import { teacherRoutes } from './routes/teacher';
+import { ceramicRoutes } from './routes/ceramic';
+import { designRoutes } from './routes/design';
 import { studentRoutes } from './routes/student';
 
 export function createSmartCourseApp(deps: Dependencies) {
@@ -24,6 +26,8 @@ export function createSmartCourseApp(deps: Dependencies) {
   app.get(`${API_PREFIX}/health`, (_req, res) => res.json({ status: 'ok', app: 'smartCourse' }));
   app.use(`${API_PREFIX}/teacher`, teacherRoutes(deps));
   app.use(API_PREFIX, studentRoutes(deps));
+  app.use(API_PREFIX, designRoutes(deps));
+  app.use(API_PREFIX, ceramicRoutes(deps));
   app.use((_req, res) => res.status(404).json({ error: 'NOT_FOUND', message: '接口不存在' }));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     errorResponse(error, res);

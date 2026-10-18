@@ -5,7 +5,7 @@ import type { Session } from '../schemas';
 
 export function courseView(course: Course, teacher = false) {
   const { courseId, title, brief, status, createdAt, agentVersion } = course;
-  return { courseId, title, brief, status, createdAt, agentVersion,
+  return { courseId, title, brief, status, createdAt, agentVersion, courseTemplateVersion: course.courseTemplateVersion,
     ...(teacher ? { joinCode: course.joinCode } : {}) };
 }
 export function artworkView(artwork: Artwork, sign: (key: string) => string) {

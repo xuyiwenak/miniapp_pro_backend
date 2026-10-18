@@ -1,9 +1,11 @@
 import { Connection, Schema } from 'mongoose';
+import { createCeramicModel } from './ceramicModels';
+import { createPatternModels } from './patternModels';
 
 export interface Teacher { teacherId: string; username: string; passwordHash: string }
 export interface Course {
   courseId: string; teacherId: string; title: string; brief: string; joinCode: string;
-  status: 'draft' | 'open' | 'closed'; appId: string; agentVersion: string; createdAt: Date;
+  courseTemplateVersion?: string; status: 'draft' | 'open' | 'closed'; appId: string; agentVersion: string; createdAt: Date;
 }
 export interface Participant {
   participantId: string; courseId: string; completed: boolean; createdAt: Date;
@@ -21,6 +23,8 @@ export interface Turn {
 const OPTIONS = { timestamps: true, versionKey: false } as const;
 export function createModels(connection: Connection) {
   return {
+    ...createPatternModels(connection),
+    ceramicJobs: createCeramicModel(connection),
     teachers: connection.model('SmartTeacher', teacherSchema()),
     courses: connection.model('SmartCourse', courseSchema()),
     participants: connection.model('SmartParticipant', participantSchema()),
@@ -38,7 +42,7 @@ function courseSchema() {
     teacherId: { type: String, required: true }, title: String, brief: String,
     joinCode: { type: String, unique: true, required: true },
     status: { type: String, enum: ['draft', 'open', 'closed'], default: 'draft' },
-    appId: String, agentVersion: String }, OPTIONS);
+    courseTemplateVersion: String, appId: String, agentVersion: String }, OPTIONS);
   schema.index({ teacherId: 1, createdAt: -1 });
   return schema;
 }

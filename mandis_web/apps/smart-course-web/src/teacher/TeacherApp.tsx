@@ -19,7 +19,7 @@ export function TeacherApp() {
     <button onClick={() => void logout()}>退出登录</button></aside>
   <main className="workspace"><div className="toolbar"><span>教学空间</span>
     <button onClick={() => void refresh()}>刷新</button></div>
-  <Notice>{error}</Notice>{!agentReady && <Notice>课程助教尚未配置。可以建课和邀请学生，智能问答暂不可用。</Notice>}
+  <Notice>{error}</Notice>{agentReady === false && <Notice>课程助教尚未配置。可以建课和邀请学生，智能问答暂不可用。</Notice>}
   {creating && <CreateCourse onCancel={() => setCreating(false)} onCreated={course => {
     setSelected(course.courseId); setCreating(false); void load();
   }} />}

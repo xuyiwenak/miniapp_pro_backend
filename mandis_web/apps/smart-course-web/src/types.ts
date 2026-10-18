@@ -1,5 +1,6 @@
+import type { DesignView } from '@pattern/contract';
 export type Course = { courseId: string; title: string; brief: string; status: 'draft' | 'open' | 'closed';
-  joinCode?: string; createdAt: string; agentVersion: string };
+  courseTemplateVersion?: string; joinCode?: string; createdAt: string; agentVersion: string };
 export type Artwork = { artworkId: string; imageUrl: string; statement: string;
   participantId: string; createdAt: string };
 export type Mode = 'question' | 'create' | 'review';
@@ -7,5 +8,5 @@ export type Turn = { requestId: string; question: string; answer: string; mode: 
   artworkId?: string; status: 'pending' | 'success' | 'failed'; errorCode?: string; createdAt: string };
 export type Participation = { agentReady: boolean; uploadReady: boolean;
   course: Course; completed: boolean; artworks: Artwork[]; turns: Turn[] };
-export type Dashboard = { course: Course; participants: { participantId: string; completed: boolean }[];
+export type Dashboard = { designs?: DesignView[]; course: Course; participants: { participantId: string; completed: boolean }[];
   artworks: Artwork[] };

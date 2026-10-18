@@ -16,6 +16,7 @@ import { createSmartCourseApp } from '../../src/apps/smartCourse/server';
 import { loadConfig } from '../../src/apps/smartCourse/config';
 import type { AgentInput } from '../../src/apps/smartCourse/services/bailian';
 import { SmartCourseError } from '../../src/apps/smartCourse/errors';
+import { PATTERN_VERSION, newPatternState, type DesignView } from '../../src/apps/smartCourse/pattern/contract';
 import { normalizeArtwork } from '../../src/apps/smartCourse/services/storage';
 
 const integration = process.env.SMARTCOURSE_INTEGRATION === '1' ? describe : describe.skip;
@@ -26,6 +27,8 @@ integration('smartCourse isolated API integration', function () {
   let models: ReturnType<typeof createModels>; let cookie: string; let otherCookie: string;
   let course: { courseId: string; joinCode: string }; let secondCourse: { courseId: string; joinCode: string };
   let student: { token: string }; let otherStudent: { token: string }; let artworkId: string;
+  const patternFiles = new Map<string, Buffer>();
+  let ceramicSubmissions = 0; let ceramicDownloadFails = false;
   const calls: AgentInput[] = []; let failAgent = false;
   const origin = 'http://localhost:5178';
   async function request(path: string, method = 'GET', body?: unknown, token?: string, teacherCookie?: string) {
@@ -57,12 +60,22 @@ integration('smartCourse isolated API integration', function () {
       { teacherId: randomUUID(), username: 'teacher-b', passwordHash: hash }]);
     const app = createSmartCourseApp({ config: loadConfig({ SMARTCOURSE_BAILIAN_APP_ID: 'test-app',
       SMARTCOURSE_BAILIAN_API_KEY: 'test-key', SMARTCOURSE_ORIGIN: origin }),
-      repo: createRepository(models), access: createAccess(redis), agent: async (_course, input) => {
+      repo: createRepository(models), access: createAccess(redis), ceramicProvider: {
+        submit: async () => { ceramicSubmissions++; return 'provider-task'; },
+        query: async () => ({ status: 'success', imageUrl: 'https://example.com/result.png' }),
+        download: async () => {
+          if (ceramicDownloadFails) throw new Error('temporary storage failure');
+          return sharp({ create: { width: 1024, height: 1024, channels: 3, background: 'white' } }).png().toBuffer();
+        },
+      }, agent: async (_course, input) => {
         calls.push(input); if (failAgent) throw new SmartCourseError(502, 'AGENT_UNAVAILABLE', 'private error');
         return { answer: input.artworkUrl ? '这是一幅蓝色线描作品。' : '先尝试重复一个小单元。', providerRequestId: 'test' };
       }, storage: { upload: async (buffer, courseId, participantId) => {
         await normalizeArtwork(buffer); return `smartCourse/${courseId}/${participantId}/image.jpg`;
-      }, remove: async () => undefined, sign: key => `https://example.com/${key}?signed=test` } });
+      }, uploadPng: async (buffer, courseId, participantId, name) => {
+        const key = `smart/${courseId}/${participantId}/${name}.png`; patternFiles.set(key, buffer); return key;
+      }, read: async key => { const data = patternFiles.get(key); if (!data) throw new Error('missing'); return data; },
+      remove: async () => undefined, sign: key => `https://example.com/${key}?signed=test` } });
     server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}/smartcourse-api`;
   });
@@ -165,6 +178,74 @@ integration('smartCourse isolated API integration', function () {
       requestId, question: '进程中断的请求', mode: 'question',
     }, fresh.token);
     assert.strictEqual(recovered.data.status, 'failed'); assert.strictEqual(calls.length, count);
+  });
+  it('runs the pattern classroom with ownership, revision conflicts, real PNG export and closed-course protection', async () => {
+    const created = await request('/teacher/courses', 'POST', { title: '我的青花盘', brief: '上传与排列',
+      courseTemplateVersion: PATTERN_VERSION }, undefined, cookie);
+    const id = created.data.courseId;
+    await request(`/teacher/courses/${id}`, 'PATCH', { status: 'open' }, undefined, cookie);
+    const first = (await request(`/join/${created.data.joinCode}`, 'POST', { consent: true })).data.token;
+    const second = (await request(`/join/${created.data.joinCode}`, 'POST', { consent: true })).data.token;
+    const endpoint = `/courses/${id}/design`;
+    const png = await sharp(Buffer.from('<svg width="200" height="200"><rect width="200" height="200" fill="white"/><path d="M100 20L160 150L30 100Z" fill="#174d8a"/></svg>')).png().toBuffer();
+    const form = new FormData(); form.append('image', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'motif.png');
+    const upload = await request(`${endpoint}/assets`, 'POST', form, first);
+    assert.equal(upload.status, 201);
+    const asset = upload.data as unknown as { assetId: string };
+    const state = { ...newPatternState(), centerAssetId: asset.assetId, step: 4,
+      seal: { enabled: true, name: '黎明' } };
+    assert.equal((await request(endpoint, 'PUT', { revision: 0, state }, second)).status, 404);
+    assert.equal((await request(`${endpoint}/preview`, 'POST', { state, ringIndex: 0 }, first)).status, 200);
+    const saved = await request(endpoint, 'PUT', { revision: 0, state }, first);
+    assert.equal(saved.status, 200);
+    assert.equal((saved.data as unknown as DesignView).revision, 1);
+    assert.equal((await request(endpoint, 'PUT', { revision: 0, state }, first)).status, 409);
+    const exported = await request(`${endpoint}/export`, 'POST', { revision: 1 }, first);
+    assert.equal(exported.status, 200);
+    const result = exported.data as unknown as DesignView;
+    assert.equal(result.exports.length, 1);
+    const artifact = [...patternFiles.entries()].find(([key]) => key.includes(`${id}/`) && key.endsWith('exports/1.png'));
+    assert(artifact); const meta = await sharp(artifact[1]).metadata();
+    assert.equal(meta.width, 2048); assert.equal(meta.height, 2048); assert.equal(meta.format, 'png');
+    await request(`${endpoint}/export`, 'POST', { revision: 1 }, first);
+    assert.equal(await models.artworks.countDocuments({ courseId: id }), 1);
+    assert.equal((await request(endpoint, 'GET', undefined, second)).status, 200);
+    assert.equal(((await request(endpoint, 'GET', undefined, second)).data as unknown as DesignView).assets.length, 0);
+    // Real persisted job state: repeats, refreshes and failed downloads must not rebill generation.
+    assert.equal((await request(`${endpoint}/ceramic`, 'POST', { revision: 1 }, second)).status, 404);
+    assert.equal((await request(`${endpoint}/ceramic`, 'POST', { revision: 1 }, first)).status, 200);
+    assert.equal((await request(`${endpoint}/ceramic`, 'POST', { revision: 1 }, first)).status, 200);
+    assert.equal(ceramicSubmissions, 1);
+    assert.equal((await request(`${endpoint}/ceramic/1`, 'GET', undefined, second)).status, 404);
+    ceramicDownloadFails = true;
+    assert.equal((await request(`${endpoint}/ceramic/1`, 'GET', undefined, first)).status, 500);
+    ceramicDownloadFails = false;
+    assert.equal((await request(`${endpoint}/ceramic/1`, 'GET', undefined, first)).data.status, 'success');
+    await request(`${endpoint}/ceramic`, 'POST', { revision: 1 }, first);
+    assert.equal(ceramicSubmissions, 1);
+    assert.equal((await request(endpoint, 'GET', undefined, first)).status, 200);
+    assert(artifact[1].equals(patternFiles.get(artifact[0])!));
+    assert.equal(await models.artworks.countDocuments({ courseId: id }), 1);
+    assert([...patternFiles.keys()].some(key => key.endsWith('ceramic/1.png')));
+    const teacherView = await request(`/teacher/courses/${id}`, 'GET', undefined, undefined, cookie);
+    assert(JSON.stringify(teacherView.data).includes('ceramic/1.png'));
+    const invalidSeal = { ...state, seal: { enabled: true, name: 'A' } };
+    assert.equal((await request(endpoint, 'PUT', { revision: 1, state: invalidSeal }, first)).status, 400);
+    const changed = { ...state, template: 'double' };
+    assert.equal((await request(endpoint, 'PUT', { revision: 1, state: changed }, first)).status, 200);
+    const restored = (await request(endpoint, 'GET', undefined, first)).data as unknown as DesignView;
+    assert.equal(restored.state.template, 'double'); assert.equal(restored.revision, 2);
+    assert.equal(restored.exports[0].revision, 1);
+    assert.equal((await request(`${endpoint}/export`, 'POST', { revision: 1 }, first)).status, 409);
+    await request(`/teacher/courses/${id}`, 'PATCH', { status: 'closed' }, undefined, cookie);
+    assert.equal((await request(`${endpoint}/export`, 'POST', { revision: 2 }, first)).status, 409);
+    assert.equal((await request(`${endpoint}/ceramic`, 'POST', { revision: 2 }, first)).status, 409);
+    assert.equal((await request(`${endpoint}/ceramic/1`, 'GET', undefined, first)).data.status, 'success');
+    assert.equal((await request(`${endpoint}/preview`, 'GET', undefined, first)).status, 200);
+    assert.equal((await request(`${endpoint}/preview`, 'POST', { state: changed, ringIndex: 0 }, first)).status, 409);
+    assert.equal((await request(endpoint, 'PUT', { revision: 2, state: changed }, first)).status, 409);
+    assert.equal((await request(endpoint, 'GET', undefined, first)).status, 200);
+    assert.equal((await request(`/teacher/courses/${id}`, 'GET', undefined, undefined, otherCookie)).status, 404);
   });
   it('completes activity and disallows new work after teacher closes course', async () => {
     assert.strictEqual((await request(`/courses/${course.courseId}/complete`, 'POST', {}, student.token)).status, 200);

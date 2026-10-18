@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const IdSchema = z.string().uuid();
 export const CourseInput = z.object({
+  courseTemplateVersion: z.literal('qinghua-plate-v1').optional(),
   title: z.string().trim().min(1).max(80),
   brief: z.string().trim().min(1).max(2000),
 }).strict();

@@ -5,7 +5,7 @@ export function useTeacherCourses() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [courses, setCourses] = useState<Course[]>([]); const [selected, setSelected] = useState('');
   const [data, setData] = useState<Dashboard | null>(null);
-  const [error, setError] = useState(''); const [agentReady, setAgentReady] = useState(false);
+  const [error, setError] = useState(''); const [agentReady, setAgentReady] = useState<boolean | null>(null);
   const requestSequence = useRef(0);
   async function load() {
     try { const result = await api<{ courses: Course[]; agentReady: boolean }>('/teacher/courses');
@@ -21,7 +21,16 @@ export function useTeacherCourses() {
       if (sequence === requestSequence.current) setData(result); }
     catch (error) { if (sequence === requestSequence.current) setError(errorMessage(error)); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const update = () => { if (!document.hidden) void load(); };
+    update();
+    window.addEventListener('focus', update);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.removeEventListener('focus', update);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
   useEffect(() => { void detail(); return () => { requestSequence.current++; }; }, [selected]);
   async function refresh() { await load(); await detail(); }
   async function logout() { try { await api('/teacher/logout', { method: 'POST' });

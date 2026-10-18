@@ -4,19 +4,32 @@ import { useParticipation } from './useParticipation';
 import { Loading, Notice, STATUS_COPY } from '../components';
 import type { Participation, Mode, Turn } from '../types';
 import { ArtworkUpload } from './ArtworkUpload';
+import { PATTERN_VERSION } from '@pattern/contract';
+import { PatternClass } from './pattern/PatternClass';
 import { AssistantPanel } from './AssistantPanel';
 
 export function StudentApp({ code }: { code: string }) {
   const { token, course, data, error, busy, loading, consent, setConsent, load, join, complete, onTurn } =
     useParticipation(code);
   const [panel, setPanel] = useState<Mode | null>(null);
+  if (data?.course.courseTemplateVersion === PATTERN_VERSION) {
+    return <PatternClass data={data} token={token} completing={busy} participationError={error}
+      onComplete={() => void complete()} onTurn={onTurn} />;
+  }
   return <WatercolorBackdrop><main className="student-shell"><header className="student-header">
     <div className="brand"><span>原色有感</span><small>smartCourse · 智能课堂</small></div>
     <button onClick={() => void load()} disabled={loading}>刷新</button></header>
   <Notice>{error}</Notice>{loading && !course ? <Loading /> : course && <>
     <section className="course-welcome"><p className="eyebrow">{STATUS_COPY[(data?.course || course).status]}</p>
       <h1>{course.title}</h1><p className="brief">{course.brief}</p></section>
-    {!data ? <section className="panel"><h2>准备好开始了吗？</h2><p>了解课程 → 线下创作 → 作品交流</p>
+    {!data && course.status !== 'open' ? <section className="panel">
+      <h2>{course.status === 'closed' ? '本课程已结束' : '课程尚未开放'}</h2>
+      <p>{course.status === 'closed'
+        ? '当前二维码不再接受加入，请向教师获取新课程的二维码或链接。'
+        : '请等待教师开放课程，然后点击上方“刷新”。'}</p>
+      {course.status === 'closed' && <p className="muted small">
+        已参与过本课？请使用原设备和浏览器查看自己的记录。</p>}
+    </section> : !data ? <section className="panel"><h2>准备好开始了吗？</h2><p>了解课程 → 线下创作 → 作品交流</p>
       <label className="consent">
         <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />
         <span>我已成年，同意将问题与选定作品发送给 AI 助教处理。作品可由本课教师查看，对话不向其他学生公开。</span></label>

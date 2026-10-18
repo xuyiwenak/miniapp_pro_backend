@@ -6,10 +6,12 @@ import type { Session } from './schemas';
 import type { Access } from './services/access';
 import type { Repository } from './dbservice/repository';
 import type { Agent } from './services/bailian';
+import type { CeramicProvider } from './services/ceramicProvider';
 import type { ArtworkStorage } from './services/storage';
 import { gameLogger } from '../../util/logger';
 
 export type Dependencies = {
+  ceramicProvider?: CeramicProvider;
   config: SmartCourseConfig; repo: Repository; access: Access; agent: Agent; storage: ArtworkStorage;
 };
 export function teacherToken(req: Request): string {
