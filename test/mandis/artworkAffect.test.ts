@@ -6,7 +6,7 @@ import {
   buildArtworkAffectAssociations,
   resolveArtworkAffect,
 } from '../../src/apps/mandis/miniapp/services/artworkAffect';
-import { parseArtworkAnalysisOutput } from '../../src/util/qwenVlAnalyzer';
+import { parseArtworkAnalysisOutput, resolveQwenVlModel } from '../../src/util/qwenVlAnalyzer';
 
 const DIMENSION_CODES = [
   'joy', 'calm', 'anxiety', 'fear', 'solitude', 'passion', 'social_aversion', 'vitality',
@@ -111,6 +111,12 @@ function participant(participantId: string, positiveValue: number): IClassroomPa
 }
 
 describe('artwork affect', () => {
+  it('migrates an unavailable legacy vision model without changing other configured models', () => {
+    assert.equal(resolveQwenVlModel('qwen-vl-plus'), 'qwen3-vl-plus');
+    assert.equal(resolveQwenVlModel(), 'qwen3-vl-plus');
+    assert.equal(resolveQwenVlModel('qwen3-vl-flash'), 'qwen3-vl-flash');
+  });
+
   it('strictly validates every dimension, score range and assessability', () => {
     assert.equal(parseArtworkAnalysisOutput(analysisOutput()).construct, 'perceived_expressed_affect');
     const missingDimension = analysisOutput();

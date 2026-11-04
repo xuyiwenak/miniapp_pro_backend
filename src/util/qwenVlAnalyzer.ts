@@ -11,7 +11,8 @@ export interface QwenVlConfig {
   baseUrl?: string;
 }
 
-const DEFAULT_MODEL = 'qwen-vl-plus';
+const LEGACY_MODEL = 'qwen-vl-plus';
+const DEFAULT_MODEL = 'qwen3-vl-plus';
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_TOKENS = 2048;
@@ -160,7 +161,12 @@ export function getQwenVlConfig(): QwenVlConfig {
   if (!cfg?.apiKey || cfg.apiKey === 'YOUR_DASHSCOPE_API_KEY') {
     throw new Error('QwenVL apiKey not configured in server_auth_config.qwenVl');
   }
-  return cfg;
+  // Existing private configs may still name the model removed from this account's available models.
+  return { ...cfg, model: resolveQwenVlModel(cfg.model) };
+}
+
+export function resolveQwenVlModel(model?: string): string {
+  return !model || model === LEGACY_MODEL ? DEFAULT_MODEL : model;
 }
 
 interface DashScopeResponse {
